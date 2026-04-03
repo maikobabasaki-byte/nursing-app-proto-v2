@@ -1,17 +1,26 @@
+import { useState } from 'react';
+import Login from './Login';
+import PatientSelect from './PatientSelect'; // 後で作るファイル
+
 function App() {
+  // 「currentPage」という名前のスイッチを作る（初期値は 'login'）
+  const [currentPage, setCurrentPage] = useState('login');
+
+  // ログイン成功時に呼ばれる関数
+  const handleLoginSuccess = () => {
+    setCurrentPage('select'); // スイッチを 'select' に切り替える
+  };
+
   return (
-    <div style={{ padding: '20px', fontFamily: 'sans-serif' }}>
-      <header>
-        <h1 style={{ color: '#007aff' }}>看護タスク・動線管理 V2</h1>
-        <p>プロトタイプ開発中</p>
-      </header>
-      
-      <main style={{ marginTop: '20px', borderTop: '1px solid #ccc', paddingTop: '20px' }}>
-        <p>ここに患者さんのタスクや動線リストを表示していきます。</p>
-        {/* ここにコンポーネントを追加していく */}
-      </main>
+    <div className="App">
+      {/* 条件分岐：ログイン中なら選択画面、そうでなければログイン画面 */}
+      {currentPage === 'login' ? (
+        <Login onLoginSuccess={handleLoginSuccess} />
+      ) : (
+        <PatientSelect />
+      )}
     </div>
-  )
+  );
 }
 
-export default App
+export default App;

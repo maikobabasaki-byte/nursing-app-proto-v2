@@ -1,0 +1,684 @@
+/* ----------------------------------------タイムライン */
+.timeline{
+  height: calc(100vh - var(--header-height, 0px) - var(--footer-height, 0px));
+  display: grid;
+  grid-template-columns: 18em 1fr;
+  grid-template-rows: 100%;
+  text-align: center;
+  overflow: hidden;
+  color: #00B4D8;
+  background-color: #D9D9D9;
+}
+h2{
+  z-index: 30;
+  padding: .5em;
+  background-color: #D9D9D9;
+}
+.taskArea{
+  overflow-y: auto; /* 縦スクロールを有効にする */
+}
+.scheduledArea{
+  background-color: #D9D9D9;
+  overflow-y: auto; /* 縦スクロールを有効にする */
+}
+/* 1. 行の基本設定：高さを揃えて、基準点(relative)にする */
+.timeline-row {
+  display: flex;
+  align-items: stretch; /* これで数字と線を中央に揃える */
+  min-height: 100px;
+  position: relative;
+  box-sizing: border-box; /* 線を高さに含める */
+  border-top: 1px solid #99D3DF;
+}
+
+/* 2. 時間ラベル */
+.time-label {
+  font-size: 14px;
+  z-index: 2; /* 線よりも手前に出す */
+  position: absolute;
+  left: -50px; /* 垂直線の左側に配置 */
+  top: -10px;  /* 線の上に重なるように調整 */
+  width: 50px;
+  height: 100%;
+}
+
+/* 4. タスクエリア */
+.task-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(14em, auto));
+  justify-content: start;
+  /* min-height: 100px; */
+  width: 100%;        /* 親要素（timeline-row）に合わせる */
+  align-content: flex-start; /* 上詰めで並べる */
+  cursor: grabbing;
+  position: relative;
+}
+
+.memo-area{
+  max-width: 12vw;
+  background-color: #EFE9E8;
+  display: flex;
+  flex-direction: column;   /* 縦並び */
+  gap: 6px;                 /* カード間の余白 */
+  align-items: stretch;    /* 横幅いっぱいに */
+  cursor: url(../icon_b/add_notes_24dp.png),auto;
+}
+#timeline-container {
+  position: relative; /* 線の位置（absolute）の基準点になります */
+  padding-top: 1em;
+  padding-left: 50px; /* 左側に時刻ラベルのスペースを作る */
+  margin-left: 20px;
+}
+/* 2. 現在時刻の横線本体 */
+#current-time-line {
+  position: absolute;
+  left: 0;
+  width: 100%;
+  height: 2px;
+  background-color: #ff5252; /* 看護現場でもパッと目につく赤色 */
+  z-index: 200;             /* 全てのカードより手前に表示 */
+  pointer-events: none;      /* 線を無視して下のタスクを触れるようにする */
+  display: none;             /* 初期状態は非表示（JSで計算後に表示） */
+  transition: top 1s linear;
+  
+}
+
+/* 3. オプション：線の左端に時間のポインタ（丸）を付ける場合 */
+#current-time-line::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: -4px;
+  width: 10px;
+  height: 10px;
+  background-color: #ff5252;
+  border-radius: 50%;
+}
+.toggle-btn {
+  padding: 8px 16px;
+  margin-right: 8px;
+  border: 1px solid #007bff;
+  background-color: white;
+  color: #007bff;
+  cursor: pointer;
+  border-radius: 4px;
+}
+
+/* 選択されている時のスタイル（一目でわかる！） */
+.toggle-btn.active {
+  background-color: #007bff;
+  color: white;
+}
+.task-card {
+  margin: 1em;
+  padding: .5em;
+  display: grid;
+  width: 14em;
+  min-height: 5em;
+  border-radius: .5em;
+  color: #1A365D;
+  box-shadow: 5px 4px 4px 0 rgba(0, 0, 0, 25%);
+  cursor: grab;
+  cursor: -webkit-grab; /* Safari用 */
+}
+/* 2行目：部屋番号(左)名前(右) */
+.room-no{
+  grid-column: 1; 
+}
+.patient-name{
+  grid-column: 2;
+  grid-row: 2;
+}
+/* 3行目：内容（2列分ぶち抜き） */
+.task-title {
+  grid-column: 1 / span 2;
+  grid-row: 3;
+  padding: 5px;
+}
+#pool-container {
+  display: flex;
+  flex-wrap: wrap;          /* 複数カード対応 */
+  justify-content: center; /* 横中央 */
+  align-items: flex-start; /* 縦は上から並べたいなら flex-start */
+  gap: 8px;
+}
+
+/* ドラッグ中のカーソルの見た目 */
+.task-card:active,
+.task-card.dragging {
+    cursor: grabbing;
+    cursor: -webkit-grabbing; /* Safari用 */
+}
+/* カードが上に重なった時の枠の反応 */
+.task-grid.drag-over {
+    background-color: rgba(33, 150, 243, 0.15); /* 薄い青色 */
+    border: 2px dashed #2196f3;
+    transition: background-color 0.2s;
+}
+/* 優先度別の色（現場の直感に合わせる） */
+.task-card.high {
+  background-color: #FF6B6B;
+}   /* 赤：点滴・時間薬 */
+.task-card.medium {
+  background-color: #34C759;
+} /* オレンジ：バイタル */
+.task-card.low {
+  background-color: #00B4D8;
+}    /* 青：処置・ケア */
+.dark-card{
+  background-color: #1A365D;
+  color: #ffffff;
+  position: relative;  
+}
+.dark-card>.card-header{
+  grid-column: 1;
+}
+.dark-card>.card-body{
+  grid-row: 3;
+  grid-column: 1 / span 2;
+  padding: 5px;
+}
+.dark-card.open {
+  min-height: 80px;
+}
+.group-body {
+  position: absolute;
+  top: calc(100% + 1em);
+  z-index: 10;
+  width: 220px;
+  background: #1A365D;
+  color: #D9D9D9;
+
+  border: 1px solid #ccc;
+  border-radius: 8px;
+  padding: 8px;
+  font-size: 13px;
+
+  overflow: hidden;
+  animation: slideDown 0.25s ease-out;
+  
+}
+@keyframes slideDown {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.detail-task{
+  background-color: #00B4D8;
+}
+
+
+
+/* ポップアップの外枠 */
+.task-popup {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 90%; max-width: 350px;
+  background: white;
+  border-radius: 15px;
+  padding: 20px;
+  z-index: 2000;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+}
+/* 右上の × ボタン */
+.pop-close-x {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  width: 30px;
+  height: 30px;
+  border: none;
+  background: none;
+  font-size: 24px;
+  color: #999;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+}
+.pop-close-x:hover {
+  color: #333;
+}
+.task-card.is-pending {
+  transition: none; /* アニメーションと同期させるため transition は切る */
+  z-index: 100;
+  background-color: #FF9500;
+}
+/* 遅延（未実施） */
+.task-card.is-overdue {
+  border: 3px solid #ff3b30;
+  box-shadow: 0 0 8px rgba(255, 59, 48, 0.4);
+}
+
+/* 実施中が優先 */
+.task-card.is-progressing.is-overdue {
+  border: none;
+  box-shadow:
+    0 0 0 2px rgba(26, 54, 93, 0.6),
+    0 6px 16px rgba(26, 54, 93, 0.35);
+}
+#pop-btn-container{
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  align-items: center;
+}
+.pop-info-room{
+  font-size: 0.9rem;
+  color: #666;
+}
+.pop-info-patient{
+  font-size: 1.2rem;
+  font-weight: bold;
+}
+.pop-info-title{
+  margin: 10px 0;
+  font-weight: bold;
+  border-top: 1px solid #eee;
+  padding-top: 10px;
+}
+.pop-info-details{
+  font-size: 0.8rem;
+  color: #888;
+  margin-bottom: 20px;
+}
+
+.pop-save{
+  width: 12em;
+  text-align: center;
+  padding: 1em;
+  border-radius: 10px;
+}
+/* 実施・完了・記録の各ボタン */
+/* アクションボタンの基本スタイル */
+.btn-action {
+  width: 85%;
+  padding: 12px;
+  border: none;
+  border-radius: 8px;
+  font-weight: bold;
+  cursor: pointer;
+  color: white; /* 基本は白文字 */
+  text-align: center;
+}
+
+/* 実施開始（青系：これから動く） */
+.btn-start {
+  background-color: #00B4D8;
+}
+
+/* 実施完了（緑系：安全・完了） */
+.btn-complete {
+  background-color: #34C759;
+}
+
+/* 記録完了（紺・グレー系：事務作業終了） */
+.btn-check {
+  background-color: #99D3DF;
+}
+
+/* 中断・保留（赤系：注意・ストップ） */
+.btn-pending {
+  background-color: #FF9500;
+}
+
+/* ホバー時の微調整 */
+.btn-action:hover {
+  filter: brightness(90%);
+}
+
+/* オーバーレイの基本形 */
+#status-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 10000; /* 最前面に */
+  display: none;  /* 通常は非表示 */
+  align-items: center;
+  justify-content: center;
+  font-size: 2rem;
+  font-weight: bold;
+  color: white;
+  pointer-events: none; /* 下の操作を邪魔しない */
+  transition: opacity 0.3s;
+}
+
+/* 表示された時 */
+#status-overlay.show {
+  display: flex;
+}
+
+/* 🟢 実施完了の時（緑） */
+#status-overlay.bg-complete {
+  background-color: rgba(76, 175, 80, 0.8) !important;
+}
+
+/* 再開の時*/
+#status-overlay.bg-start {
+  background-color: rgba(0, 180, 216, 0.85); /* 鮮やかな信頼感のある青 */
+  color: white;
+}
+
+/* 🔵 記録完了の時（指定の青 #00B4D8 70%） */
+#status-overlay.bg-record-done {
+  background-color: rgba(0, 180, 216, 0.7);
+}
+
+/* 🟡 中断・取り消しの時（黄色・オレンジ系） */
+#status-overlay.bg-check {
+  background-color: rgba(255, 193, 7, 0.8);
+  color: #333; /* 黄色背景は黒文字の方が見やすいです */
+}
+.btn-action.btn-undo {
+  background-color: #666; /* 注意を促すオレンジ */
+  color: white;
+}
+.btn-action.btn-undo:hover {
+  background-color: #f57c00;
+}
+/* 記録取り消し（実施取り消しと同じ系統のオレンジ） */
+.btn-action.btn-undo-record {
+  background-color: #fb8c00; 
+  color: white;
+}
+
+/* 実施中カードのスタイル */
+.task-card.is-progressing {
+  outline: 3px solid #1A365D;
+  box-shadow:
+    0 0 0 2px rgba(0, 122, 255, 0.6),
+    0 6px 16px rgba(0, 122, 255, 0.35);
+  transform: translateY(-1px);
+}
+/* 実施完了カードの基本スタイル */
+.task-card.is-completed {
+  background-color: #99D3DF;
+  opacity: 0.8;
+  position: relative; /* バッジの基準位置にする */
+}
+
+/* 💡 記録まで全て終わった「完全完了」の状態 */
+.task-card.is-recorded {
+  background-color: #99D3DF; /* 非常に薄いグレー */
+  color: #70757a;                      /* 文字を薄くして「終了感」を出す */
+  opacity: 0.8;                        /* 少し透明度を下げて背景に馴染ませる */
+}
+
+/* 左上の丸いマーク（擬似要素） */
+.task-card.is-completed::before,.group-status-mark{
+  content: "";
+  position: absolute;
+  top: .5em;  
+  left: .5em;
+  width: 20px;
+  height: 20px;
+  background-color: #00B4D8;
+  color: white;
+  border-radius: 50%; /* 正円にする */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: bold;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+  z-index: 10;
+}
+/* ダークカードが全記録完了した時の色 */
+.dark-card.all-recorded {
+  background-color: #99D3DF;
+  border-color: #88c2ce;
+  color: #444; /* 文字を少し濃くして読みやすく */
+} 
+
+/* ダークカード内のカウント表示の調整 */
+.task-count {
+  font-weight: bold;
+  margin-right: 8px;
+}
+
+.task-popup.is-popup-progressing {
+  background-color: #FFF2BC ; /* 指定の色に変更 */
+  transition: background-color 0.3s ease; /* ふわっと色を変える */
+}
+/* 💡 中断中ポップアップの背景色 */
+.task-popup.is-status-pending {
+  background-color: #FAB77C ;
+  border: 2px solid #e6a56b;
+  color: #fff; /* 文字を白にすると読みやすいです */
+}
+
+/* ポップアップ内の文字色調整（背景がオレンジの時） */
+/* 💡 通常の「実施中」ポップアップ（元の色：例えば深い青やグレーなど） */
+.task-popup.is-popup-progressing {
+  background-color: #ffffff; /* 元の背景色が白なら白 */
+  color: #333;
+}
+
+/* 💡 「中断中」の時だけ上書き */
+.task-popup.is-status-pending {
+  background-color: #FAB77C;
+  color: #fff;
+}
+.is-current-row .task-card.is-pending {
+  position: absolute; /* 親要素の(0,0)を基準に浮く */
+  left: 10px;
+  right: 10px;
+  width: auto;
+  z-index: 100;
+  margin: 0; /* 余計な隙間をカット */
+  pointer-events: auto; /* クリックできるようにする */
+  /* 💡 JSで書き換える 'top' を即座に反映させるため、transitionはオフに */
+  transition: none; 
+}
+.task-placeholder{
+  display:flex;
+  align-items: center;
+  justify-content: center;
+  color: #888;
+  border: 1px dashed #888;
+  border-radius: .5em;
+  margin: 1em;
+  padding: .5em;
+}
+
+.task-popup.is-status-pending .pop-close-x {
+  color: #fff;
+}
+.pop-status-badge {
+  color: #f44336;            /* はっきりした赤 */
+  font-weight: bold;
+  font-size: 1rem;
+  text-align: center;
+  width: 100%;
+  margin-bottom: 10px;       /* 下の部屋番号との間隔 */
+  display: block;            /* 確実に一行占有させる */
+}
+#current-time-line {
+  position: absolute;
+  width: 100%;
+}
+/* 現在時刻ラインに吸着するレーン */
+.sticky-lane {
+  position: absolute;
+  left: 0;
+  right: 0;
+  display: flex;
+  flex-wrap: wrap;
+  padding: 4px 8px;
+  z-index: 2000;
+  pointer-events: none; /* 下を操作できるように */
+}
+/* 現在時刻ラインに吸着する中断カード用 */
+.task-card.is-sticky-now {
+  /* position: absolute; */
+  z-index: 5;
+}
+/* レーンの中の中断カード */
+.sticky-lane .task-card {
+  pointer-events: auto; /* カードは操作可能に戻す */
+}
+
+
+.btn-reset {
+  background-color: #f8f9fa;
+  color: #dc3545; /* 文字を赤くして「戻す」感を出します */
+  border: 1px solid #dc3545;
+  margin-top: 10px; /* 他のボタンと少し離すと誤クリック防止になります */
+}
+
+.btn-reset:hover {
+  background-color: #dc3545;
+  color: #fff;
+}
+/* ポップアップを画面の最前面に固定する */
+.pop-input-box {
+  position: fixed; /* 画面に対して固定 */
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%); /* 真ん中に持ってくる */
+  background-color: #ffffa2;
+  padding: 20px;
+  border-radius: 12px;
+  box-shadow: 0 10px 50px rgba(0,0,0,0.5); /* 影を濃くして目立たせる */
+  z-index: 9999; /* 絶対に一番手前に出す数字 */
+  width: 300px;
+  border: 2px solid #ffd700;
+  color: #1A365D;
+}
+/* 中断・保留のときの色（チェック中） */
+#status-overlay.bg-check {
+  background-color: rgba(255, 193, 7, 0.6); /* 警告・注意のオレンジ/黄色 */
+  color: white;
+}
+
+/* 完了のときの色 */
+#status-overlay.bg-complete {
+  background-color: rgba(76, 175, 80, 0.3); /* 安心の緑 */
+  color: white;
+}
+/* 黄色の付箋っぽくするスタイル */
+.memo-style {
+  margin: 1em;
+  padding: .5em;
+  color: #1A365D;
+  background-color: #ffffa2; /* 付箋イエローに */
+  border-left: 5px solid #ffd700;
+  word-break: break-all;      /* 💡 長い英単語なども強制的に改行する */
+  overflow-wrap: break-word; /* 💡 単語の途中で改行を許可 */
+  white-space: normal;       /* 💡 スペースや改行を反映しつつ、端で折り返す */
+  max-width: 9em;           /* 💡 親要素（memo-area）の幅を超えない */
+  height: auto;              /* 💡 文字数に合わせて高さが伸びる */
+  min-height: 40px;          /* 最低限の高さは確保 */
+  border-radius: .5em;
+  box-shadow: 5px 4px 4px 0 rgba(0, 0, 0, 25%);
+  cursor: grab;
+  cursor: -webkit-grab;
+  display: grid;
+  grid-template-columns: 1fr auto auto; /* 時間(1fr) | ペン(auto) | ゴミ箱(auto) */
+  gap: 4px;
+  align-items: center;
+}
+
+/* 1行目：時間 */
+.memo-style > .task-time {
+  grid-column: 1;
+  grid-row: 1;
+}
+
+/* 1行目：ペンアイコン */
+.memo-style > .icon-pencil {
+  grid-column: 2;
+  grid-row: 1;
+}
+
+/* 1行目：ゴミ箱アイコン */
+.memo-style > .icon-delete {
+  grid-column: 3;
+  grid-row: 1;
+}
+
+/* 2段目：日付（2026年...） */
+.memo-style > .memo-planned-date {
+  grid-column: 1 / span 3;
+  grid-row: 2;
+  font-size: 0.8em;
+  color: #555;
+  margin-top: 0.3em;
+}
+
+/* 3段目：時間（09:00） */
+.memo-style > .memo-planned-time {
+  grid-column: 1 / span 3;
+  grid-row: 3;
+  font-size: 0.9em;
+}
+
+/* 4段目：メモ本文 */
+.memo-style > .task-title {
+  grid-column: 1 / span 3;
+  grid-row: 4;
+  margin-top: 0.5em;
+}
+
+/* アイコン共通設定 */
+.icon-pencil img, .icon-delete img {
+  width: 20px; /* 少し小さめにすると収まりが良いです */
+  height: 20px;
+  display: block;
+}
+
+/* 実施予定＋メモ入力エリアをまとめる枠 */
+.pop-planned {
+  border: 1px solid #bbb;
+  border-radius: 6px;
+  padding: 8px;
+  margin: 8px 0;
+  background: #fafafa;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.pop-btns{
+  margin: .4em;
+}
+.pop-btns button{
+  padding: .4em;
+  border-radius: 5px;
+}
+.btn-memo-save{
+  background-color: #ffd700;
+}
+
+
+/* 💡 メモ入力欄のスタイル */
+.pop-input-box textarea {
+  text-align: left;          /* ← 左揃え */
+  width: 100%;
+  box-sizing: border-box;    /* ← はみ出し防止 */
+  padding: 8px 10px;
+  resize: vertical;         /* ← 縦方向だけリサイズOK */
+  overflow-wrap: break-word;/* ← 長い単語も折り返す */
+  word-break: break-word;   /* ← 日本語・英語どちらも安全に改行 */
+}
+
+/* 💡 表示側（保存されたメモ）も突き抜け防止 */
+.task-card.memo-style .task-title {
+  text-align: left;
+  white-space: pre-wrap;    /* 改行を保持 */
+  word-break: break-word;   /* 単語を途中で折る */
+  overflow-wrap: break-word;
+  display: block;            /* 💡 1行に固執せず、ブロック要素として扱う */
+  line-height: 1.4;          /* 読みやすい行間 */
+}
+/* ----------------------------------------タイムライン */

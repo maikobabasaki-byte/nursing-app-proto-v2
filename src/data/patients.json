@@ -1,0 +1,137 @@
+[
+  {
+    "patient_id": "P211",
+    "name": "山崎 陽向",
+    "adl": "全介助",
+    "risk_level": "中",
+    "allergy":"",
+    "room_id": "201",
+    "bed_number": 1
+  },
+  {
+    "patient_id": "P212",
+    "name": "森 碧",
+    "adl": "自立",
+    "risk_level": "高",
+    "allergy":"",
+    "room_id": "202",
+    "bed_number": 1
+  },
+  {
+    "patient_id": "P213",
+    "name": "池田 悠",
+    "adl": "自立",
+    "risk_level": "高",
+    "allergy":"",
+    "room_id": "202",
+    "bed_number": 2
+  },
+  {
+    "patient_id": "P214",
+    "name": "橋本 瑞希",
+    "adl": "一部介助",
+    "risk_level": "高",
+    "allergy":"アルコール綿",
+    "room_id": "203",
+    "bed_number": 1
+  },
+  {
+    "patient_id": "P215",
+    "name": "阿部 飛鳥",
+    "adl": "全介助",
+    "risk_level": "低",
+    "allergy":"",
+    "room_id": "203",
+    "bed_number": 2
+  },
+  {
+    "patient_id": "P216",
+    "name": "石川 凪沙",
+    "adl": "全介助",
+    "risk_level": "低",
+    "allergy":"",
+    "room_id": "203",
+    "bed_number": 3
+  },
+  {
+    "patient_id": "P217",
+    "name": "山下 光",
+    "adl": "全介助",
+    "risk_level": "低",
+    "allergy":"",
+    "room_id": "203",
+    "bed_number": 4
+  },
+  {
+    "patient_id": "P218",
+    "name": "中島 伊織",
+    "adl": "自立",
+    "risk_level": "中",
+    "allergy":"",
+    "room_id": "205",
+    "bed_number": 1
+  },
+  {
+    "patient_id": "P219",
+    "name": "石井 望",
+    "adl": "自立",
+    "risk_level": "高",
+    "allergy":"",
+    "room_id": "205",
+    "bed_number": 2
+  },
+  {
+    "patient_id": "P220",
+    "name": "吉田 陽葵",
+    "adl": "自立",
+    "risk_level": "高",
+    "allergy":"",
+    "room_id": "205",
+    "bed_number": 3
+  },
+  {
+    "patient_id": "P221",
+    "name": "山田 紬",
+    "adl": "自立",
+    "risk_level": "高",
+    "allergy":"",
+    "room_id": "205",
+    "bed_number": 4
+  },
+  {
+    "patient_id": "P222",
+    "name": "佐藤 蓮",
+    "adl": "自立",
+    "risk_level": "中",
+    "allergy":"",
+    "room_id": "206",
+    "bed_number": 1
+  },
+  {
+    "patient_id": "P223",
+    "name": "鈴木 陽翔",
+    "adl": "自立",
+    "risk_level": "中",
+    "allergy":"",
+    "room_id": "206",
+    "bed_number": 2
+  },
+  {
+    "patient_id": "P224",
+    "name": "高橋 湊",
+    "adl": "自立",
+    "risk_level": "中",
+    "allergy":"",
+    "room_id": "206",
+    "bed_number": 3
+  },
+  {
+    "patient_id": "P225",
+    "name": "田中 悠真",
+    "adl": "自立",
+    "risk_level": "中",
+    "allergy":"",
+    "room_id": "206",
+    "bed_number": 4
+  }
+]
