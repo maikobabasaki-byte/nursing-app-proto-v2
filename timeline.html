@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="stylesheet" href="../css/destyle.css">
+  <link rel="stylesheet" href="../css/style.css">
+  <link rel="stylesheet" href="../css/timeline.css">
+  <link rel="icon" href="../icon_b/local_hospital_48dp.png">
+  <script src="../js/Sortable.min.js"></script>
+  <script type="module" src="../js/main.js"></script> 
+  <title>タイムライン（PC版）</title>
+</head>
+<body>
+  <header>
+    <h1>
+      <img src="../icon_b/local_hospital_48dp.png" alt="NurseFlow Dashboard">
+      <span class="header-title-text">NurseFlow Dashboard</span>
+    </h1>
+    <nav>
+      <ul>
+        <li><a href="./patientMaster.html"><img src="../icon_b/account_circle_48dp.png" alt="患者マスター"><br>
+          患者マスター</a></li>
+        <li><img src="../icon_b/event_note_48dp.png" alt="タイムライン"><br>
+          タイムライン</li>
+        <li><img src="../icon_b/pin_drop_48dp.png" alt="マップ"><br>
+          マップ</li>
+      </ul>
+    </nav>
+    <div class="is-login">
+      <p>現在時刻：<span id="header-time">--:--</span></p>
+      <p>ログイン者：<span id="header-user-name">---</span></p>
+    </div>
+    <div class="logout" id="logout-btn">
+      <img src="../icon_b/logout_48dp.png" alt="ログアウト">
+      <p>ログアウト</p>
+    </div>
+  </header>
+  <main>
+    <div class="timeline">
+      <div class="taskArea" id="task-pool">
+        <h2>タスク</h2>
+        <div id="pool-container"></div>
+      </div>
+      <div class="scheduledArea">
+        <h2>タイムライン</h2>
+        <div id="controls-area"></div>
+        <div id="timeline-container"></div>
+      </div>
+    </div>
+  </main>
+  <footer>
+    <div class="setting">
+      <img src="../icon_b/settings_48dp.png" alt="システム設定">
+      <p>システム設定</p>
+    </div>
+    <div class="shortcut">
+      <p>Ctrl + Tab でカルテへ切り替え</p>
+      <p>Alt + A で患者マスターへ切り替え</p>
+    </div>
+  </footer>
+</body>
+</html>
