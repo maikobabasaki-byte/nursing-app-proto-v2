@@ -1,10 +1,9 @@
 import React from 'react'
 import ReactDOM from 'react-dom/client'
-import App from './App'
+import App from './pages/App'
 // 共通CSSをここでインポート
-import './destyle.css' 
-import './index.css'
-import './style.css'
+import './styles/destyle.css' 
+import './styles/index.css'
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>

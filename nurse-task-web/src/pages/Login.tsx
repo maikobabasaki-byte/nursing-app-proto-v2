@@ -1,9 +1,14 @@
-import Header from './Header'; 
-import Footer from './Footer';
+import Header from '../components/Header'; 
+import Footer from '../components/Footer';
 
 export default function Login({ onLoginSuccess }: { onLoginSuccess: () => void }) {
   
-  const handleLogin = async () => {
+  const handleLogin = () => {
+    // 💡 職場のPCでバックエンド(PHP)が未起動でもエラーを出さず、
+    // ボタンを押したら即座に患者選択画面へ移動するようにします。
+    onLoginSuccess();
+
+    /* ーーー バックエンド連携時の通信処理（一時保存） ーーー
     const idElement = document.getElementsByName('user_id')[0] as HTMLInputElement;
     const pwElement = document.getElementById('password_input') as HTMLInputElement;
 
@@ -33,6 +38,7 @@ export default function Login({ onLoginSuccess }: { onLoginSuccess: () => void }
     } catch (error) {
       console.error('通信エラー:', error);
     }
+    ーーー ここまで ーーー */
   };
 
   return (
