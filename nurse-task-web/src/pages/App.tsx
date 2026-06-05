@@ -2,13 +2,12 @@ import { useState } from 'react';
 import Login from './Login';
 import GlobalHeader from '../components/GlobalHeader'; 
 import GlobalFooter from '../components/GlobalFooter.tsx'; 
-import PatientSelect from "./PatientSelect.tsx"; // 患者選択画面
-
-
+import PatientSelect from "./PatientSelect.tsx"; 
+import Timeline from "./Timeline.tsx";
 export default function App() {
-  // 💡 いまどの画面を表示するかを文字で管理します（初期値は 'login'）
   const [currentScreen, setCurrentScreen] = useState<'login' | 'patientSelect' | 'timeline'>('login');
-
+  const [selectedPatients, setSelectedPatients] = useState<string[]>([]);
+  
   return (
     <>
       {/* 1. ログイン画面 */}
@@ -19,27 +18,26 @@ export default function App() {
       {/* 2. 患者選択画面 */}
       {currentScreen === 'patientSelect' && (
         <div className="min-h-screen flex flex-col bg-gray-50">
-          {/* 💡 患者マスターのアイコンを青くハイライト */}
-          <GlobalHeader currentPage="patientMaster" /> 
-          
-          <main className="flex-grow">
-            {/* 💡 選択が終わったらタイムラインへ進むように関数を渡す例 */}
-            <PatientSelect onSelectComplete={() => setCurrentScreen('timeline')} />
-          </main>
-          
+          <GlobalHeader currentPage="patientSelect" /> 
+          <PatientSelect 
+            onSelectComplete={(selectedList) => {
+              setSelectedPatients(selectedList); // IDを保存して
+              setCurrentScreen('timeline');      // 即、画面切り替え！
+            }} 
+          />
           <GlobalFooter />
         </div>
       )}
 
-      {/* 3. タイムライン画面（明日作ります！） */}
+      {/* 3. タイムライン画面 */}
       {currentScreen === 'timeline' && (
-        <div className="min-h-screen flex flex-col bg-gray-50">
-          {/* 💡 タイムラインのアイコンを青くハイライト */}
+        <div className="h-screen flex flex-col bg-gray-50 overflow-hidden">
           <GlobalHeader currentPage="timeline" /> 
           
-          <main className="flex-grow">
-            <TimelinePC />
-          </main>
+          {/* 💡 選択された患者IDの配列だけをTimelineにパスする */}
+          <div className="flex-1 overflow-hidden w-full">
+            <Timeline selectedPatients={selectedPatients} />
+          </div>
           
           <GlobalFooter />
         </div>

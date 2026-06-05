@@ -87,7 +87,7 @@ export default function Login({ onLoginSuccess }: { onLoginSuccess: () => void }
           <p id="error_message" style={{ color: 'red' }} className="text-sm mb-4"></p>
           
           <button 
-            className="w-1/2 !block !mx-auto !bg-sky-400 !text-white !font-bold !p-2 !rounded !text-center"
+            className="w-1/2 !block !mx-auto !bg-[#1A365D] !text-white !font-bold !p-2 !rounded !text-center"
             onClick={handleLogin} 
             type="button"
           >
