@@ -1,47 +1,59 @@
-import { useState } from 'react';
+import React, { useState } from 'react';
 import Login from './Login';
-import GlobalHeader from '../components/GlobalHeader'; 
-import GlobalFooter from '../components/GlobalFooter.tsx'; 
+import Header from '../components/Header'; 
+import Footer from '../components/Footer';
 import PatientSelect from "./PatientSelect.tsx"; 
 import Timeline from "./Timeline.tsx";
+// 自分で作った新しいページや土台をインポート
+// import WardMap from "../components/WardMap.tsx"; 
+import MainLayout from "../components/MainLayout.tsx"; 
+
 export default function App() {
-  const [currentScreen, setCurrentScreen] = useState<'login' | 'patientSelect' | 'timeline'>('login');
+  // 画面の選択肢に 'map' などを自由に追加できるようになります
+  const [currentScreen, setCurrentScreen] = useState<'login' | 'patientSelect' | 'timeline' | 'map'>('login');
   const [selectedPatients, setSelectedPatients] = useState<string[]>([]);
   
   return (
-    <>
-      {/* 1. ログイン画面 */}
+    <div className="min-h-screen flex flex-col bg-gray-50">
+      
+      {/* ─── 【A：ログイン前の世界】 ─── */}
       {currentScreen === 'login' && (
-        <Login onLoginSuccess={() => setCurrentScreen('patientSelect')} />
+        <>
+          <Header currentPage="login" />
+          <main className="flex-1 !flex items-center justify-center bg-gray-50"><Login onLoginSuccess={() => setCurrentScreen('patientSelect')} /></main>
+          <Footer />
+        </>
       )}
 
-      {/* 2. 患者選択画面 */}
       {currentScreen === 'patientSelect' && (
-        <div className="min-h-screen flex flex-col bg-gray-50">
-          <GlobalHeader currentPage="patientSelect" /> 
-          <PatientSelect 
-            onSelectComplete={(selectedList) => {
-              setSelectedPatients(selectedList); // IDを保存して
-              setCurrentScreen('timeline');      // 即、画面切り替え！
-            }} 
-          />
-          <GlobalFooter />
-        </div>
+        <>
+          <Header currentPage="patientSelect" />
+          <main className="flex-1 !flex items-center justify-center bg-gray-50">
+            <PatientSelect onSelectComplete={(list) => {
+              setSelectedPatients(list);
+              setCurrentScreen('timeline'); // または 'map' へ
+            }} />
+          </main>
+          <Footer />
+        </>
       )}
 
-      {/* 3. タイムライン画面 */}
-      {currentScreen === 'timeline' && (
-        <div className="h-screen flex flex-col bg-gray-50 overflow-hidden">
-          <GlobalHeader currentPage="timeline" /> 
+      {/* ─── 【B：ログイン後の世界（GlobalHeaderを使うグループ）】 ─── */}
+      {(currentScreen === 'timeline' || currentScreen === 'map') && (
+        <MainLayout currentScreen={currentScreen}>
           
-          {/* 💡 選択された患者IDの配列だけをTimelineにパスする */}
-          <div className="flex-1 overflow-hidden w-full">
+          {/* この中身が、MainLayout の {children} の部分にスポッと収まります */}
+          {currentScreen === 'timeline' && (
             <Timeline selectedPatients={selectedPatients} />
-          </div>
+          )}
+
+          {/* {currentScreen === 'map' && (
+            <WardMap onRoomChange={(roomId) => console.log(roomId)} />
+          )} */}
           
-          <GlobalFooter />
-        </div>
+        </MainLayout>
       )}
-    </>
-  );
+
+    </div>
+  ); 
 }

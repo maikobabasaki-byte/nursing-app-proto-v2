@@ -1,6 +1,3 @@
-import Header from '../components/Header'; 
-import Footer from '../components/Footer';
-
 export default function Login({ onLoginSuccess }: { onLoginSuccess: () => void }) {
   
   const handleLogin = () => {
@@ -42,13 +39,7 @@ export default function Login({ onLoginSuccess }: { onLoginSuccess: () => void }
   };
 
   return (
-    // 💡 外枠を min-h-screen flex flex-col にすることで、画面全体の高さを確保し、縦並びにします
-    <div className="min-h-screen flex flex-col bg-gray-50">
-      <Header />
-
-      {/* 💡 flex-grow で残りの高さをすべて使い、flex items-center justify-center でログインフォームを画面の「真ん中」に配置します */}
-      <main className="flex-grow !flex items-center justify-center p-4">
-        
+    <>
         {/* ログインフォームの見た目（白背景・シャドウ・角丸など）をTailwindで整える例 */}
         <div className="bg-white p-8 rounded-lg shadow-md w-full max-w-sm border border-gray-200">
           
@@ -94,9 +85,7 @@ export default function Login({ onLoginSuccess }: { onLoginSuccess: () => void }
             ログイン
           </button>
         </div>
-      </main>
-
-      <Footer />
-    </div>
+    </>
+    
   );
 }

@@ -11,19 +11,19 @@ export default function GlobalHeader({ currentPage }: GlobalHeaderProps) {
         <span className="header-title-text font-bold text-lg">NurseFlowApp</span>
       </h1>
       
-      <nav className="w-64">
+      <nav className="w-72">
         <ul className="flex justify-between text-center">
           {/* 👥 患者マスター（患者選択画面 'patientSelect' のときもアクティブ（青）にします） */}
           <li className="cursor-pointer">
             <img 
-              src={(currentPage === 'patientMaster' || currentPage === 'patientSelect') 
+              src={currentPage === 'patientMaster' 
                 ? "/icon_active/account_circle_48dp_155DFC_FILL1_wght400_GRAD0_opsz48.png" 
                 : "/icon_b/account_circle_48dp.png"
               } 
               alt="患者マスター" 
               className="mx-auto w-10 h-10" 
             />
-            <span className={(currentPage === 'patientMaster' || currentPage === 'patientSelect') ? "text-blue-600 font-bold" : "text-gray-600"}>
+            <span className={currentPage === 'patientMaster' ? "text-blue-600 font-bold" : "text-gray-600"}>
               患者マスター
             </span>
           </li>

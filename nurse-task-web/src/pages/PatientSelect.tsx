@@ -79,7 +79,6 @@ export default function PatientSelect({ onSelectComplete }: PatientSelectProps) 
 
   return (
     <>
-      <main>
         <div className="flex flex-col items-center">
           
           {/* 🔘 メンバー / リーダー 切り替え */}
@@ -203,7 +202,6 @@ export default function PatientSelect({ onSelectComplete }: PatientSelectProps) 
             </button>
           </div>
         </div>
-      </main>
 
       <footer></footer>
     </>
