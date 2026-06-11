@@ -1,6 +1,7 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect,useMemo } from 'react';
 import TimelineSidebar from "./TimelineSidebar.tsx"; 
-import TimelineMain from "./TimelineMain.tsx";       
+import TimelineMain from "./TimelineMain.tsx";   
+import type { TaskStatus } from '../types/types';    
 
 interface TimelineProps {
   selectedPatients: string[];
@@ -27,7 +28,8 @@ export default function Timeline({ selectedPatients }: TimelineProps) {
           const targetPatient = patientsData.find((p: any) => p.patient_id === task.patient_id);
           return {
             ...task,
-            patient_name: targetPatient ? targetPatient.name : '不明な患者'
+            patient_name: targetPatient ? targetPatient.name : '不明な患者',
+            initial_period: task.display_period // 変更前の時間を保持するフィールドを追加
           };
         });
 
@@ -42,19 +44,36 @@ export default function Timeline({ selectedPatients }: TimelineProps) {
     loadTimelineData();
   }, []);
 
+  const handleUpdateTaskPeriod = (taskId: string, newPeriod: string) => {
+    setAllTasks((prevTasks) =>
+      prevTasks.map((task) =>
+        task.task_id === taskId ? { ...task, display_period: newPeriod } : task
+      )
+    );
+  };
+
+  const { poolTasks, timedTasks } = useMemo(() => {
+    const patientTasks = allTasks.filter(task => selectedPatients.includes(task.patient_id));
+    return {
+      poolTasks: patientTasks.filter(task => !task.display_period.includes(':')),
+      timedTasks: patientTasks.filter(task => task.display_period.includes(':'))
+    };
+  }, [allTasks, selectedPatients]);
+
   if (loading) {
     return <div className="p-8 text-center text-gray-500">データを読み込み中...</div>;
   }
 
-  // 🎯 選択された患者のタスクだけに絞り込む
-  const patientTasks = allTasks.filter(task => selectedPatients.includes(task.patient_id));
-
-  // 🎯 プール用：display_period に「:」が含まれないタスク（午前、午後、随時）
-  const poolTasks = patientTasks.filter(task => !task.display_period.includes(':'));
-
-  // 🎯 メイン用：display_period に「:」が含まれるタスク（10:00、16:00など）
-  const timedTasks = patientTasks.filter(task => task.display_period.includes(':'));
-
+  // タスクのステータスを更新する関数を新しく定義する
+  const handleUpdateStatus = (taskId: string, newStatus: TaskStatus) => {
+  setAllTasks(prev => 
+    prev.map(task => 
+      task.task_id === taskId 
+        ? { ...task, status: newStatus } // 該当するタスクを上書き
+        : task // それ以外はそのまま
+    )
+  );
+};
   return (
     <main 
       className="flex flex-row w-full h-full bg-gray-50 overflow-hidden"
@@ -68,7 +87,10 @@ export default function Timeline({ selectedPatients }: TimelineProps) {
 
       {/* 🗓️ 右側：タイムラインメイン（残りの幅を全部使い、縦横スクロール） */}
       <div className="flex-1 min-w-0 overflow-auto bg-white">
-        <TimelineMain timedTasks={timedTasks || []} />
+        <TimelineMain timedTasks={timedTasks || []}
+          onUpdateTaskPeriod={handleUpdateTaskPeriod} 
+          onUpdateTaskStatus={handleUpdateStatus}
+        />
       </div>
 
     </main>
