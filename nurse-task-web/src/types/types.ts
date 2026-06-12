@@ -6,6 +6,7 @@ export type TaskStatus =
   | 'pending'
   | 'completed'
   | 'record_start'
+  | 'record_pending'
   | 'record_complete'
   | 'unexecuted';
 

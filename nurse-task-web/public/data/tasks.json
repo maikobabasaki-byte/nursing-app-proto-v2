@@ -11,7 +11,12 @@
     "room_id": "202",
     "staff_id": "N012",
     "interruptions": [],
-    "events": []
+    "events": [
+      { "action": "progressing", "at": "2026-04-03T10:05:00" }, 
+      { "action": "completed", "at": "2026-04-03T10:35:00" },  
+      { "action": "record_start", "at": "2026-04-03T10:36:00" },
+      { "action": "record_complete", "at": "2026-04-03T10:40:00" }
+    ]
   },
   {
     "task_id": "T002",
@@ -25,7 +30,10 @@
     "room_id": "202",
     "staff_id": "N012",
     "interruptions": [],
-    "events": []
+    "events": [
+      { "action": "progressing", "at": "2026-04-03T10:05:00" },
+      { "action": "completed", "at": "2026-04-03T10:35:00" }
+    ]
   },
   {
     "task_id": "T003",
@@ -39,7 +47,10 @@
     "room_id": "202",
     "staff_id": "N012",
     "interruptions": [],
-    "events": []
+    "events": [
+      { "action": "progressing", "at": "2026-04-03T10:05:00" },
+      { "action": "completed", "at": "2026-04-03T11:05:00" }
+    ]
   },
   {
     "task_id": "T004",
@@ -53,7 +64,10 @@
     "room_id": "202",
     "staff_id": "N012",
     "interruptions": [],
-    "events": []
+    "events": [
+      { "action": "progressing", "at": "2026-04-03T10:05:00" },
+      { "action": "completed", "at": "2026-04-03T10:35:00" }
+    ]
   },
   {
     "task_id": "T005",
@@ -67,7 +81,10 @@
     "room_id": "202",
     "staff_id": "N012",
     "interruptions": [],
-    "events": []
+    "events": [
+      { "action": "progressing", "at": "2026-04-03T10:05:00" },
+      { "action": "completed", "at": "2026-04-03T10:35:00" }
+    ]
   },
   {
     "task_id": "T006",
@@ -81,7 +98,10 @@
     "room_id": "202",
     "staff_id": "N012",
     "interruptions": [],
-    "events": []
+    "events": [
+      { "action": "progressing", "at": "2026-04-03T10:05:00" },
+      { "action": "completed", "at": "2026-04-03T10:35:00" }
+    ]
   },
   {
     "task_id": "T007",
@@ -95,7 +115,10 @@
     "room_id": "203",
     "staff_id": "N012",
     "interruptions": [],
-    "events": []
+    "events": [
+      { "action": "progressing", "at": "2026-04-03T10:05:00" },
+      { "action": "completed", "at": "2026-04-03T10:35:00" }
+    ]
   },
   {
     "task_id": "T008",
@@ -109,7 +132,10 @@
     "room_id": "203",
     "staff_id": "N012",
     "interruptions": [],
-    "events": []
+    "events": [
+      { "action": "progressing", "at": "2026-04-03T10:05:00" },
+      { "action": "completed", "at": "2026-04-03T10:35:00" }
+    ]
   },
   {
     "task_id": "T009",
@@ -123,7 +149,10 @@
     "room_id": "203",
     "staff_id": "N012",
     "interruptions": [],
-    "events": []
+    "events": [
+      { "action": "progressing", "at": "2026-04-03T10:05:00" },
+      { "action": "completed", "at": "2026-04-03T10:35:00" }
+    ]
   },
   {
     "task_id": "T010",
@@ -137,7 +166,10 @@
     "room_id": "203",
     "staff_id": "N012",
     "interruptions": [],
-    "events": []
+    "events": [
+      { "action": "progressing", "at": "2026-04-03T10:05:00" },
+      { "action": "completed", "at": "2026-04-03T10:35:00" }
+    ]
   },
   {
     "task_id": "T011",
@@ -151,7 +183,10 @@
     "room_id": "203",
     "staff_id": "N012",
     "interruptions": [],
-    "events": []
+    "events": [
+      { "action": "progressing", "at": "2026-04-03T10:05:00" },
+      { "action": "completed", "at": "2026-04-03T10:35:00" }
+    ]
   },
   {
     "task_id": "T012",
@@ -165,7 +200,10 @@
     "room_id": "203",
     "staff_id": "N012",
     "interruptions": [],
-    "events": []
+    "events": [
+      { "action": "progressing", "at": "2026-04-03T10:05:00" },
+      { "action": "completed", "at": "2026-04-03T10:35:00" }
+    ]
   },
   {
     "task_id": "T013",
@@ -179,7 +217,10 @@
     "room_id": "203",
     "staff_id": "N012",
     "interruptions": [],
-    "events": []
+    "events": [
+      { "action": "progressing", "at": "2026-04-03T10:05:00" },
+      { "action": "completed", "at": "2026-04-03T10:35:00" }
+    ]
   },
   {
     "task_id": "T014",
@@ -193,7 +234,10 @@
     "room_id": "203",
     "staff_id": "N012",
     "interruptions": [],
-    "events": []
+    "events": [
+      { "action": "progressing", "at": "2026-04-03T10:05:00" },
+      { "action": "completed", "at": "2026-04-03T10:35:00" }
+    ]
   },
   {
     "task_id": "T015",
@@ -207,7 +251,10 @@
     "room_id": "203",
     "staff_id": "N012",
     "interruptions": [],
-    "events": []
+    "events": [
+      { "action": "progressing", "at": "2026-04-03T10:05:00" },
+      { "action": "completed", "at": "2026-04-03T10:35:00" }
+    ]
   },
   {
     "task_id": "T017",
@@ -221,7 +268,10 @@
     "room_id": "203",
     "staff_id": "N012",
     "interruptions": [],
-    "events": []
+    "events": [
+      { "action": "progressing", "at": "2026-04-03T10:05:00" },
+      { "action": "completed", "at": "2026-04-03T10:35:00" }
+    ]
   },
   {
     "task_id": "T018",
@@ -235,7 +285,10 @@
     "room_id": "203",
     "staff_id": "N012",
     "interruptions": [],
-    "events": []
+    "events": [
+      { "action": "progressing", "at": "2026-04-03T10:05:00" },
+      { "action": "completed", "at": "2026-04-03T10:35:00" }
+    ]
   },
   {
     "task_id": "T019",
@@ -249,7 +302,10 @@
     "room_id": "203",
     "staff_id": "N012",
     "interruptions": [],
-    "events": []
+    "events": [
+      { "action": "progressing", "at": "2026-04-03T10:05:00" },
+      { "action": "completed", "at": "2026-04-03T10:35:00" }
+    ]
   },
   {
     "task_id": "T020",
@@ -263,7 +319,10 @@
     "room_id": "205",
     "staff_id": "N013",
     "interruptions": [],
-    "events": []
+    "events": [
+      { "action": "progressing", "at": "2026-04-03T10:05:00" },
+      { "action": "completed", "at": "2026-04-03T10:35:00" }
+    ]
   },
   {
     "task_id": "T021",
@@ -277,6 +336,9 @@
     "room_id": "205",
     "staff_id": "N012",
     "interruptions": [],
-    "events": []
+    "events": [
+      { "action": "progressing", "at": "2026-04-03T10:05:00" },
+      { "action": "completed", "at": "2026-04-03T10:35:00" }
+    ]
   }
 ]
