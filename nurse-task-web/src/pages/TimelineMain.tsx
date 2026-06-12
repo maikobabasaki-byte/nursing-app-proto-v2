@@ -46,7 +46,22 @@ export default function TimelineMain({
     status: null,
   });
 
-  const activePopupTask = extendedTasks.find(t => t.task_id === activePopupTaskId) || null;
+  // 修正後：親タスクだけでなく、グループの中（children）まで全探索してタスクを見つける
+const activePopupTask = (() => {
+  if (!activePopupTaskId) return null;
+  
+  for (const task of extendedTasks) {
+    // 1. 親タスク自体が一致した場合
+    if (task.task_id === activePopupTaskId) return task;
+    
+    // 2. グループタスクの場合、その中身（children）からも探す
+    if (task.isGroup && task.children) {
+      const foundChild = task.children.find(c => c.task_id === activePopupTaskId);
+      if (foundChild) return foundChild;
+    }
+  }
+  return null;
+})();
 
   const stepsPerHour = 60 / timelineMode;
   const timeSlots = Array.from({ length: 24 * stepsPerHour }, (_, i) => {
@@ -431,47 +446,47 @@ export default function TimelineMain({
                       </div>
 
                       {/* アコーディオン展開部分 */}
-                    {task.isGroup && isExpanded && (
-                      <div className="absolute top-[90%] left-2 w-60 bg-[#1e3a6a] rounded-xl p-2 z-30 shadow-xl flex flex-col gap-2 border border-blue-900 animate-fade-in max-h-[320px] overflow-y-auto scrollbar-thin">
-                        {task.children?.map((child) => {
-                          // 子タスクの優先度に応じた色をここで判定する
-                          let childColorClass = 'bg-white border-gray-200 text-gray-800'; // デフォルト
-                          
-                          const priorityColors = {
-                            high: 'bg-red-300 border-red-200 text-gray-900',
-                            medium: 'bg-green-300 border-green-200 text-gray-900',
-                            low: 'bg-blue-300 border-blue-200 text-gray-900',
-                          };
-                          
-                          // 子タスクの優先度から色を取得（statusが特別ならそこも考慮できますが、まずは元の優先度色を優先）
-                          childColorClass = priorityColors[child.priority as 'high' | 'medium' | 'low'] || childColorClass;
+                      {task.isGroup && isExpanded && (
+                        <div className="absolute top-[90%] left-2 w-60 bg-[#1e3a6a] rounded-xl p-2 z-30 shadow-xl flex flex-col gap-2 border border-blue-900 animate-fade-in max-h-[320px] overflow-y-auto scrollbar-thin">
+                          {task.children?.map((child) => {
+                            let childColorClass = 'bg-white border-gray-200 text-gray-800';
+                            const priorityColors = {
+                              high: 'bg-red-300 border-red-200 text-gray-900',
+                              medium: 'bg-green-300 border-green-200 text-gray-900',
+                              low: 'bg-blue-300 border-blue-200 text-gray-900',
+                            };
+                            childColorClass = priorityColors[child.priority as 'high' | 'medium' | 'low'] || childColorClass;
 
-                          return (
-                            <div 
-                              key={child.task_id}
-                              // ✨ 'bg-[#00a2e8] text-white' だった部分を 'childColorClass' に差し替え！
-                              className={`p-2 rounded-lg border shadow-sm text-xs relative text-left ${childColorClass}`}
-                            >
-                              <div className="font-bold flex justify-between items-center mb-0.5">
-                                {/* 文字色が黒ベース（text-gray-900）になるので、文字の透過度などを調整 */}
-                                <span className="opacity-75">午前 {child.room_id}号室</span>
-                                <button
-                                  type="button"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    onUngroupTask(task.task_id, child.task_id, task.display_period);
-                                  }}
-                                  className="bg-gray-50 hover:bg-gray-200 !px-1.5 !py-0.5 !rounded text-[9px] font-bold transition-colors cursor-pointer"
-                                >
-                                  外す
-                                </button>
+                            return (
+                              <div 
+                                key={child.task_id}
+                                className={`p-2 rounded-lg border shadow-sm text-xs relative text-left transition-transform active:scale-[0.98] ${childColorClass}`}
+                                
+                                // ✨ ここを追加！子タスクをクリックしたらポップアップを開く
+                                onClick={(e) => {
+                                  e.stopPropagation(); // 🔴 親グループカードのクリック（開閉）が動かないようにブロック！
+                                  setActivePopupTaskId(child.task_id); // 🎉 子タスクのポップアップを表示
+                                }}
+                              >
+                                <div className="font-bold flex justify-between items-center mb-0.5">
+                                  <span className="opacity-75">午前 {child.room_id}号室</span>
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation(); // 🔴 ポップアップが開かないようにボタンのクリックもブロック
+                                      onUngroupTask(task.task_id, child.task_id, task.display_period);
+                                    }}
+                                    className="!bg-white hover:!bg-gray-200 text-gray-800 !px-1.5 !py-0.5 !rounded text-[9px] font-bold transition-colors cursor-pointer"
+                                  >
+                                    外す
+                                  </button>
+                                </div>
+                                <div className="font-black text-sm">{child.patient_name}様</div>
+                                <div className="opacity-90 text-[11px]">{child.title}</div>
                               </div>
-                              <div className="font-black text-sm">{child.patient_name}様</div>
-                              <div className="opacity-90 text-[11px]">{child.title}</div>
-                            </div>
-                          );
-                        })}
-                      </div>
+                            );
+                          })}
+                        </div>
                     )}
                     </div>
                   );
