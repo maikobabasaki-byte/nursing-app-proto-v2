@@ -23,3 +23,9 @@ export interface Task {
   room_id: string;
   patient_name: string;
 }
+
+export interface Memo {
+  id: string;
+  text: string;
+  time: string;
+}

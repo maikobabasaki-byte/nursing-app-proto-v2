@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
-import TimelineSidebar from "./TimelineSidebar.tsx"; 
-import TimelineMain from "./TimelineMain.tsx";   
-import type { TaskStatus } from '../types/types';    
+import TimelineSidebar from "../../pages/TimelineSidebar.tsx"; 
+import TimelineMain from "../../pages/TimelineMain.tsx";   
+import type { TaskStatus } from '../../types/types.ts';    
 
 interface TimelineProps {
   selectedPatients: string[];

@@ -3,7 +3,7 @@ import Login from './Login';
 import Header from '../components/Header'; 
 import Footer from '../components/Footer';
 import PatientSelect from "./PatientSelect.tsx"; 
-import Timeline from "./Timeline.tsx";
+import Timeline from "../components/Timeline/Timeline.tsx";
 // 自分で作った新しいページや土台をインポート
 // import WardMap from "../components/WardMap.tsx"; 
 import MainLayout from "../components/MainLayout.tsx"; 
