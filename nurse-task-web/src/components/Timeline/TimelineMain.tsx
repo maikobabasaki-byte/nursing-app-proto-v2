@@ -1,26 +1,19 @@
   import { useState, useEffect, useRef } from 'react';
-  import type { Task, TaskStatus } from '../types/types';
+  import type { Task, TaskStatus,Memo, ExtendedTaskStatus, ExtendedTask, TimelineMainProps } from '../../types/types';
+  import { TimelineControls } from './TimelineControls';
+  import { getTaskStyles } from '../../utils/taskStyles';
+  import { TaskCard } from './TaskCard';
+  import { GroupAccordion } from './GroupAccordion';
+  import { TimelinePopup } from '../Timeline/TimelinePopup'
+  import { MemoPopup } from './MemoPopup';
+  import { MemoCell } from './MemoCell';
+import { DndContext, DragEndEvent } from '@dnd-kit/core';
+// import { DraggableTask } from './DraggableTask'; 
+// import { DroppableRow } from './DroppableRow';     
 
-  // 💡 記録中断のステータス（型定義の拡張対応）
-  type ExtendedTaskStatus = TaskStatus | 'record_pending';
 
-  // Task型の拡張（コンポーネント内部で安全に使うため）
-  interface ExtendedTask extends Omit<Task, 'status'> {
-    status: ExtendedTaskStatus;
-    isChild?: boolean;
-    isGroup?: boolean;
-    children?: ExtendedTask[];
-    initial_period?: string;
-  }
 
-  interface TimelineMainProps {
-    timedTasks: Task[]; 
-    onUpdateTaskPeriod: (taskId: string, newPeriod: string) => void; 
-    onUpdateTaskStatus?: (taskId: string, newStatus: ExtendedTaskStatus) => void;
-    onGroupTasks: (draggedId: string, targetId: string) => void;
-    onUngroupTask: (groupId: string, childTaskId: string, currentPeriod: string) => void;
-  }
-
+  
 
 
   export default function TimelineMain({ 
@@ -44,8 +37,17 @@
     const [activeMemoTime, setActiveMemoTime] = useState<string | null>(null);
     const [editingMemo, setEditingMemo] = useState<Memo | null>(null); 
     const [newMemoText, setNewMemoText] = useState("");
-    
 
+    const handleDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event;
+    if (!over) return;
+
+    const taskId = active.id as string;
+    const newTime = over.id as string; // DroppableRow の ID に時刻を使用
+
+    onUpdateTaskPeriod(taskId, newTime);
+  };
+  
     // 💡 toast の状態に status も保持
     const [toast, setToast] = useState<{ message: string; visible: boolean; status: ExtendedTaskStatus | null }>({
       message: '',
@@ -113,22 +115,6 @@
       const timerId = setInterval(updateLinePosition, 1000);
       return () => clearInterval(timerId);
     }, [timelineMode]); 
-
-    const handleDragStart = (e: React.DragEvent, taskId: string) => {
-      e.dataTransfer.setData('text/plain', taskId);
-    };
-
-    const handleDragOver = (e: React.DragEvent) => {
-      e.preventDefault();
-    };
-    
-    const handleDrop = (e: React.DragEvent, targetTime: string) => {
-      e.preventDefault();
-      const taskId = e.dataTransfer.getData('text/plain');
-      if (taskId) {
-        onUpdateTaskPeriod(taskId, targetTime); 
-      }
-    };
 
     const handleStatusChange = (task: ExtendedTask, nextStatus: ExtendedTaskStatus) => {
       if (task.status === nextStatus) return;
@@ -271,24 +257,10 @@
     return (
       <div className="flex flex-col h-full p-4 select-none">
         {/* コントロールエリア */}
-        <div id="controls-area" className="flex space-x-2 mb-4 bg-gray-100 p-2 rounded shadow-inner">
-          {([
-            { label: '1時間', value: 60 },
-            { label: '30分', value: 30 },
-            { label: '15分', value: 15 },
-          ] as const).map((config) => (
-            <button
-              key={config.value}
-              type="button"
-              className={`!px-4 !py-2 !text-sm !font-bold !rounded !transition-colors !cursor-pointer ${
-                timelineMode === config.value ? '!bg-blue-600 !text-white shadow' : 'bg-white text-gray-700 border hover:bg-gray-50'
-              }`}
-              onClick={() => setTimelineMode(config.value)}
-            >
-              {config.label}
-            </button>
-          ))}
-        </div>
+        <TimelineControls 
+      timelineMode={timelineMode} 
+      setTimelineMode={setTimelineMode} 
+    />
         
 
         {/* タイムライン本体コンテナ */}
@@ -314,6 +286,16 @@
               <div
                 key={time}
                 ref={(el) => { rowRefs.current[time] = el; }}
+                // 【最重要】ここでの preventDefault がドロップの鍵です
+      onDragOver={(e) => {
+        e.preventDefault(); 
+      }}
+      onDrop={(e) => {
+        e.preventDefault();
+        const draggedId = e.dataTransfer.getData('text/plain');
+        console.log("Dropping into row:", time, "ID:", draggedId); // ログで確認
+        handleDropAction(draggedId, time);
+      }}
                 className={`flex !border-b !border-gray-200 min-h-[60px] ${isCurrentRow ? 'bg-amber-50/50 is-current-row' : ''}`}
               >
                 {/* 時間ラベル列 */}
@@ -325,8 +307,6 @@
                 <div
                   id={`task-grid-${time.replace(':', '')}`}
                   className="p-2 min-h-[60px] relative flex flex-wrap flex-1 gap-2"
-                  onDragOver={handleDragOver}
-                  onDrop={(e) => handleDrop(e, time)}
                 >
                   {/* 1. 看板（プレースホルダー）の描画 */}
                   {placeholders.map(task => (
@@ -338,194 +318,77 @@
                       <span>{task.room_id}号室 {task.patient_name}様</span>
                     </div>
                   ))}
-
-                  {/* 2. 実際のタスクカードの描画 */}
+                  {/* 2. タスクカードの描画 */}
                   {rowTasks.map(task => {
-                    const isExpanded = !!expandedGroups[task.task_id];
-                    const isRecordDone = task.status === 'record_complete';
-                    const isActionRequiredDone = ['completed', 'record_start', 'record_pending'].includes(task.status);
-                    
-                    let cardColorClass = '';
-                    if (task.isGroup) {
-                      cardColorClass = 'bg-[#1e3a6a] border-[#1e3a6a] text-white';
-                    } else if (task.status === 'pending') {
-                      cardColorClass = 'bg-orange-400 border-orange-300 text-gray-900';
-                    } else if (isRecordDone) {
-                      cardColorClass = 'bg-slate-200/60 border-slate-200 text-gray-400';
-                    } else if (isActionRequiredDone) {
-                      cardColorClass = 'bg-slate-300 border-slate-200 text-gray-900';
-                    } else {
-                      const priorityColors = {
-                        high: 'bg-red-300 border-red-200 text-gray-900',
-                        medium: 'bg-green-300 border-green-200 text-gray-900',
-                        low: 'bg-blue-300 border-blue-200 text-gray-900',
-                      };
-                      cardColorClass = priorityColors[task.priority as 'high' | 'medium' | 'low'] || 'bg-white border-gray-200 text-gray-800';
-                    }
-
-                    const isProgressing = task.status === 'progressing';
-                    // 1. まず「時間を過ぎているか」の判定を作る
-                    const isOverdue = isPastTime(task.display_period) && !isRecordDone && !isActionRequiredDone;
-
-                    // 2. その判定を使って、枠線のスタイルを3段階に分岐させる
-                    const borderStyle = isOverdue
-                      ? '!border-2 !border-red-600 shadow-md shadow-red-100' // 🚨 時間を過ぎたら赤枠
-                      : isProgressing 
-                        ? '!border-2 !border-blue-600 shadow-md scale-[1.01]'               // 🟦 実施中なら青枠
-                        : 'border';                                                          // ⬜ 通常時
+                    const { cardColorClass, borderStyle } = getTaskStyles(task, isPastTime);
                     const originalTime = task.initial_period || task.display_period;
 
                     return (
-                      <div key={task.task_id} className="relative">
-                        {/* タスクカード本体 */}
-                        <div 
-                          draggable={task.status !== 'pending'} 
-                          onDragStart={(e) => handleDragStart(e, task.task_id)}
-                          onDragOver={(e) => {
-                            if (task.priority !== 'high') {
-                              e.preventDefault();
-                            }
-                          }}
-                          onDrop={(e) => {
-                            e.preventDefault();
-                            e.stopPropagation();
-                            const draggedId = e.dataTransfer.getData('text/plain');
-                            if (draggedId && draggedId !== task.task_id) {
-                              onGroupTasks(draggedId, task.task_id);
-                            }
-                          }}
-                          onClick={(e) => {
-                            e.stopPropagation(); 
-                            // グループ化されているカードなら、シングルクリックではポップアップを開かない（またはアコーディオンを開閉させる）
+                      <div key={task.task_id}
+                      onDragOver={(e) => {
+    e.preventDefault(); // ここで必ずpreventDefaultを入れる
+    e.stopPropagation(); // これが干渉していないか一旦外して試す
+  }}
+  onDrop={(e) => {
+    e.preventDefault();
+    e.stopPropagation(); 
+    const draggedId = e.dataTransfer.getData('text/plain');
+    handleDropAction(draggedId, task.display_period, task.task_id);
+  }}
+                        className="relative">
+                        <TaskCard 
+                          task={task}
+                          cardColorClass={cardColorClass}
+                          borderStyle={borderStyle}
+                          originalTime={originalTime}
+                          draggable={true} // これがtrueになっていることを確認
+  onDragStart={(e) => {
+    e.dataTransfer.setData('text/plain', task.task_id);
+    e.dataTransfer.effectAllowed = 'move';
+    console.log("Drag Started:", task.task_id); // ログが出ていれば成功
+  }}
+                          onEdit={() => {
                             if (task.isGroup) {
-                              // 💡 好みに合わせてどちらかを選んでください：
-                              
-                              // パターンA：グループカードはシングルクリックでアコーディオンを開閉させる場合（ダブルクリックの手間が省けて直感的になります）
                               setExpandedGroups(prev => ({ ...prev, [task.task_id]: !prev[task.task_id] }));
                             } else {
-                              // 通常タスクカードのみ、今まで通りポップアップを開く
                               setActivePopupTaskId(task.task_id);
                             }
                           }}
-                          onDoubleClick={(e) => {
-                            if (task.isGroup) {
-                              e.stopPropagation();
-                              setExpandedGroups(prev => ({ ...prev, [task.task_id]: !prev[task.task_id] }));
-                            }
-                          }}
-                          className={`w-60 p-2 m-2 rounded shadow-sm font-bold cursor-grab active:cursor-grabbing transition-all select-none ${cardColorClass} ${borderStyle}`}
-                        >
-                          {task.isGroup ? (
-                            <div className="text-center py-1">
-                              <div className="text-[10px] opacity-80 font-bold">午前</div>
-                              <div className="text-lg font-black my-0.5">
-                                0/{task.children?.length || 0}
-                              </div>
-                              <div className="text-xs font-bold tracking-wider">{task.title}</div>
-                            </div>
-                          ) : (
-                            <>
-                              <div className="flex items-center justify-between mb-1">
-                                <div className="flex items-center gap-1.5">
-                                  <span className="font-size-sm font-bold">{task.display_period}</span>
-                                  {originalTime && originalTime !== time && (
-                                    <span className="bg-gray-700 text-white text-[9px] px-1.5 py-0.5 rounded font-normal opacity-90">
-                                      指示: {originalTime}
-                                    </span>
-                                  )}
-                                </div>
-                                {task.status === 'completed' && <span className="text-blue-500 text-xs animate-pulse" title="記録未完了">🔵</span>}
-                                {task.status === 'record_start' && <span className="text-green-500 text-xs animate-pulse" title="記録中">🟢</span>}
-                                {task.status === 'record_pending' && <span className="text-orange-500 text-xs animate-pulse" title="記録中断中">🟠</span>}
-                              </div>
-                              <div className="grid grid-cols-3 gap-1 mb-1 text-sm">
-                                <span>{task.room_id}号室</span>
-                                <span className='col-span-2 text-left'>{task.patient_name}様</span>
-                              </div>
-                              <div className="text-sm text-left">{task.title}</div>
-                              {task.details && (
-                                <div className="text-[11px] font-normal mt-0.5 border-t border-dashed border-current/20 pt-0.5 opacity-80 text-left">
-                                  {task.details}
-                                </div>
-                              )}
-                            </>
-                          )}
-                        </div>
-
-                        {/* アコーディオン展開部分 */}
-                        {task.isGroup && isExpanded && (
-                          <div className="absolute top-[90%] left-2 w-60 bg-[#1e3a6a] rounded-xl p-2 z-30 shadow-xl flex flex-col gap-2 border border-blue-900 animate-fade-in max-h-[320px] overflow-y-auto scrollbar-thin">
-                            {task.children?.map((child) => {
-                              let childColorClass = 'bg-white border-gray-200 text-gray-800';
-                              const priorityColors = {
-                                high: 'bg-red-300 border-red-200 text-gray-900',
-                                medium: 'bg-green-300 border-green-200 text-gray-900',
-                                low: 'bg-blue-300 border-blue-200 text-gray-900',
-                              };
-                              childColorClass = priorityColors[child.priority as 'high' | 'medium' | 'low'] || childColorClass;
-
-                              return (
-                                <div 
-                                  key={child.task_id}
-                                  className={`p-2 rounded-lg border shadow-sm text-xs relative text-left transition-transform active:scale-[0.98] ${childColorClass}`}
-                                  
-                                  // ✨ ここを追加！子タスクをクリックしたらポップアップを開く
-                                  onClick={(e) => {
-                                    e.stopPropagation(); // 🔴 親グループカードのクリック（開閉）が動かないようにブロック！
-                                    setActivePopupTaskId(child.task_id); // 🎉 子タスクのポップアップを表示
-                                  }}
-                                >
-                                  <div className="font-bold flex justify-between items-center mb-0.5">
-                                    <span className="opacity-75">午前 {child.room_id}号室</span>
-                                    <button
-                                      type="button"
-                                      onClick={(e) => {
-                                        e.stopPropagation(); // 🔴 ポップアップが開かないようにボタンのクリックもブロック
-                                        onUngroupTask(task.task_id, child.task_id, task.display_period);
-                                      }}
-                                      className="!bg-white hover:!bg-gray-200 text-gray-800 !px-1.5 !py-0.5 !rounded text-[9px] font-bold transition-colors cursor-pointer"
-                                    >
-                                      外す
-                                    </button>
-                                  </div>
-                                  <div className="font-black text-sm">{child.patient_name}様</div>
-                                  <div className="opacity-90 text-[11px]">{child.title}</div>
-                                </div>
-                              );
-                            })}
-                          </div>
-                      )}
+                        />
+                        
+                        {task.isGroup && (
+                          <GroupAccordion 
+                            task={task} 
+                            isExpanded={!!expandedGroups[task.task_id]}
+                            onChildClick={setActivePopupTaskId}
+                            onUngroup={onUngroupTask}
+                          />
+                        )}
                       </div>
                     );
                   })}
                 </div>
                 {/* ✨ メモ専用列 */}
                 <div
-                  className="w-24 border-l border-gray-200 bg-yellow-50/10 flex flex-col p-1 gap-1 cursor-pointer hover:bg-yellow-100 transition-colors group relative"
-                  onClick={() => setActiveMemoTime(time)}
+                  className="w-48 border-l border-gray-200 bg-yellow-50/10 flex flex-col p-1 gap-1 cursor-pointer hover:bg-yellow-100 transition-colors group relative"
+                  onClick={() => setActiveMemoTime(time)} // 行全体をクリックで新規作成
                 >
-                  {/* 1. メモが表示されている時の表示エリア */}
                   {timeMemos
                     .filter((memo) => memo.time === time)
                     .map((memo) => (
-                      <div 
-                        key={memo.id} 
-                        className="text-[10px] bg-yellow-200 p-1 rounded shadow-sm border border-yellow-300 truncate"
-                        title={memo.text} // マウスを乗せると全文が出るようにする
-                        onClick={(e) => {
-                          e.stopPropagation();   // 親の「メモ追加」を発火させない
-                          console.log("memo clicked", memo);
-                          setEditingMemo(memo);  // 編集対象にセット
+                      <MemoCell 
+                        key={memo.id}   // keyはここへ
+                        memo={memo}     // 配列ではなく、個別のメモを渡す
+                        onEdit={(m) => {
                           setActiveMemoTime(null);
+                          setEditingMemo(m);
                         }}
-                      >
-                        {memo.text}
-                      </div>
+                      />
                     ))
                   }
 
-                  {/* 2. メモがない時だけ、ホバーで「+ メモを追加」と表示する */}
-                  <span className="text-xs text-yellow-700 font-bold opacity-0 group-hover:opacity-100 transition-opacity duration-200 absolute inset-0 flex items-center justify-center">
+                  {/* 「+ メモを追加」の表示 */}
+                  <span className="text-xs text-yellow-700 font-bold opacity-0 group-hover:opacity-100 transition-opacity duration-200 absolute inset-0 flex items-center justify-center pointer-events-none">
                     + メモを追加
                   </span>
                 </div>
@@ -571,177 +434,38 @@
         )}
 
         {/* 🎯 メモ用ポップアップ (新規作成用 と 編集・削除用) */}
-{(activeMemoTime || editingMemo) && (
-  <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
-    <div className="bg-white p-6 rounded-2xl shadow-2xl w-full max-w-sm">
-      <h2 className="text-lg font-bold mb-4 border-b pb-2">
-        {editingMemo ? 'メモの編集' : 'メモの追加'}
-      </h2>
-
-      {/* タイムライン時間入力 */}
-      <div className="mb-4">
-        <label className="block text-sm font-bold text-gray-600 mb-1">タイムライン時間：</label>
-        <input
-        type="time"
-        value={editingMemo ? editingMemo.time : activeMemoTime!}
-        disabled={!editingMemo}
-        onChange={(e) => {
-          if (editingMemo) {
-            setEditingMemo({
-              ...editingMemo,
-              time: e.target.value,
-            });
-          }
-        }}
-        className="w-full p-2 border rounded-lg bg-gray-50 disabled:bg-gray-100"
-      />
-      </div>
-
-      {/* 実施予定日時（datetime-local） */}
-      <div className="mb-4">
-        <label className="block text-sm font-bold text-gray-600 mb-1">実施予定日時：</label>
-        <input 
-          type="datetime-local" 
-          className="w-full p-2 border rounded-lg bg-gray-50 text-sm"
-          defaultValue={new Date().toISOString().slice(0, 16)} 
-        />
-      </div>
-
-      {/* メモ内容 */}
-      <div className="mb-6">
-        <textarea
-          className="w-full h-24 p-3 border rounded-lg focus:ring-2 focus:ring-blue-400 outline-none"
-          placeholder="メモ内容を入力..."
-          value={editingMemo ? editingMemo.text : newMemoText}
-          onChange={(e) => {
-            if (editingMemo) {
-              setEditingMemo({ ...editingMemo, text: e.target.value });
-            } else {
-              setNewMemoText(e.target.value);
-            }
-          }}
-        />
-      </div>
-
-      {/* ボタンエリア */}
-      <div className="flex gap-3">
-        {/* 削除ボタン (編集時のみ表示) */}
-        {editingMemo && (
-          <button 
-            className="px-4 py-2 bg-red-100 text-red-600 hover:bg-red-200 rounded-lg font-bold"
-            onClick={() => {
-              setTimeMemos(prev => prev.filter(m => m.id !== editingMemo.id));
+        {(activeMemoTime || editingMemo) && (
+          <MemoPopup
+            editingMemo={editingMemo}
+            activeMemoTime={activeMemoTime}
+            newMemoText={newMemoText}
+            setNewMemoText={setNewMemoText}
+            onClose={() => { setActiveMemoTime(null); setEditingMemo(null); }}
+            onSave={(data) => {
+              if (editingMemo) {
+                setTimeMemos(prev => prev.map(m => m.id === data.id ? data : m));
+              } else {
+                setTimeMemos(prev => [...prev, data]);
+              }
+              setActiveMemoTime(null);
               setEditingMemo(null);
             }}
-          >削除</button>
-        )}
-        
-        <button 
-          className="flex-1 py-2.5 bg-gray-100 hover:bg-gray-200 rounded-lg font-bold"
-          onClick={() => {
-            setActiveMemoTime(null);
-            setEditingMemo(null);
-          }}
-        >キャンセル</button>
-        
-        <button 
-          className="flex-1 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-bold"
-          onClick={() => {
-            if (editingMemo) {
-              // 更新処理
-              setTimeMemos(prev => prev.map(m => m.id === editingMemo.id ? editingMemo : m));
+            onDelete={(id) => {
+              setTimeMemos(prev => prev.filter(m => m.id !== id));
               setEditingMemo(null);
-            } else {
-              // 新規追加処理
-              const newMemo = { 
-                id: Date.now().toString(), 
-                time: activeMemoTime!, 
-                text: newMemoText 
-              };
-              setTimeMemos(prev => [...prev, newMemo]);
-              setNewMemoText("");
-              setActiveMemoTime(null);
-            }
-          }}
-        >
-          {editingMemo ? '更新' : '追加'}
-        </button>
-      </div>
-    </div>
-  </div>
-)}
+            }}
+          />
+        )}
 
 
-        {/* 🎯 ポップアップ表示エリア */}
-        {activePopupTaskId && activePopupTask && (() => {
-          const statusColors: Record<ExtendedTaskStatus, { bg: string; border: string; text: string }> = {
-            initial: { bg: 'bg-gray-50', border: 'border-gray-200', text: 'text-gray-900' },
-            untouched: { bg: 'bg-gray-50', border: 'border-gray-200', text: 'text-gray-900' },
-            progressing: { bg: 'bg-cyan-50', border: 'border-cyan-200', text: 'text-cyan-900' },
-            pending: { bg: 'bg-orange-50', border: 'border-orange-200', text: 'text-orange-900' },
-            completed: { bg: 'bg-green-50', border: 'border-green-200', text: 'text-green-900' },
-            record_start: { bg: 'bg-blue-50', border: 'border-blue-200', text: 'text-blue-900' },
-            record_pending: { bg: 'bg-orange-50', border: 'border-orange-200', text: 'text-orange-900' },
-            record_complete: { bg: 'bg-purple-50', border: 'border-purple-200', text: 'text-purple-900' },
-            unexecuted: { bg: 'bg-red-50', border: 'border-red-200', text: 'text-red-900' },
-          };
-
-          let statusLabel = '未着手';
-          let labelBgClass = 'bg-gray-200 text-gray-700';
-          const currentStatus = activePopupTask.status;
-
-          if (currentStatus === 'progressing') {
-            statusLabel = '実施中';
-            labelBgClass = 'bg-cyan-600 text-white';
-          } else if (currentStatus === 'pending') {
-            statusLabel = '中断中';
-            labelBgClass = 'bg-orange-500 text-white';
-          } else if (currentStatus === 'completed') {
-            statusLabel = '実施完了';
-            labelBgClass = 'bg-green-600 text-white';
-          } else if (currentStatus === 'record_start') {
-            statusLabel = '記録中';
-            labelBgClass = 'bg-blue-600 text-white';
-          } else if (currentStatus === 'record_pending') {
-            statusLabel = '記録中断';
-            labelBgClass = 'bg-orange-500 text-white';
-          } else if (currentStatus === 'record_complete') {
-            statusLabel = '記録完了';
-            labelBgClass = 'bg-purple-600 text-white';
-          } else if (currentStatus === 'unexecuted') {
-            statusLabel = '未実施';
-            labelBgClass = 'bg-red-600 text-white';
-          }
-
-          const colorSet = statusColors[currentStatus] || { bg: 'bg-white', border: 'border-gray-200', text: 'text-gray-900' };
-
-          return (
-            <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
-              <div className={`relative ${colorSet.bg} ${colorSet.border} ${colorSet.text} border-2 rounded-xl shadow-2xl p-6 w-[360px]`}>
-                <div className="absolute top-4 right-14 flex items-center">
-                  <span className={`text-xs font-black px-2.5 py-1 rounded-full shadow-sm ${labelBgClass}`}>
-                    {statusLabel}
-                  </span>
-                </div>
-                <button 
-                  type="button"
-                  className="absolute top-4 right-4 text-gray-400 hover:text-gray-600 font-bold text-xl w-8 h-8 flex items-center justify-center rounded-lg hover:bg-black/5 transition-colors cursor-pointer" 
-                  onClick={() => setActivePopupTaskId(null)}
-                >
-                  &times;
-                </button>
-                <div className="pr-6">
-                  <div className="text-xs font-bold opacity-70 mb-0.5">{activePopupTask.room_id}号室</div>
-                  <div className="text-xl font-black mb-2">{activePopupTask.patient_name} 様</div>
-                  <div className="text-sm font-bold border-b pb-2 mb-3">指示時間: {activePopupTask.display_period}</div>
-                  <div className="text-base font-black mb-1">{activePopupTask.title}</div>
-                  <div className="text-xs opacity-80 mb-6 min-h-[40px] whitespace-pre-wrap text-left">{activePopupTask.details || '詳細はありません'}</div>
-                  {renderPopupButtons(activePopupTask)} 
-                </div>
-              </div>
-            </div>
-          );
-        })()}
+        🎯 ポップアップ表示エリア
+        {activePopupTaskId && activePopupTask && (
+          <TimelinePopup 
+            task={activePopupTask}
+            onClose={() => setActivePopupTaskId(null)}
+            renderPopupButtons={renderPopupButtons}
+          />
+        )}
 
 
         {/* ステータス連動型 フルカラー・全画面オーバーレイ */}
@@ -771,3 +495,4 @@
       </div>
     );
   }
+  

@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
-import TimelineSidebar from "../../pages/TimelineSidebar.tsx"; 
-import TimelineMain from "../../pages/TimelineMain.tsx";   
-import type { TaskStatus } from '../../types/types.ts';    
+import TimelineSidebar from "../components/Timeline/TimelineSidebar.tsx"; 
+import TimelineMain from "../components/Timeline/TimelineMain.tsx";   
+import type { TaskStatus } from '../types/types.ts';    
 
 interface TimelineProps {
   selectedPatients: string[];
@@ -71,55 +71,80 @@ export default function Timeline({ selectedPatients }: TimelineProps) {
   };
 
   // 💡 1. タスク同士が重なってグループ化する関数（サイドバーからの直接ドロップ対応版）
-const handleGroupTasks = (draggedId: string, targetId: string) => {
+const handleGroupTasks = (draggedId: string, targetIdentifier: string) => {
+  console.log("--- ドラッグ＆ドロップ開始 ---");
+  console.log("ドラッグ元タスクID:", draggedId);
+  console.log("ドロップ先ID/時刻:", targetIdentifier);
+  
+
   setAllTasks((prevTasks) => {
-    const draggedTask = prevTasks.find((t: any) => t.task_id === draggedId);
-    const targetTask = prevTasks.find((t: any) => t.task_id === targetId);
+    const draggedTask = prevTasks.find((t: any) => String(t.task_id) === String(draggedId));
+    const targetTask = prevTasks.find((t: any) => String(t.task_id) === String(targetIdentifier));
 
-    if (!draggedTask || !targetTask) return prevTasks;
+    console.log("検索結果 - ドラッグ:", draggedTask, "ターゲット:", targetTask);
 
-    // 🔴 修正: 優先度チェックやタイトルチェックは残しつつ、時間の不一致での即拒否を無くす
-    if (
-      draggedTask.title !== targetTask.title ||
-      draggedTask.priority === 'high' ||
-      targetTask.priority === 'high' ||
-      draggedId === targetId
-    ) {
+    if (!draggedTask) {
+      console.log("エラー: ドラッグ対象が見つかりません");
       return prevTasks;
     }
 
-    // ドロップ先の時間（例: "10:00"）をグループ全体の時間として採用する
-    const targetPeriod = targetTask.display_period;
+    // 判定ロジックのデバッグ
+    if (targetTask) {
+      console.log("タイトル一致:", draggedTask.title === targetTask.title);
+      console.log("時間一致:", draggedTask.display_period === targetTask.display_period);
+      console.log("自分自身ではない:", draggedId !== targetIdentifier);
+    } else {
+      console.log("ドロップ先はタスクではなく時刻:", targetIdentifier);
+    }
 
-    return prevTasks.reduce((acc: any[], task: any) => {
-      // ドラッグされたタスクは単体リストからは消去（グループに入るため）
-      if (task.task_id === draggedId) return acc;
+    // --- 【条件チェック】グループ化できるか？ ---
+    // A: ターゲットがタスクであること
+    // B: タイトルが同じであること
+    // C: 時間(display_period)が同じであること
+    // D: 自分自身ではないこと
+    const isSameTitle = targetTask && draggedTask.title === targetTask.title;
+    const isSameTime = targetTask && draggedTask.display_period === targetTask.display_period;
+    const canGroup = isSameTitle && isSameTime && draggedId !== targetIdentifier;
 
-      if (task.task_id === targetId) {
-        if (task.isGroup) {
-          // すでにグループ化されているカードにドロップされた場合
-          // 子要素（children）に追加するタスクの時間も同期させる
-          const updatedDragged = { ...draggedTask, display_period: targetPeriod };
-          return [...acc, { ...task, children: [...(task.children || []), updatedDragged] }];
-        } else {
-          // 通常タスク同士が新しくグループを作る場合
-          // 親となるグループタスクと、中に入る子タスクすべての時間をターゲットの時間に合わせる
-          const updatedTarget = { ...task, display_period: targetPeriod };
-          const updatedDragged = { ...draggedTask, display_period: targetPeriod };
+    if (canGroup) {
+      const targetPeriod = targetTask.display_period;
 
-          return [...acc, {
-            ...updatedTarget,
-            task_id: `group-${targetId}`, // 一意のグループID
-            isGroup: true,
-            children: [updatedTarget, updatedDragged] // 両方を子要素に入れる
-          }];
+      return prevTasks.reduce((acc: any[], task: any) => {
+        if (task.task_id === draggedId) return acc; // ドラッグ元を削除
+
+        if (task.task_id === targetIdentifier) {
+          if (task.isGroup) {
+            // 既にグループなら子に追加
+            return [...acc, { 
+              ...task, 
+              children: [...(task.children || []), { ...draggedTask, display_period: targetPeriod }] 
+            }];
+          } else {
+            // 新規グループ作成
+            return [...acc, {
+              ...task,
+              task_id: `group-${targetIdentifier}`,
+              isGroup: true,
+              children: [
+                { ...task, display_period: targetPeriod }, 
+                { ...draggedTask, display_period: targetPeriod }
+              ]
+            }];
+          }
         }
-      }
-      return [...acc, task];
-    }, []);
+        return [...acc, task];
+      }, []);
+    }
+
+    // --- 【移動の処理】グループ化条件を満たさない場合 ---
+    // targetIdentifier が「時間文字列」の場合だけ更新する
+    if (!targetIdentifier.includes(':')) return prevTasks;
+
+    return prevTasks.map((t) =>
+      t.task_id === draggedId ? { ...t, display_period: targetIdentifier } : t
+    );
   });
 };
-
   // 💡 2. グループから特定のタスクを外してタイムラインに戻す関数（型エラー修正版）
   const handleUngroupTask = (groupId: string, childTaskId: string, currentPeriod: string) => {
     setAllTasks((prevTasks) => {
@@ -165,6 +190,7 @@ const handleGroupTasks = (draggedId: string, targetId: string) => {
 
       <div className="flex-1 min-w-0 overflow-auto bg-white">
         <TimelineMain 
+          allTasks={allTasks}
           timedTasks={timedTasks || []}
           onUpdateTaskPeriod={handleUpdateTaskPeriod} 
           onUpdateTaskStatus={handleUpdateStatus}

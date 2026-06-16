@@ -1,3 +1,4 @@
+import type { DragEvent } from 'react';
 
 export type TaskStatus = 
   | 'initial'
@@ -24,8 +25,45 @@ export interface Task {
   patient_name: string;
 }
 
+export interface TaskCardProps {
+  task: ExtendedTask;
+  cardColorClass: string;
+  borderStyle: string;
+  originalTime?: string;
+  time?: string;
+  draggable: boolean;
+  onDragStart?: (e: DragEvent<HTMLDivElement>) => void;
+  onDragOver?: (e: DragEvent<HTMLDivElement>) => void;
+  onDrop?: (e: React.DragEvent) => void;
+  onEdit: () => void;
+}
+
+export type TimelineMode = 15 | 30 | 60;
+
+  // 💡 記録中断のステータス（型定義の拡張対応）
+export  type ExtendedTaskStatus = TaskStatus | 'record_pending';
+// Task型の拡張（コンポーネント内部で安全に使うため）
+export  interface ExtendedTask extends Omit<Task, 'status'> {
+    status: ExtendedTaskStatus;
+    isChild?: boolean;
+    isGroup?: boolean;
+    children?: ExtendedTask[];
+    initial_period?: string;
+  }
+
+export  interface TimelineMainProps {
+    allTasks: ExtendedTask[];
+    timedTasks: Task[]; 
+    onUpdateTaskPeriod: (taskId: string, newPeriod: string) => void; 
+    onUpdateTaskStatus?: (taskId: string, newStatus: ExtendedTaskStatus) => void;
+    onGroupTasks: (draggedId: string, targetId: string) => void;
+    onUngroupTask: (groupId: string, childTaskId: string, currentPeriod: string) => void;
+  }
+
+
 export interface Memo {
   id: string;
   text: string;
   time: string;
+  scheduledAt?: string;
 }
