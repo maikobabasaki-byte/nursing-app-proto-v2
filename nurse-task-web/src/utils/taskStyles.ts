@@ -5,6 +5,8 @@ export const getTaskStyles = (task: any, isPastTime: (period: string) => boolean
   let cardColorClass = '';
   if (task.isGroup) {
     cardColorClass = 'bg-[#1e3a6a] border-[#1e3a6a] text-white';
+  } else if (task.status === 'unexecuted') {
+    cardColorClass = 'bg-gray-100 border-gray-200 text-gray-400 opacity-70 line-through';
   } else if (task.status === 'pending') {
     cardColorClass = 'bg-orange-400 border-orange-300 text-gray-900';
   } else if (isRecordDone) {
@@ -21,7 +23,10 @@ export const getTaskStyles = (task: any, isPastTime: (period: string) => boolean
   }
 
   const isProgressing = task.status === 'progressing';
-  const isOverdue = isPastTime(task.display_period) && !isRecordDone && !isActionRequiredDone;
+  const isOverdue = isPastTime(task.display_period) && 
+                  !isRecordDone && 
+                  !isActionRequiredDone && 
+                  task.status !== 'unexecuted'; 
 
   const borderStyle = isOverdue
     ? '!border-2 !border-red-600 shadow-md shadow-red-100'

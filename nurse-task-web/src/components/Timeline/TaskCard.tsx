@@ -1,21 +1,28 @@
 import type{ TaskCardProps } from '../../types/types';
+import { useDraggable } from '@dnd-kit/core';
 
 export const TaskCard = ({
   task, 
   cardColorClass,
   borderStyle, 
   originalTime, 
-  draggable,
-  onDragStart,
-  onDragOver,
-  onDrop,
-  onEdit }: TaskCardProps) => {
+  onEdit
+}: Omit<TaskCardProps, 'draggable' | 'onDragStart' | 'onDragOver' | 'onDrop'>) => {
+  // 3. フックの設定
+  const { attributes, listeners, setNodeRef, transform } = useDraggable({
+    id: task.task_id,
+  });
+
+  // ドラッグ中のスタイル（座標を適用）
+  const style = transform ? {
+    transform: `translate3d(${transform.x}px, ${transform.y}px, 0)`,
+  } : undefined;
   return (
     <div 
-      draggable={draggable}
-      onDragStart={onDragStart}
-      onDragOver={onDragOver}
-      onDrop={onDrop}
+      ref={setNodeRef} // 4. refを紐付け
+      style={style}
+      {...listeners} // 5. ドラッグイベントを紐付け
+      {...attributes} // 6. スクリーンリーダー等の属性を紐付け
       onClick={onEdit}
       className={`w-60 p-2 m-2 rounded shadow-sm font-bold cursor-grab active:cursor-grabbing transition-all select-none ${cardColorClass} ${borderStyle}`}
     >

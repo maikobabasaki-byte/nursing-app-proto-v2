@@ -60,6 +60,24 @@ export  interface TimelineMainProps {
     onUngroupTask: (groupId: string, childTaskId: string, currentPeriod: string) => void;
   }
 
+export  interface TimelineRowProps {
+    time: string;
+    isCurrentRow: boolean;
+    rowTasks: ExtendedTask[];
+    placeholders: ExtendedTask[];
+    expandedGroups: Record<string, boolean>;
+    onDrop: (e: React.DragEvent, time: string) => void;
+    onDragOver: (e: React.DragEvent) => void;
+    onEdit: (task: ExtendedTask) => void;
+    onChildClick: (taskId: string) => void;
+    onUngroup: any;
+    setRowRef: (time: string, el: HTMLDivElement | null) => void;
+    // メモ関連のprops
+    timeMemos: Memo[];
+    onMemoClick: (time: string) => void;
+    onEditMemo: (memo: Memo) => void;
+    isPastTime: (time: string) => boolean;
+  }
 
 export interface Memo {
   id: string;
