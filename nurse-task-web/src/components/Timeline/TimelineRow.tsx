@@ -47,6 +47,7 @@ export const TimelineRow: React.FC<TimelineRowProps> = ({
                 task={task} 
                 cardColorClass={cardColorClass} 
                 borderStyle={borderStyle}
+                originalTime={task.initial_period}
                 onEdit={() => onEdit(task)}
               />
               {task.isGroup && (
