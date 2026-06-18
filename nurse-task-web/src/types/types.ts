@@ -23,6 +23,15 @@ export interface Task {
   patient_id: string;
   room_id: string;
   patient_name: string;
+
+  isGroup?: boolean;
+  groupType?: 'patient' | 'task'; // ハイブリッド対応
+  children?: Task[]; // グループ内のタスク
+  isChild?: boolean; // グループ内のタスクであることのフラグ
+}
+
+export interface ExtendedTask extends Task {
+  patient_name: string;
 }
 
 export interface TaskCardProps {

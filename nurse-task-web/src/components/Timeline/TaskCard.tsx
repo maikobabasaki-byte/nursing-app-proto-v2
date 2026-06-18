@@ -1,36 +1,57 @@
-import type{ TaskCardProps } from '../../types/types';
+import type { Task } from '../../types/types';
 import { useDraggable } from '@dnd-kit/core';
 
-export const TaskCard = ({
-  task, 
-  cardColorClass,
-  borderStyle, 
-  originalTime, 
-  onEdit
-}: Omit<TaskCardProps, 'draggable' | 'onDragStart' | 'onDragOver' | 'onDrop'>) => {
-  // 3. フックの設定
+interface TaskCardPropsInner {
+  task: Task;
+  cardColorClass?: string;
+  borderStyle?: string;
+  originalTime?: string;
+  onEdit?: () => void;
+  style?: React.CSSProperties;
+  className?: string;
+}
+
+export const TaskCard = (props: TaskCardPropsInner) => {
+  // ここでデフォルト値を設定すれば、プロパティが渡されなくても絶対にエラーにならない
+  const { 
+    task, 
+    cardColorClass = 'bg-white border-gray-200',
+    borderStyle = 'border-solid',
+    originalTime, 
+    onEdit,
+    style, 
+    className = '' 
+  } = props;
+  // 3. ドラッグの設定
   const { attributes, listeners, setNodeRef, transform } = useDraggable({
     id: task.task_id,
   });
 
-  // ドラッグ中のスタイル（座標を適用）
-  const style = transform ? {
+  // ドラッグ中のスタイル
+  const dndStyle = transform ? {
     transform: `translate3d(${transform.x}px, ${transform.y}px, 0)`,
   } : undefined;
+
   return (
     <div 
-      ref={setNodeRef} // 4. refを紐付け
-      style={style}
-      {...listeners} // 5. ドラッグイベントを紐付け
-      {...attributes} // 6. スクリーンリーダー等の属性を紐付け
+      ref={setNodeRef}
+      style={{ ...dndStyle, ...style }}
       onClick={onEdit}
-      className={`w-60 p-2 m-2 rounded shadow-sm font-bold cursor-grab active:cursor-grabbing transition-all select-none ${cardColorClass} ${borderStyle}`}
+      // classNameを結合
+      className={`w-60 p-2 m-2 rounded shadow-sm font-bold transition-all select-none ${cardColorClass} ${borderStyle} ${className}`}
     >
+      <div 
+        {...listeners} 
+        {...attributes} 
+        className="cursor-grab active:cursor-grabbing text-gray-400 hover:text-gray-600 px-1 flex flex-col items-center justify-center h-full"
+      >
+        <span style={{ fontSize: '10px', lineHeight: '0.8' }}>⠿</span>
+      </div>
       <div className="flex items-center justify-between mb-1">
         <div className="flex items-center gap-1.5">
           <span className="font-size-sm font-bold">{task.display_period}</span>
           {originalTime && originalTime !== task.display_period && (
-            <span className="bg-gray-700 text-white text-[9px] px-1.5 py-0.5 rounded font-normal opacity-90">
+            <span className="bg-gray-700 text-white text-[12px] px-1.5 py-0.5 rounded font-normal opacity-90">
               指示: {originalTime}
             </span>
           )}

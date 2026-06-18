@@ -1,13 +1,45 @@
 import { useState, useEffect, useMemo } from 'react';
 import TimelineSidebar from "../components/Timeline/TimelineSidebar.tsx"; 
-import TimelineMain from "../components/Timeline/TimelineMain.tsx";   
-import type { TaskStatus } from '../types/types.ts';    
+import TimelineMain from "../components/Timeline/TimelineMain.tsx";  
+import { TaskCard } from '../components/Timeline/TaskCard.tsx'; 
+import type { TaskStatus } from '../types/types.ts';
+import { getTaskStyles } from '../utils/taskStyles'
+import { DndContext, DragOverlay, closestCenter } from '@dnd-kit/core';
 
 interface TimelineProps {
   selectedPatients: string[];
 }
 
 export default function Timeline({ selectedPatients }: TimelineProps) {
+  const [activeId, setActiveId] = useState<string | null>(null);
+  const handleDragStart = (event: any) => {
+    setActiveId(event.active.id);
+  };
+
+ const handleDragEnd = (event: any) => {
+  const { active, over } = event;
+  
+  // 1. ドロップ先がない場合は無視
+  if (!over) {
+    setActiveId(null);
+    return;
+  }
+
+  // 2. ドラッグ移動距離が極端に短い（＝クリックに近い）場合は無視する
+  const delta = event.delta;
+  const wasDragged = Math.abs(delta.x) > 5 || Math.abs(delta.y) > 5;
+  
+  // 3. 元の場所とドロップ先が同じなら無視
+  if (active.id === over.id || !wasDragged) {
+    setActiveId(null);
+    return;
+  }
+    
+  handleGroupTasks(active.id, over.id);
+  setActiveId(null); // ドラッグ終了後にリセット
+};
+
+  
   const [allTasks, setAllTasks] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -178,26 +210,50 @@ const handleGroupTasks = (draggedId: string, targetIdentifier: string) => {
   }
 
   return (
-    <main 
-      className={`flex flex-row w-full h-full bg-gray-50 overflow-hidden select-none ${
-        hasPendingTasks ? 'pb-28' : ''
-      }`}
-      style={{ display: 'flex', flexDirection: 'row' }}
+    <DndContext 
+      collisionDetection={closestCenter} 
+      onDragStart={handleDragStart} 
+      onDragEnd={handleDragEnd}
     >
-      <div className="w-60 min-w-[320px] max-w-[320px] flex-shrink-0 bg-white border-r border-gray-200 overflow-y-auto">
-        <TimelineSidebar tasks={poolTasks || []} />
-      </div>
+      <main 
+        className={`flex flex-row w-full h-full bg-gray-50 overflow-hidden select-none ${
+          hasPendingTasks ? 'pb-28' : ''
+        }`}
+        style={{ display: 'flex', flexDirection: 'row' }}
+      >
+        <div className="w-60 min-w-[320px] max-w-[320px] flex-shrink-0 bg-white border-r border-gray-200 overflow-y-auto">
+          <TimelineSidebar tasks={poolTasks || []} />
+        </div>
 
-      <div className="flex-1 min-w-0 overflow-auto bg-white">
-        <TimelineMain 
-          allTasks={allTasks}
-          timedTasks={timedTasks || []}
-          onUpdateTaskPeriod={handleUpdateTaskPeriod} 
-          onUpdateTaskStatus={handleUpdateStatus}
-          onGroupTasks={handleGroupTasks}    
-          onUngroupTask={handleUngroupTask}    
-        />
-      </div>
-    </main>
+        <div className="flex-1 min-w-0 overflow-auto bg-white">
+          <TimelineMain 
+            allTasks={allTasks}
+            timedTasks={timedTasks || []}
+            onUpdateTaskPeriod={handleUpdateTaskPeriod} 
+            onUpdateTaskStatus={handleUpdateStatus}
+            onGroupTasks={handleGroupTasks}    
+            onUngroupTask={handleUngroupTask}    
+          />
+        </div>
+      </main>
+      <DragOverlay>
+        {activeId ? (() => {
+          const activeTask = allTasks.find(t => t.task_id === activeId);
+          if (!activeTask) return null;
+          
+          // スタイルを計算する（ドラッグ中は過去判定は不要なので false）
+          const { cardColorClass, borderStyle } = getTaskStyles(activeTask, () => false);
+
+          return (
+            <TaskCard 
+              task={activeTask} 
+              cardColorClass={cardColorClass} // ここに色情報を渡す！
+              borderStyle={borderStyle}       // ここに枠線情報を渡す！
+              className="shadow-2xl cursor-grabbing scale-105" 
+            />
+          );
+        })() : null}
+      </DragOverlay>
+    </DndContext>
   );
 }

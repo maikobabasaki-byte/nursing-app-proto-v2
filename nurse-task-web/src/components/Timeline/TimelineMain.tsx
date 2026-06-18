@@ -8,7 +8,6 @@ import { MemoManager } from './MemoManager';
 import { TimelineToast } from './TimelineToast';
 import { TimelinePopupButtons } from './TimelinePopupButtons';
 import { PendingTray } from './PendingTray';
-import { DndContext } from '@dnd-kit/core';
 import type { DragEndEvent } from '@dnd-kit/core';
 
 export default function TimelineMain({ 
@@ -75,22 +74,7 @@ export default function TimelineMain({
   const currentSlotKey = `${String(currentTime.getHours()).padStart(2, '0')}:${String(Math.floor(currentTime.getMinutes() / timelineMode) * timelineMode).padStart(2, '0')}`;
   const pendingTasks = extendedTasks.filter(task => task.status === 'pending');
 
-  // TimelineMain.tsx の中
-  const handleDragEnd = (event: DragEndEvent) => {
-    const { active, over } = event;
-    if (!over || active.id === over.id) return;
-
-    const taskId = active.id as string;
-    const newPeriod = over.id as string; // ここにドロップ先の「時間」が入ります
-
-    // ここで親から渡された関数を呼び出す
-    onUpdateTaskPeriod(taskId, newPeriod);
-    
-    console.log(`移動完了: ${taskId} を ${newPeriod} へ`);
-  };
-
   return (
-    <DndContext onDragEnd={handleDragEnd}>
     <div className="flex flex-col h-full p-4 select-none">
       <TimelineControls timelineMode={timelineMode} setTimelineMode={setTimelineMode} />
 
@@ -188,6 +172,5 @@ export default function TimelineMain({
 
       <TimelineToast toast={toast} />
     </div>
-    </DndContext>
   );
 }
