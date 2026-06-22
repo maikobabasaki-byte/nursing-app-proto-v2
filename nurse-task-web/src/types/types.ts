@@ -41,10 +41,9 @@ export interface TaskCardProps {
   originalTime?: string;
   time?: string;
   draggable: boolean;
-  onDragStart?: (e: DragEvent<HTMLDivElement>) => void;
-  onDragOver?: (e: DragEvent<HTMLDivElement>) => void;
-  onDrop?: (e: React.DragEvent) => void;
   onEdit: () => void;
+  groupingMode: string | null;
+  onStartGrouping?: (taskId: string) => void;
 }
 
 export type TimelineMode = 15 | 30 | 60;
@@ -60,6 +59,13 @@ export  interface ExtendedTask extends Omit<Task, 'status'> {
     initial_period?: string;
   }
 
+export  interface TimelineControlsProps {
+  timelineMode: TimelineMode;
+  setTimelineMode: (value: TimelineMode) => void;
+  groupingMode: string | null;            
+  setGroupingMode: (id: string | null) => void; 
+}
+
 export  interface TimelineMainProps {
     allTasks: ExtendedTask[];
     timedTasks: Task[]; 
@@ -67,16 +73,32 @@ export  interface TimelineMainProps {
     onUpdateTaskStatus?: (taskId: string, newStatus: ExtendedTaskStatus) => void;
     onGroupTasks: (draggedId: string, targetId: string) => void;
     onUngroupTask: (groupId: string, childTaskId: string, currentPeriod: string) => void;
+    groupingMode: string | null;
+    setGroupingMode: (id: string | null) => void;
+    onStartGrouping: (taskId: string) => void;
+    memos: any[];
+    onSaveMemo: (updatedMemo: any) => void;
+    onDeleteMemo: (memoId: string) => void;
   }
 
+export interface TaskCardPropsInner {
+  task: Task;
+  cardColorClass?: string;
+  borderStyle?: string;
+  originalTime?: string;
+  onEdit?: () => void;
+  style?: React.CSSProperties;
+  className?: string;
+  onStartGrouping?: (taskId: string) => void;
+  groupingMode?: string | null;
+}
 export  interface TimelineRowProps {
+    id: string;
     time: string;
-    isCurrentRow: boolean;
+    isCurrentRow?: boolean;
     rowTasks: ExtendedTask[];
     placeholders: ExtendedTask[];
     expandedGroups: Record<string, boolean>;
-    onDrop: (e: React.DragEvent, time: string) => void;
-    onDragOver: (e: React.DragEvent) => void;
     onEdit: (task: ExtendedTask) => void;
     onChildClick: (taskId: string) => void;
     onUngroup: any;
@@ -86,6 +108,8 @@ export  interface TimelineRowProps {
     onMemoClick: (time: string) => void;
     onEditMemo: (memo: Memo) => void;
     isPastTime: (time: string) => boolean;
+    groupingMode: string | null;
+    onStartGrouping: (taskId: string) => void;
   }
 
 export interface Memo {

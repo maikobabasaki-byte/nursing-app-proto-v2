@@ -1,6 +1,7 @@
+// ⭕ MemoCell.tsx を Sortable 仕様に書き換え
 import type { Memo } from '../../types/types';
-import { useDraggable } from '@dnd-kit/core'; // 追加
-import { CSS } from '@dnd-kit/utilities';    // 追加
+import { useSortable } from '@dnd-kit/sortable'; // 🔥 useDraggable から変更
+import { CSS } from '@dnd-kit/utilities';
 
 interface MemoCellProps {
   memo: Memo;
@@ -8,49 +9,46 @@ interface MemoCellProps {
 }
 
 export const MemoCell = ({ memo, onEdit }: MemoCellProps) => {
-    // ドラッグの準備（IDを割り当てるのがポイント！）
-    const { attributes, listeners, setNodeRef, transform } = useDraggable({
-        id: memo.id, 
-    });
+  // 🔥 useSortable に変更
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id: memo.id, 
+  });
 
-    // 移動のスタイルを作成
-    const style = {
-        transform: CSS.Translate.toString(transform),
-    };
-    // 1. 日付のフォーマット処理 (mapの外に出しました)
-    const dateObj = memo.scheduledAt ? new Date(memo.scheduledAt) : null;
-    const formattedDate = dateObj && !isNaN(dateObj.getTime()) 
-        ? `${(dateObj.getMonth() + 1).toString().padStart(2, '0')}/${dateObj.getDate().toString().padStart(2, '0')} ${dateObj.getHours().toString().padStart(2, '0')}:${dateObj.getMinutes().toString().padStart(2, '0')}`
-        : null;
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+  };
+
+  const dateObj = memo.scheduledAt ? new Date(memo.scheduledAt) : null;
 
   return (
     <div 
-      ref={setNodeRef}           // ドラッグ開始点を指定
-      style={style}              // スタイルを適用
-      {...listeners}             // ドラッグイベントを紐付け
-      {...attributes}            // 属性を付与
-      className="... (既存のクラス)"
-      onClick={() => onEdit(memo)}
-    >
-        <div 
-        className="text-[10px] bg-yellow-200 p-1 rounded shadow-sm border border-yellow-300 mb-1 cursor-pointer hover:bg-yellow-300 transition-colors"
-        onClick={(e) => {
-            e.stopPropagation();
-            onEdit(memo);
+        ref={setNodeRef}
+        style={{
+            ...style,
+            touchAction: 'none'
         }}
+        {...attributes}
+        {...listeners}
+        onPointerDown={(e) => {
+    console.log("🖐️ MemoCell: ポインターダウン検知！");
+  }}
+  onDragStart={(e) => {
+    console.log("🚫 ブラウザのデフォルトドラッグ検知！");
+    e.preventDefault();
+  }}
+        className="w-full text-[10px] bg-yellow-100 p-1.5 rounded shadow-sm border border-yellow-300 mb-1 flex items-start gap-1 select-none hover:bg-yellow-200 transition-colors"
         >
-        <div className="font-bold border-b border-yellow-400/50 mb-0.5">
-            {memo.time}
+        {/* ⠿ ハンドルを掴んで移動 */}
+        <div className="cursor-grab active:cursor-grabbing text-yellow-500 font-bold px-0.5 text-xs">
+            ⠿
         </div>
-        
-        {formattedDate && (
-            <div className="text-[9px] text-gray-600 mb-0.5">
-            実施予定：{formattedDate}
-            </div>
-        )}
-        
-        <div className="truncate">{memo.text}</div>
+
+        <div className="flex-1 min-w-0 cursor-pointer" onClick={(e) => { e.stopPropagation(); onEdit(memo); }}>
+            <div className="font-bold border-b border-yellow-300/60 mb-0.5">{memo.time}</div>
+            <div className="truncate font-medium text-gray-800">{memo.text}</div>
         </div>
-    </div>
-  );
-};
+        </div>
+    );
+    };

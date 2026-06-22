@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import type { Memo, ExtendedTaskStatus, ExtendedTask, TimelineMainProps } from '../../types/types';
 import { useTimelinePopup } from '../../hooks/useTimelinePopup';
-import { TimelineControls } from './TimelineControls';
+import { TimelineControls} from './TimelineControls';
 import { TimelineRow } from './TimelineRow';
 import { TimelinePopup } from '../Timeline/TimelinePopup';
 import { MemoManager } from './MemoManager';
@@ -14,19 +14,22 @@ export default function TimelineMain({
   timedTasks, 
   onUpdateTaskStatus,
   onUpdateTaskPeriod,
-  onUngroupTask
+  onUngroupTask,
+  groupingMode,     
+  setGroupingMode,
+  onStartGrouping,
+  memos,
+  onSaveMemo,
+  onDeleteMemo
 }: TimelineMainProps) {
   const extendedTasks = timedTasks as unknown as ExtendedTask[];
 
   const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({});
   const [timelineMode, setTimelineMode] = useState<15 | 30 | 60>(30);
-  const [currentTime, setCurrentTime] = useState(new Date());
-  const [lineTop, setLineTop] = useState<number>(0);
   const containerRef = useRef<HTMLDivElement>(null);
   const rowRefs = useRef<Record<string, HTMLDivElement | null>>({});
   
    const { activePopupTask, setActivePopupTaskId, closePopup } = useTimelinePopup(extendedTasks);
-  const [timeMemos, setTimeMemos] = useState<Memo[]>([]);
   const [activeMemoTime, setActiveMemoTime] = useState<string | null>(null);
   const [editingMemo, setEditingMemo] = useState<Memo | null>(null); 
   const [newMemoText, setNewMemoText] = useState("");
@@ -34,29 +37,6 @@ export default function TimelineMain({
     message: '', visible: false, status: null,
   });
 
-  // 時刻関連のロジック（フック化する前の状態）
-  useEffect(() => {
-    const timerId = setInterval(() => setCurrentTime(new Date()), 1000);
-    return () => clearInterval(timerId);
-  }, []);
-
-  useEffect(() => {
-    const updateLinePosition = () => {
-      if (!containerRef.current) return;
-      const now = new Date();
-      const currentKey = `${String(now.getHours()).padStart(2, '0')}:${String(Math.floor(now.getMinutes() / timelineMode) * timelineMode).padStart(2, '0')}`;
-      const targetRow = rowRefs.current[currentKey];
-      if (!targetRow) return;
-
-      const offset = ((now.getMinutes() % timelineMode) * 60 + now.getSeconds()) / (timelineMode * 60) * targetRow.offsetHeight;
-      const containerRect = containerRef.current.getBoundingClientRect();
-      const rowRect = targetRow.getBoundingClientRect();
-      setLineTop(rowRect.top - containerRect.top + offset + containerRef.current.scrollTop);
-    };
-    updateLinePosition();
-    const timerId = setInterval(updateLinePosition, 1000);
-    return () => clearInterval(timerId);
-  }, [timelineMode]);
 
   const isPastTime = (targetTime: string): boolean => {
     if (!targetTime || !targetTime.includes(':')) return false;
@@ -70,31 +50,33 @@ export default function TimelineMain({
     const m = String((i % (60 / timelineMode)) * timelineMode).padStart(2, '0');
     return `${h}:${m}`;
   });
-
-  const currentSlotKey = `${String(currentTime.getHours()).padStart(2, '0')}:${String(Math.floor(currentTime.getMinutes() / timelineMode) * timelineMode).padStart(2, '0')}`;
   const pendingTasks = extendedTasks.filter(task => task.status === 'pending');
 
+  console.log("レンダリング回数確認: groupingModeは", groupingMode);
   return (
     <div className="flex flex-col h-full p-4 select-none">
-      <TimelineControls timelineMode={timelineMode} setTimelineMode={setTimelineMode} />
+      <TimelineControls 
+        timelineMode={timelineMode} 
+        setTimelineMode={setTimelineMode}
+        groupingMode={groupingMode}        
+        setGroupingMode={setGroupingMode}  
+      />
 
-      <div ref={containerRef} className="relative flex-1 overflow-y-auto border border-gray-200 rounded bg-white">
-        <div className="absolute left-0 right-0 !border-t-2 !border-red-500 z-10 pointer-events-none" style={{ top: `${lineTop}px`, transition: 'top 0.5s ease' }}>
-          <span className="absolute left-0 -top-2.5 !bg-red-500 text-white text-[10px] px-1 rounded shadow">
-            {String(currentTime.getHours()).padStart(2, '0')}:{String(currentTime.getMinutes()).padStart(2, '0')}
-          </span>
-        </div>
+      <div 
+      ref={containerRef} 
+      className="relative flex-1 overflow-y-auto border border-gray-200 rounded bg-white"
+      style={{ touchAction: 'pan-y' }}
+      >
+        <LiveCurrentTimeLine timelineMode={timelineMode} containerRef={containerRef} rowRefs={rowRefs} />
 
         {timeSlots.map((time) => (
           <TimelineRow 
             key={time}
+            id={time}
             time={time}
-            isCurrentRow={time === currentSlotKey}
-            rowTasks={extendedTasks.filter(t => t.display_period === time && t.status !== 'pending' && !t.isChild)}
+            rowTasks={extendedTasks.filter(t => t.display_period === time && t.status !== 'pending' && (!t.isChild || t.isGroup))}
             placeholders={extendedTasks.filter(t => t.display_period === time && t.status === 'pending')}
             expandedGroups={expandedGroups}
-            onDrop={() => {}} 
-            onDragOver={(e) => e.preventDefault()}
             onEdit={(t) => {
               if (t.isGroup) setExpandedGroups(prev => ({...prev, [t.task_id]: !prev[t.task_id]}));
               else setActivePopupTaskId(t.task_id);
@@ -102,10 +84,12 @@ export default function TimelineMain({
             onChildClick={setActivePopupTaskId}
             onUngroup={onUngroupTask}
             setRowRef={(time, el) => rowRefs.current[time] = el}
-            timeMemos={timeMemos}
+            timeMemos={memos}
             onMemoClick={setActiveMemoTime}
             onEditMemo={setEditingMemo}
             isPastTime={isPastTime}
+            groupingMode={groupingMode}
+            onStartGrouping={onStartGrouping}
           />
         ))}
       </div>
@@ -119,11 +103,14 @@ export default function TimelineMain({
         setNewMemoText={setNewMemoText}
         onClose={() => { setActiveMemoTime(null); setEditingMemo(null); }}
         onSave={(data) => {
-          if (editingMemo) setTimeMemos(prev => prev.map(m => m.id === data.id ? data : m));
-          else setTimeMemos(prev => [...prev, data]);
-          setActiveMemoTime(null); setEditingMemo(null);
+          onSaveMemo(data);
+          setActiveMemoTime(null); 
+          setEditingMemo(null);
         }}
-        onDelete={(id) => { setTimeMemos(prev => prev.filter(m => m.id !== id)); setEditingMemo(null); }}
+        onDelete={(id) => { 
+          onDeleteMemo(id); 
+          setEditingMemo(null); 
+        }}
       />
 
       {activePopupTask && (
@@ -171,6 +158,47 @@ export default function TimelineMain({
       )}
 
       <TimelineToast toast={toast} />
+    </div>
+  );
+}
+// 💡 タイマーによる再レンダリングをこの中だけに閉じ込める
+function LiveCurrentTimeLine({ timelineMode, containerRef, rowRefs }: { 
+  timelineMode: number; 
+  containerRef: React.RefObject<HTMLDivElement | null>;
+  rowRefs: React.RefObject<Record<string, HTMLDivElement | null>>;
+}) {
+  const [time, setTime] = useState(new Date());
+  const [top, setTop] = useState(0);
+
+  useEffect(() => {
+    const timerId = setInterval(() => setTime(new Date()), 1000);
+    return () => clearInterval(timerId);
+  }, []);
+
+  useEffect(() => {
+    const updatePosition = () => {
+      if (!containerRef.current || !rowRefs.current) return;
+      const now = new Date();
+      const currentKey = `${String(now.getHours()).padStart(2, '0')}:${String(Math.floor(now.getMinutes() / timelineMode) * timelineMode).padStart(2, '0')}`;
+      const targetRow = rowRefs.current[currentKey];
+      if (!targetRow) return;
+
+      const offset = ((now.getMinutes() % timelineMode) * 60 + now.getSeconds()) / (timelineMode * 60) * targetRow.offsetHeight;
+      const containerRect = containerRef.current.getBoundingClientRect();
+      const rowRect = targetRow.getBoundingClientRect();
+      setTop(rowRect.top - containerRect.top + offset + containerRef.current.scrollTop);
+    };
+
+    updatePosition();
+    const timerId = setInterval(updatePosition, 1000);
+    return () => clearInterval(timerId);
+  }, [timelineMode, containerRef, rowRefs, time]); // 1秒ごとにここだけが静かに動く
+
+  return (
+    <div className="absolute left-0 right-0 !border-t-2 !border-red-500 z-10 pointer-events-none" style={{ top: `${top}px`, transition: 'top 0.5s ease' }}>
+      <span className="absolute left-0 -top-2.5 !bg-red-500 text-white text-[10px] px-1 rounded shadow">
+        {String(time.getHours()).padStart(2, '0')}:{String(time.getMinutes()).padStart(2, '0')}
+      </span>
     </div>
   );
 }

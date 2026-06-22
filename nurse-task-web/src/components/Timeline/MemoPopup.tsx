@@ -56,8 +56,10 @@ export const MemoPopup = ({
           <textarea
             className="w-full !h-24 !p-3 !bg-gray-50 !border !rounded-lg focus:!ring-2 focus:!ring-blue-400 !outline-none"
             placeholder="メモ内容を入力..."
-            value={editingMemo ? editingMemo.text : newMemoText}
-            onChange={(e) => editingMemo ? /* ここは親のStateを直接更新するか、onSaveに含める */ null : setNewMemoText(e.target.value)}
+            // 💡 編集時は editingText、新規時は newMemoText を見る
+            value={editingMemo ? editingText : newMemoText}
+            // 💡 編集時は setEditingText、新規時は setNewMemoText を動かす
+            onChange={(e) => editingMemo ? setEditingText(e.target.value) : setNewMemoText(e.target.value)}
           />
         </div>
 
@@ -80,23 +82,22 @@ export const MemoPopup = ({
           </button>
           
           <button 
-            className="!flex-1 flex justify-center !py-2.5 !bg-blue-600 hover:!bg-blue-700 !text-white !rounded-lg !font-bold"
-            onClick={() => {
-              // 編集時と新規作成時で統一したオブジェクトを作成
-              const memoToSave = editingMemo 
-                ? { ...editingMemo, text: editingMemo.text, scheduledAt: scheduledAt } // 編集時は現在の内容を維持しつつ日時を更新
-                : { 
-                    id: Date.now().toString(), 
-                    time: activeMemoTime || "", 
-                    text: newMemoText, 
-                    scheduledAt: scheduledAt // ✨ ここで必須項目を追加
-                  };
-              
-              onSave(memoToSave);
-            }}
-          >
-            {editingMemo ? '更新' : '追加'}
-          </button>
+          className="!flex-1 flex justify-center !py-2.5 !bg-blue-600 hover:!bg-blue-700 !text-white !rounded-lg !font-bold"
+          onClick={() => {
+            const memoToSave = editingMemo 
+              ? { ...editingMemo, text: editingText, scheduledAt: scheduledAt } // 🔥 ここを editingText に修正！
+              : { 
+                  id: Date.now().toString(), 
+                  time: activeMemoTime || "", 
+                  text: newMemoText, 
+                  scheduledAt: scheduledAt 
+                };
+            
+            onSave(memoToSave);
+          }}
+        >
+          {editingMemo ? '更新' : '追加'}
+        </button>
         </div>
       </div>
     </div>
