@@ -21,6 +21,9 @@ export const MemoCell = ({ memo, onEdit }: MemoCellProps) => {
   };
 
   const dateObj = memo.scheduledAt ? new Date(memo.scheduledAt) : null;
+  const formattedDate = dateObj && !isNaN(dateObj.getTime()) 
+        ? `${(dateObj.getMonth() + 1).toString().padStart(2, '0')}/${dateObj.getDate().toString().padStart(2, '0')} ${dateObj.getHours().toString().padStart(2, '0')}:${dateObj.getMinutes().toString().padStart(2, '0')}`
+        : null;
 
   return (
     <div 
@@ -32,13 +35,15 @@ export const MemoCell = ({ memo, onEdit }: MemoCellProps) => {
         {...attributes}
         {...listeners}
         onPointerDown={(e) => {
-    console.log("🖐️ MemoCell: ポインターダウン検知！");
+    console.log("① ポインター押した");
   }}
-  onDragStart={(e) => {
-    console.log("🚫 ブラウザのデフォルトドラッグ検知！");
-    e.preventDefault();
+  onPointerMove={(e) => {
+    console.log("② ポインター動かした");
   }}
-        className="w-full text-[10px] bg-yellow-100 p-1.5 rounded shadow-sm border border-yellow-300 mb-1 flex items-start gap-1 select-none hover:bg-yellow-200 transition-colors"
+  onPointerUp={(e) => {
+    console.log("③ ポインター離した");
+  }}
+        className="w-full text-[12px] bg-yellow-100 p-1.5 rounded shadow-sm border border-yellow-300 mb-1 flex items-start gap-1 select-none hover:bg-yellow-200 transition-colors"
         >
         {/* ⠿ ハンドルを掴んで移動 */}
         <div className="cursor-grab active:cursor-grabbing text-yellow-500 font-bold px-0.5 text-xs">
@@ -47,6 +52,11 @@ export const MemoCell = ({ memo, onEdit }: MemoCellProps) => {
 
         <div className="flex-1 min-w-0 cursor-pointer" onClick={(e) => { e.stopPropagation(); onEdit(memo); }}>
             <div className="font-bold border-b border-yellow-300/60 mb-0.5">{memo.time}</div>
+            {formattedDate && (
+                <div className="text-[12px] text-gray-600 mb-0.5">
+                実施予定：{formattedDate}
+                </div>
+            )}
             <div className="truncate font-medium text-gray-800">{memo.text}</div>
         </div>
         </div>

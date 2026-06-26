@@ -1,30 +1,27 @@
 import React from 'react';
-import type { TimelineRowProps } from '../../types/types'
+import type { TimelineRowProps,ExtendedTask } from '../../types/types'
 import { TaskCard } from './TaskCard';
+import { GroupParentCard } from './GroupParentCard';
 import { GroupAccordion } from './GroupAccordion';
 import { MemoCell } from './MemoCell';
 import { getTaskStyles } from '../../utils/taskStyles';
+import { handleCardClick } from '../../utils/taskLogic';
 import { useDroppable } from '@dnd-kit/core';
 
 // 💡 React.FC を廃止し、引数の横に直接型（TimelineRowProps）を当てる形に変更！
 export function TimelineRow({ 
-  id, time, isCurrentRow, rowTasks, placeholders, expandedGroups, 
+  id, time, isCurrentRow, rowTasks, placeholders, expandedGroups, toggleGroup,
   onEdit, onChildClick, onUngroup, setRowRef,
   timeMemos, onMemoClick, onEditMemo, isPastTime,
-  groupingMode,
-  onStartGrouping // 🔥 確実に Props から直接キャッチする
+  groupingMode, onStartGrouping, 
 }: TimelineRowProps) {
-  const { setNodeRef, isOver } = useDroppable({
-    id: id, 
-  });
-
-  const { setNodeRef: setMemoDropRef, isOver: isMemoOver } = useDroppable({
-    id: `memo-drop-${time}`, // 例: "memo-drop-09:00"
-  });
+  const { setNodeRef: setRowNodeRef, isOver } = useDroppable({ id: id });
+  const { setNodeRef: setMemoDropRef, isOver: isMemoOver } = useDroppable({ id: `memo-drop-${time}` });
+  
   return (
     <div
       ref={(el) => {
-        setNodeRef(el);     
+        setRowNodeRef(el);     // setNodeRef ではなく Row 用のものを使う
         setRowRef(time, el); 
       }}
       className={`
@@ -50,20 +47,34 @@ export function TimelineRow({
           console.log(`🔍 [Row:${time}] groupingMode:`, groupingMode, " / onStartGrouping型:", typeof onStartGrouping);
           return (
             <div key={task.task_id} className="relative">
-              <TaskCard 
-                task={task} 
-                cardColorClass={cardColorClass} 
-                borderStyle={borderStyle}
-                originalTime={task.initial_period}
-                onEdit={() => onEdit(task)}
-                groupingMode={groupingMode}
-                // 🔥 孫の TaskCard に、上で直接キャッチした関数を流し込む！
-                onStartGrouping={onStartGrouping} 
-              />
-              {task.isGroup && (
+              {task.isGroup ? (
+                // 🔥 グループなら「専用の親カード」を表示
+                <GroupParentCard 
+                  task={task}
+                  isExpanded={!!expandedGroups[task.task_id]}
+                  onClick={() => toggleGroup(task.task_id)}
+                  groupingMode={groupingMode} 
+                  onStartGrouping={onStartGrouping} 
+                />
+              ) : (
+                // 🔥 通常タスクなら「通常の TaskCard」を表示
+                <TaskCard 
+                  task={task} 
+                  cardColorClass={cardColorClass} 
+                  borderStyle={borderStyle}
+                  originalTime={task.initial_period}
+                  onEdit={() => onEdit(task)}
+                  groupingMode={groupingMode}
+                  onStartGrouping={onStartGrouping} 
+                  onClick={() => handleCardClick(task)}
+                />
+              )}
+
+              {/* グループが展開されている時だけアコーディオンを表示 */}
+              {task.isGroup && expandedGroups[task.task_id] && (
                 <GroupAccordion 
                   task={task} 
-                  isExpanded={!!expandedGroups[task.task_id]}
+                  isExpanded={true} // 上で判定済みなのでここはtrueでOK
                   onChildClick={onChildClick}
                   onUngroup={onUngroup}
                 />

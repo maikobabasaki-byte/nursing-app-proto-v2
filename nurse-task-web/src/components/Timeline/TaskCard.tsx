@@ -1,5 +1,5 @@
 import type { TaskCardPropsInner } from "../../types/types";
-import { useDraggable } from '@dnd-kit/core';
+import { useDraggable,useDroppable } from '@dnd-kit/core';
 
 export const TaskCard = (props: TaskCardPropsInner) => {
   // ここでデフォルト値を設定すれば、プロパティが渡されなくても絶対にエラーにならない
@@ -12,13 +12,21 @@ export const TaskCard = (props: TaskCardPropsInner) => {
     originalTime, 
     onEdit,
     style, 
-    className = '' 
+    className = '' ,
   } = props;
   // 3. ドラッグの設定
-  const { attributes, listeners, setNodeRef, transform } = useDraggable({
+  const { attributes, listeners, setNodeRef: setDraggableRef, transform } = useDraggable({
     id: task.task_id,
   });
 
+  const { setNodeRef: setDroppableRef, isOver } = useDroppable({
+    id: task.task_id, // 自分のIDをドロップ先IDとして登録
+  });
+
+  const setCombinedRef = (node: HTMLElement | null) => {
+    setDraggableRef(node);
+    setDroppableRef(node);
+  };
   // ドラッグ中のスタイル
   const dndStyle = transform ? {
     transform: `translate3d(${transform.x}px, ${transform.y}px, 0)`,
@@ -48,15 +56,15 @@ export const TaskCard = (props: TaskCardPropsInner) => {
 
   return (
     <div 
-      ref={setNodeRef}
+      ref={setCombinedRef}
       style={{ ...dndStyle, ...style }}
-      className={`relative w-60 p-2 m-2 rounded shadow-sm font-bold transition-all select-none flex items-start gap-2 ${cardColorClass} ${borderStyle} ${className}`}
+      className={`relative w-55 p-2 m-2 rounded shadow-sm font-bold transition-all select-none flex items-start gap-2 ${cardColorClass} ${borderStyle} ${className}`}
     >
       {/* 1. ドラッグハンドル（左端） */}
       <div 
         {...listeners} 
         {...attributes} 
-        className="cursor-grab active:cursor-grabbing text-gray-400 hover:text-gray-600 flex-shrink-0 pt-1"
+        className=" cursor-grab active:cursor-grabbing text-gray-400 hover:text-gray-600 flex-shrink-0 pt-1"
       >
         ⠿
       </div>
@@ -73,9 +81,20 @@ export const TaskCard = (props: TaskCardPropsInner) => {
           </div>
           <button 
             onClick={handleGroupingClick}
-            className={`!text-xs !px-1 !rounded ${groupingMode === task.task_id ? '!bg-orange-500 !text-white' : '!bg-blue-500'}`}
+            // 優先度が高い時はボタンを無効化（disabled）
+            disabled={task.priority === 'high'} 
+            className={`!text-xs !px-1 !rounded transition-colors ${
+              task.priority === 'high'
+                ? '!bg-gray-400 !cursor-not-allowed opacity-60' // 無効時のスタイル
+                : (groupingMode === task.task_id 
+                    ? '!bg-orange-500 !text-white' 
+                    : '!bg-blue-500 !text-white') // 通常時のスタイル
+            }`}
           >
-            {groupingMode === task.task_id ? '選択中' : 'グループ化'}
+            {task.priority === 'high' 
+              ? '制限中' 
+              : (groupingMode === task.task_id ? '選択中' : 'グループ化')
+            }
           </button>
           {/* ステータスアイコン */}
           {task.status === 'completed' && <span className="text-blue-500 text-xs" title="記録未完了">🔵</span>}
@@ -95,7 +114,7 @@ export const TaskCard = (props: TaskCardPropsInner) => {
             {task.details}
           </div>
         )}
-      </div>
+        </div>
     </div>
   );
 };

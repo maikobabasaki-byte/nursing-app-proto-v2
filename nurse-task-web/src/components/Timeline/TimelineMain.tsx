@@ -22,9 +22,15 @@ export default function TimelineMain({
   onSaveMemo,
   onDeleteMemo
 }: TimelineMainProps) {
-  const extendedTasks = timedTasks as unknown as ExtendedTask[];
+  const extendedTasks = timedTasks as ExtendedTask[];
 
   const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({});
+  const toggleGroup = (groupId: string) => {
+    setExpandedGroups(prev => ({
+      ...prev,
+      [groupId]: !prev[groupId]
+    }));
+  };
   const [timelineMode, setTimelineMode] = useState<15 | 30 | 60>(30);
   const containerRef = useRef<HTMLDivElement>(null);
   const rowRefs = useRef<Record<string, HTMLDivElement | null>>({});
@@ -65,7 +71,6 @@ export default function TimelineMain({
       <div 
       ref={containerRef} 
       className="relative flex-1 overflow-y-auto border border-gray-200 rounded bg-white"
-      style={{ touchAction: 'pan-y' }}
       >
         <LiveCurrentTimeLine timelineMode={timelineMode} containerRef={containerRef} rowRefs={rowRefs} />
 
@@ -77,6 +82,7 @@ export default function TimelineMain({
             rowTasks={extendedTasks.filter(t => t.display_period === time && t.status !== 'pending' && (!t.isChild || t.isGroup))}
             placeholders={extendedTasks.filter(t => t.display_period === time && t.status === 'pending')}
             expandedGroups={expandedGroups}
+            toggleGroup={toggleGroup}
             onEdit={(t) => {
               if (t.isGroup) setExpandedGroups(prev => ({...prev, [t.task_id]: !prev[t.task_id]}));
               else setActivePopupTaskId(t.task_id);

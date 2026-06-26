@@ -30,8 +30,19 @@ export interface Task {
   isChild?: boolean; // グループ内のタスクであることのフラグ
 }
 
-export interface ExtendedTask extends Task {
-  patient_name: string;
+// 1. 基本となるタスクステータスの拡張
+export type ExtendedTaskStatus = TaskStatus | 'record_pending';
+
+// 2. 拡張されたタスク型（単一の定義に統合）
+export interface ExtendedTask extends Omit<Task, 'status'> {
+  patient_name: string;      // 既存の拡張分
+  status: ExtendedTaskStatus; // ステータスの型を上書き
+  isChild?: boolean;
+  isGroup?: boolean;
+  children?: ExtendedTask[];
+  initial_period?: string;
+  priority: 'high' | 'medium' | 'low';
+  parent_id?: string | null;
 }
 
 export interface TaskCardProps {
@@ -48,16 +59,6 @@ export interface TaskCardProps {
 
 export type TimelineMode = 15 | 30 | 60;
 
-  // 💡 記録中断のステータス（型定義の拡張対応）
-export  type ExtendedTaskStatus = TaskStatus | 'record_pending';
-// Task型の拡張（コンポーネント内部で安全に使うため）
-export  interface ExtendedTask extends Omit<Task, 'status'> {
-    status: ExtendedTaskStatus;
-    isChild?: boolean;
-    isGroup?: boolean;
-    children?: ExtendedTask[];
-    initial_period?: string;
-  }
 
 export  interface TimelineControlsProps {
   timelineMode: TimelineMode;
@@ -91,6 +92,7 @@ export interface TaskCardPropsInner {
   className?: string;
   onStartGrouping?: (taskId: string) => void;
   groupingMode?: string | null;
+  onClick: () => void;
 }
 export  interface TimelineRowProps {
     id: string;
@@ -99,6 +101,7 @@ export  interface TimelineRowProps {
     rowTasks: ExtendedTask[];
     placeholders: ExtendedTask[];
     expandedGroups: Record<string, boolean>;
+    toggleGroup: (groupId: string) => void;
     onEdit: (task: ExtendedTask) => void;
     onChildClick: (taskId: string) => void;
     onUngroup: any;
@@ -111,6 +114,20 @@ export  interface TimelineRowProps {
     groupingMode: string | null;
     onStartGrouping: (taskId: string) => void;
   }
+
+export interface GroupParentCardProps {
+  task: ExtendedTask;
+  isExpanded: boolean;
+  onClick: () => void;
+  groupingMode: string | null;            
+  onStartGrouping: (id: string) => void; 
+}
+
+export interface GroupingProps {
+  task: any;
+  groupingMode: string | null;
+  onClick: () => void; // ここがポイント！親から処理を受け取る
+}
 
 export interface Memo {
   id: string;
