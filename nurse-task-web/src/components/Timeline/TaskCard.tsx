@@ -32,6 +32,10 @@ export const TaskCard = (props: TaskCardPropsInner) => {
     transform: `translate3d(${transform.x}px, ${transform.y}px, 0)`,
   } : undefined;
 
+  const isCurrentlySelected = 
+    groupingMode === task.task_id || 
+    (task.isGroup && task.children?.some(child => child.task_id === groupingMode));
+
   const handleGroupingClick = (e: React.MouseEvent) => {
   e.stopPropagation(); // 発火を止める
   
@@ -50,9 +54,6 @@ export const TaskCard = (props: TaskCardPropsInner) => {
   }
 };
 
-  // 🔥 グループ化モード中で、自分がそのモードの起点（ボタンが押されたタスク）ではない場合、
-  // ドロップ対象であることを示すために背景色を黄色にする
-  const isDropTarget = groupingMode !== null && groupingMode !== task.task_id;
 
   return (
     <div 
@@ -93,7 +94,7 @@ export const TaskCard = (props: TaskCardPropsInner) => {
           >
             {task.priority === 'high' 
               ? '制限中' 
-              : (groupingMode === task.task_id ? '選択中' : 'グループ化')
+              : (isCurrentlySelected ? '選択中' : 'グループ化') // 💡 修正：拡張した判定を使う
             }
           </button>
           {/* ステータスアイコン */}

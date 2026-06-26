@@ -3,7 +3,9 @@ export const getTaskStyles = (task: any, isPastTime: (period: string) => boolean
   const isActionRequiredDone = ['completed', 'record_start', 'record_pending'].includes(task.status);
 
   let cardColorClass = '';
-  if (task.isGroup) {
+
+  // 💡 【ここを修正】task.isGroup かつ「子ではない（!task.isChild）」、つまり親グループカードの時だけネイビーにする
+  if (task.isGroup && !task.isChild) {
     cardColorClass = 'bg-[#1e3a6a] border-[#1e3a6a] text-white';
   } else if (task.status === 'unexecuted') {
     cardColorClass = 'bg-gray-100 border-gray-200 text-gray-400 opacity-70 line-through';
@@ -24,9 +26,9 @@ export const getTaskStyles = (task: any, isPastTime: (period: string) => boolean
 
   const isProgressing = task.status === 'progressing';
   const isOverdue = isPastTime(task.display_period) && 
-                  !isRecordDone && 
-                  !isActionRequiredDone && 
-                  task.status !== 'unexecuted'; 
+                    !isRecordDone && 
+                    !isActionRequiredDone && 
+                    task.status !== 'unexecuted'; 
 
   const borderStyle = isOverdue
     ? '!border-2 !border-red-600 shadow-md shadow-red-100'

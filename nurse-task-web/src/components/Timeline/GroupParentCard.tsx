@@ -41,6 +41,10 @@ export const GroupParentCard = ({
     setDropRef(node);
   };
 
+  const isCurrentlySelected = 
+  groupingMode === task.task_id || 
+  (task.children?.some(child => child.task_id === groupingMode));
+
   return (
     <div 
       ref={setCombinedRef} 
@@ -71,6 +75,7 @@ export const GroupParentCard = ({
           <GroupingButton 
             task={task} 
             groupingMode={groupingMode} 
+            isCurrentlySelected={isCurrentlySelected}
             onClick={() => {
               onStartGrouping(task.task_id);
             }}

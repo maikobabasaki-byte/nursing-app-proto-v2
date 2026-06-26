@@ -8,6 +8,7 @@ import { MemoCell } from '../components/Timeline/MemoCell.tsx';
 import type { TaskStatus,ExtendedTask } from '../types/types.ts';
 import { getTaskStyles } from '../utils/taskStyles';
 import { handleCardClick } from '../utils/taskLogic';
+import { useDndCollision } from '../hooks/useDndCollision';
 import type { DragEndEvent, DragStartEvent } from '@dnd-kit/core';
 import {
   DndContext, 
@@ -24,13 +25,14 @@ interface TimelineProps {
 }
 
 export default function Timeline({ selectedPatients }: TimelineProps) {
-    const sensors = useSensors(
-  useSensor(PointerSensor, {
-    activationConstraint: {
-      distance: 5, // 💡 5ピクセル動かした時点で「ドラッグ開始」と確定させる
-    },
-  })
-);
+  // 💡 フックから衝突判定関数を取得
+  const { customCollisionDetection } = useDndCollision();
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: { distance: 5 },
+    })
+  );
   const [activeId, setActiveId] = useState<string | null>(null);
   const [allTasks, setAllTasks] = useState<ExtendedTask[]>([]); // 🔥 これを一番上に！
   const [memos, setMemos] = useState<any[]>([]);
@@ -72,6 +74,9 @@ export default function Timeline({ selectedPatients }: TimelineProps) {
 
   const handleDragEnd = (event: DragEndEvent) => {
   const { active, over } = event;
+  console.log("🚨【最優先ログ】実際に届いた active.id:", active?.id, "型:", typeof active?.id);
+  console.log("🚨【最優先ログ】実際に届いた over.id:", over?.id);
+  
   setActiveId(null);
 
   if (!over || active.id === over.id) return;
@@ -81,15 +86,20 @@ export default function Timeline({ selectedPatients }: TimelineProps) {
 
   // 🚀 【重要】「memo-」の処理（既存のまま）
   if (draggedId.startsWith('memo-')) {
-    if (overId.startsWith('memo-drop-')) {
-      const targetTime = overId.replace('memo-drop-', '');
-      setMemos(prev => prev.map(m => m.id === draggedId ? { ...m, time: targetTime } : m));
-    } else if (overId.includes(':')) {
-      setMemos(prev => prev.map(m => m.id === draggedId ? { ...m, time: overId } : m));
-    }
-    setActiveId(null);
-    return;
+  // 💡 比較用に、頭の 'memo-' を削った純粋な元のIDを作っておく
+  const pureMemoId = draggedId.replace('memo-', ''); 
+
+  if (overId.startsWith('memo-drop-')) {
+    const targetTime = overId.replace('memo-drop-', '');
+    setMemos(prev => prev.map(m => String(m.id) === pureMemoId ? { ...m, time: targetTime } : m));
+  } else if (overId.includes(':')) {
+    // 💡 ログに出ている「09:30」はここにヒットします
+    setMemos(prev => prev.map(m => String(m.id) === pureMemoId ? { ...m, time: overId } : m));
   }
+  
+  setActiveId(null);
+  return; // 🛑 タスク側のロジックにいかせない
+}
 
   // ─── グループ内の子要素同士の並び替え処理（既存のまま） ───
   if (active.id !== over.id) {
@@ -221,12 +231,41 @@ export default function Timeline({ selectedPatients }: TimelineProps) {
   const hasPendingTasks = timedTasks.some(task => task.status === 'pending');
 
   const handleUpdateStatus = (taskId: string, newStatus: TaskStatus) => {
-    setAllTasks(prev => 
-      prev.map(task => 
-        task.task_id === taskId ? { ...task, status: newStatus } : task
-      )
-    );
-  };
+  setAllTasks(prev => 
+    prev.map(task => {
+      // 1. 通常の単体タスク、または親グループ自体のステータス変更の場合
+      if (task.task_id === taskId) {
+        return { ...task, status: newStatus };
+      }
+      
+      // 2. 🚀 【ここが重要】グループの中の「特定の1つの子タスク」が更新された場合
+      if (task.isGroup && task.children) {
+        // children の中に、今回更新された taskId を持つ子がいるか探す
+        const hasTargetChild = task.children.some(child => String(child.task_id) === String(taskId));
+        
+        if (hasTargetChild) {
+          // 対象の子タスクだけを newStatus に更新する
+          const updatedChildren = task.children.map(child => 
+            String(child.task_id) === String(taskId) ? { ...child, status: newStatus } : child
+          );
+
+          // 💡 追加の看護師目線ロジック: 
+          // もしグループ内の「すべての」子タスクが完了（'completed'）になったら、
+          // 親グループ自体も自動的に完了にする、という連動を入れるとさらに便利です。
+          const isAllChildrenCompleted = updatedChildren.every(child => child.status === 'completed');
+
+          return {
+            ...task,
+            status: isAllChildrenCompleted ? 'completed' : task.status, // 全員完了なら親も完了
+            children: updatedChildren
+          };
+        }
+      }
+
+      return task;
+    })
+  );
+};
 
 const handleStartGrouping = useCallback((taskId: string) => {
   console.log("🔥 親の handleStartGrouping が発火！ 押されたタスクID:", taskId);
@@ -266,11 +305,12 @@ const handleSaveMemo = (updatedMemo: any) => {
     }
   };
 
+  
 
   return (
     <DndContext 
       sensors={sensors}
-      collisionDetection={pointerWithin} 
+      collisionDetection={customCollisionDetection}
       onDragStart={handleDragStart} 
       onDragEnd={handleDragEnd}
     >
@@ -309,10 +349,11 @@ const handleSaveMemo = (updatedMemo: any) => {
         {activeId ? (() => {
           // 💡 もしドラッグされているのが「メモ」だった場合
           if (String(activeId).startsWith('memo-')) {
-            const activeMemo = memos.find(m => m.id === activeId);
+            const pureActiveId = String(activeId).replace('memo-', '');
+            // 💡 State内の m.id と比較できるように純粋なIDで探す
+            const activeMemo = memos.find(m => String(m.id) === pureActiveId); 
             if (!activeMemo) return null;
             return (
-              // ドラッグ中専用のスタイルを当てて横幅を固定する
               <div className="w-44 shadow-2xl scale-105 opacity-90 cursor-grabbing">
                 <MemoCell memo={activeMemo} onEdit={() => {}} />
               </div>

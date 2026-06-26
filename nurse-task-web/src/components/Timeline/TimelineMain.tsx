@@ -56,9 +56,29 @@ export default function TimelineMain({
     const m = String((i % (60 / timelineMode)) * timelineMode).padStart(2, '0');
     return `${h}:${m}`;
   });
-  const pendingTasks = extendedTasks.filter(task => task.status === 'pending');
+  const pendingTasks = (() => {
+    const list: ExtendedTask[] = [];
+    extendedTasks.forEach(task => {
+      // 1. 通常の単体タスク、または親グループ自体が保留の場合
+      if (task.status === 'pending') {
+        list.push(task);
+      }
+      // 2. グループの中の「子タスク」に保留がいる場合もトレイに送る
+      if (task.isGroup && task.children) {
+        task.children.forEach(child => {
+          if (child.status === 'pending') {
+            list.push({
+              ...child,
+              parent_id: task.task_id // トレイからポップアップを開いたときのために親IDを保証
+            });
+          }
+        });
+      }
+    });
+    return list;
+  })();
 
-  console.log("レンダリング回数確認: groupingModeは", groupingMode);
+  
   return (
     <div className="flex flex-col h-full p-4 select-none">
       <TimelineControls 
@@ -74,30 +94,45 @@ export default function TimelineMain({
       >
         <LiveCurrentTimeLine timelineMode={timelineMode} containerRef={containerRef} rowRefs={rowRefs} />
 
-        {timeSlots.map((time) => (
-          <TimelineRow 
-            key={time}
-            id={time}
-            time={time}
-            rowTasks={extendedTasks.filter(t => t.display_period === time && t.status !== 'pending' && (!t.isChild || t.isGroup))}
-            placeholders={extendedTasks.filter(t => t.display_period === time && t.status === 'pending')}
-            expandedGroups={expandedGroups}
-            toggleGroup={toggleGroup}
-            onEdit={(t) => {
-              if (t.isGroup) setExpandedGroups(prev => ({...prev, [t.task_id]: !prev[t.task_id]}));
-              else setActivePopupTaskId(t.task_id);
-            }}
-            onChildClick={setActivePopupTaskId}
-            onUngroup={onUngroupTask}
-            setRowRef={(time, el) => rowRefs.current[time] = el}
-            timeMemos={memos}
-            onMemoClick={setActiveMemoTime}
-            onEditMemo={setEditingMemo}
-            isPastTime={isPastTime}
-            groupingMode={groupingMode}
-            onStartGrouping={onStartGrouping}
-          />
-        ))}
+        {timeSlots.map((time) => {
+          const currentRows = extendedTasks.filter(t => t.display_period === time);
+
+          // 📋 通常のタスク（グループはそのまま通し、子タスクも保持する）
+          const filteredRowTasks = currentRows.filter(t => {
+            if (!t.isGroup && t.status === 'pending') return false; // 単体の保留はトレイへ
+            if (t.isGroup && t.status === 'pending') return false;   // 親全体の保留はトレイへ
+            if (t.isChild && !t.isGroup) return false;              // 通常の子タスク単体はスキップ
+            return true;
+          });
+
+          // ⏳ 【ここを修正】ここには「単体タスクの保留」だけを渡す（子タスクの保留は入れない）
+          const filteredPlaceholders = currentRows.filter(t => !t.isGroup && t.status === 'pending');
+
+          return (
+            <TimelineRow 
+              key={time}
+              id={time}
+              time={time}
+              rowTasks={filteredRowTasks}         
+              placeholders={filteredPlaceholders} 
+              expandedGroups={expandedGroups}
+              toggleGroup={toggleGroup}
+              onEdit={(t) => {
+                if (t.isGroup) setExpandedGroups(prev => ({...prev, [t.task_id]: !prev[t.task_id]}));
+                else setActivePopupTaskId(t.task_id);
+              }}
+              onChildClick={setActivePopupTaskId}
+              onUngroup={onUngroupTask}
+              setRowRef={(time, el) => rowRefs.current[time] = el}
+              timeMemos={memos}
+              onMemoClick={setActiveMemoTime}
+              onEditMemo={setEditingMemo}
+              isPastTime={isPastTime}
+              groupingMode={groupingMode}
+              onStartGrouping={onStartGrouping}
+            />
+          );
+        })}
       </div>
 
       <PendingTray pendingTasks={pendingTasks} onTaskClick={setActivePopupTaskId} />
