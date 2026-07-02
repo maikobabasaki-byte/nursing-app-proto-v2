@@ -61,19 +61,33 @@ export const TaskCard = (props: TaskCardPropsInner) => {
       style={{ ...dndStyle, ...style }}
       className={`relative w-55 p-2 m-2 rounded shadow-sm font-bold transition-all select-none flex items-start gap-2 ${cardColorClass} ${borderStyle} ${className}`}
     >
-      {/* 1. ドラッグハンドル（左端） */}
-      <div 
-        {...listeners} 
-        {...attributes} 
-        className=" cursor-grab active:cursor-grabbing text-gray-400 hover:text-gray-600 flex-shrink-0 pt-1"
-      >
-        ⠿
+      {/* 💡 左端エリア：ドラッグハンドルとステータスアイコンを綺麗に縦並びにする */}
+      <div className="flex flex-col items-center gap-1 flex-shrink-0 w-5 select-none pt-0.5">
+        
+        {/* 1. ドラッグハンドル（上段） */}
+        <div 
+          {...listeners} 
+          {...attributes} 
+          className="cursor-grab active:cursor-grabbing text-gray-400 hover:text-gray-600 text-base"
+        >
+          ⠿
+        </div>
+        
+        {/* 2. ステータスアイコン（下段） */}
+        <div className="flex items-center justify-center h-4 text-xs">
+          {task.status === 'completed' && <span className="text-blue-500" title="記録未完了">🔵</span>}
+          {task.status === 'record_start' && <span className="text-green-500" title="記録中">🟢</span>}
+          {task.status === 'record_pending' && <span className="text-orange-500" title="記録中断中">🟠</span>}
+          {task.status === 'record_complete' && <span title="記録完了">✅</span>}
+        </div>
+        
       </div>
-      {/* 2. カードの内容（クリックで onEdit） */}
-      <div className="flex-1 cursor-pointer" onClick={onEdit}>
+
+      {/* 2. カードの内容（右側エリア：クリックで onEdit） */}
+      <div className="flex-1 min-w-0 cursor-pointer" onClick={onEdit}>
         <div className="flex items-center justify-between mb-1">
           <div className="flex items-center gap-1.5">
-            <span className="font-size-sm font-bold">{task.display_period}</span>
+            <span className="text-sm font-bold">{task.display_period}</span>
             {originalTime && originalTime !== task.display_period && (
               <span className="bg-gray-700 text-white text-[12px] px-1.5 py-0.5 rounded font-normal opacity-90">
                 指示: {originalTime}
@@ -82,25 +96,20 @@ export const TaskCard = (props: TaskCardPropsInner) => {
           </div>
           <button 
             onClick={handleGroupingClick}
-            // 優先度が高い時はボタンを無効化（disabled）
             disabled={task.priority === 'high'} 
             className={`!text-xs !px-1 !rounded transition-colors ${
               task.priority === 'high'
-                ? '!bg-gray-400 !cursor-not-allowed opacity-60' // 無効時のスタイル
+                ? '!bg-gray-400 !cursor-not-allowed opacity-60' 
                 : (groupingMode === task.task_id 
                     ? '!bg-orange-500 !text-white' 
-                    : '!bg-blue-500 !text-white') // 通常時のスタイル
+                    : '!bg-blue-500 !text-white') 
             }`}
           >
             {task.priority === 'high' 
               ? '制限中' 
-              : (isCurrentlySelected ? '選択中' : 'グループ化') // 💡 修正：拡張した判定を使う
+              : (isCurrentlySelected ? '選択中' : 'グループ化') 
             }
           </button>
-          {/* ステータスアイコン */}
-          {task.status === 'completed' && <span className="text-blue-500 text-xs" title="記録未完了">🔵</span>}
-          {task.status === 'record_start' && <span className="text-green-500 text-xs" title="記録中">🟢</span>}
-          {task.status === 'record_pending' && <span className="text-orange-500 text-xs" title="記録中断中">🟠</span>}
         </div>
         
         <div className="grid grid-cols-3 gap-1 mb-1 text-sm">
@@ -115,7 +124,7 @@ export const TaskCard = (props: TaskCardPropsInner) => {
             {task.details}
           </div>
         )}
-        </div>
+      </div>
     </div>
   );
 };

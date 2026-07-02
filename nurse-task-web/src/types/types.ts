@@ -92,7 +92,7 @@ export interface TaskCardPropsInner {
   className?: string;
   onStartGrouping?: (taskId: string) => void;
   groupingMode?: string | null;
-  onClick: () => void;
+  onClick?: () => void;
 }
 export  interface TimelineRowProps {
     id: string;

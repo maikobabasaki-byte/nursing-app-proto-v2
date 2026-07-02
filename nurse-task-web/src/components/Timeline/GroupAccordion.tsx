@@ -2,7 +2,7 @@ import type { ExtendedTask } from '../../types/types';
 // 🔥 dnd-kit の並び替え用コンポーネントをインポート
 import { SortableContext, verticalListSortingStrategy, useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-// 💡 スタイル計算関数をインポート（※ パスは環境に合わせて適宜調整してください）
+// 💡 スタイル計算関数をインポート
 import { getTaskStyles } from '../../utils/taskStyles';
 
 interface GroupAccordionProps {
@@ -41,9 +41,10 @@ const SortableChildItem = ({ child, parentTaskId, onChildClick, onUngroup }: {
     id: child.task_id,
   });
 
-  // 💡 【復活！】子タスクのステータスや重要度に応じた色と枠線をここで計算する
+  // 🎨 【完璧な同期】
+  // 新しくなった getTaskStyles に子フラグを渡して、完璧にトリアージされたスタイルを受け取る
   const { cardColorClass, borderStyle } = getTaskStyles(
-    { ...child, isChild: true }, // 子フラグを立てて計算に回す
+    { ...child, isChild: true }, 
     () => false
   );
 
@@ -53,7 +54,7 @@ const SortableChildItem = ({ child, parentTaskId, onChildClick, onUngroup }: {
     opacity: isDragging ? 0.5 : 1,
   };
 
-  // ⏳ 中断中（pending）のときは、ご希望通りの「白い点線の仮カード」と入れ替える（ここはこのままでOK！）
+  // ⏳ 中断中（pending）のときは、ご希望通りの「白い点線の仮カード」と入れ替える
   if (child.status === 'pending') {
     return (
       <div 
@@ -61,7 +62,7 @@ const SortableChildItem = ({ child, parentTaskId, onChildClick, onUngroup }: {
         style={style}
         {...attributes}
         {...listeners}
-        className="p-2 rounded-lg border-2 border-dashed border-gray-200 bg-white/90 text-gray-400 text-xs mb-2 text-center font-bold"
+        className="p-2 rounded-lg border-2 border-dashed border-gray-200 bg-white/90 text-gray-600 text-xs mb-2 text-center font-bold"
         onClick={(e) => { 
           e.stopPropagation(); 
           onChildClick(child.task_id); 
@@ -72,14 +73,14 @@ const SortableChildItem = ({ child, parentTaskId, onChildClick, onUngroup }: {
     );
   }
 
-  // 💡 通常時（実施中や未着手など）は、真っ白（bg-white）に戻さず、計算した色が当たるように修正！
+  // 💡 【修正完了】
+  // getTaskStyles が返してくれた、コントラストのハッキリした色（cardColorClass）をそのまま注入！
   return (
     <div 
       ref={setNodeRef}
       style={style}
       {...attributes}
       {...listeners}
-      // 👇 ここを修正：固定の bg-white border を排除し、計算された cardColorClass と borderStyle を注入
       className={`p-2 rounded-lg text-xs mb-2 cursor-grab active:cursor-grabbing hover:opacity-90 transition-all ${cardColorClass} ${borderStyle}`}
       onClick={(e) => { 
         e.stopPropagation(); 
@@ -95,14 +96,22 @@ const SortableChildItem = ({ child, parentTaskId, onChildClick, onUngroup }: {
             e.stopPropagation(); 
             onUngroup(parentTaskId, child.task_id, child.display_period); 
           }}
-          // 👇 文字が白抜きになったときも見やすいように、少し透過するボタン配色に
-          className="bg-black/10 hover:bg-black/20 text-current px-1.5 py-0.5 rounded text-[9px] font-bold transition-colors cursor-pointer"
+          className="!bg-black/10 hover:!bg-black/20 !text-current !px-1.5 !py-0.5 !rounded !font-bold transition-colors cursor-pointer"
         >
           外す
         </button>
       </div>
-      <div className="font-black text-sm">{child.patient_name}様</div>
-      <div className="opacity-80">{child.title}</div>
+      
+      {/* 📝 タイトルの前に、記録状態が一瞬でわかる絵文字（🔵 🟢 🟠 ✅）を自動で添える */}
+      <div className="font-black text-sm flex items-center gap-1">
+        {child.status === 'completed' && <span className="text-xs select-none">🔵</span>}
+        {child.status === 'record_start' && <span className="text-xs select-none">🟢</span>}
+        {child.status === 'record_pending' && <span className="text-xs select-none">🟠</span>}
+        {child.status === 'record_complete' && <span className="text-xs select-none">✅</span>}
+        <span>{child.patient_name}様</span>
+      </div>
+      
+      <div className="opacity-90 mt-0.5">{child.title}</div>
     </div>
   );
 };

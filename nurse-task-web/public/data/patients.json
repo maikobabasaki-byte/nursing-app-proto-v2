@@ -6,7 +6,8 @@
     "risk_level": "中",
     "allergy":"",
     "room_id": "201",
-    "bed_number": 1
+    "bed_number": 1,
+    "team": "A"
   },
   {
     "patient_id": "P212",
@@ -15,7 +16,8 @@
     "risk_level": "高",
     "allergy":"",
     "room_id": "202",
-    "bed_number": 1
+    "bed_number": 1,
+    "team": "A"
   },
   {
     "patient_id": "P213",
@@ -24,7 +26,8 @@
     "risk_level": "高",
     "allergy":"",
     "room_id": "202",
-    "bed_number": 2
+    "bed_number": 2,
+    "team": "A"
   },
   {
     "patient_id": "P214",
@@ -33,7 +36,8 @@
     "risk_level": "高",
     "allergy":"アルコール綿",
     "room_id": "203",
-    "bed_number": 1
+    "bed_number": 1,
+    "team": "A"
   },
   {
     "patient_id": "P215",
@@ -42,7 +46,8 @@
     "risk_level": "低",
     "allergy":"",
     "room_id": "203",
-    "bed_number": 2
+    "bed_number": 2,
+    "team": "A"
   },
   {
     "patient_id": "P216",
@@ -51,7 +56,8 @@
     "risk_level": "低",
     "allergy":"",
     "room_id": "203",
-    "bed_number": 3
+    "bed_number": 3,
+    "team": "A"
   },
   {
     "patient_id": "P217",
@@ -60,7 +66,8 @@
     "risk_level": "低",
     "allergy":"",
     "room_id": "203",
-    "bed_number": 4
+    "bed_number": 4,
+    "team": "A"
   },
   {
     "patient_id": "P218",
@@ -69,7 +76,8 @@
     "risk_level": "中",
     "allergy":"",
     "room_id": "205",
-    "bed_number": 1
+    "bed_number": 1,
+    "team": "A"
   },
   {
     "patient_id": "P219",
@@ -78,7 +86,8 @@
     "risk_level": "高",
     "allergy":"",
     "room_id": "205",
-    "bed_number": 2
+    "bed_number": 2,
+    "team": "A"
   },
   {
     "patient_id": "P220",
@@ -87,7 +96,8 @@
     "risk_level": "高",
     "allergy":"",
     "room_id": "205",
-    "bed_number": 3
+    "bed_number": 3,
+    "team": "A"
   },
   {
     "patient_id": "P221",
@@ -96,7 +106,8 @@
     "risk_level": "高",
     "allergy":"",
     "room_id": "205",
-    "bed_number": 4
+    "bed_number": 4,
+    "team": "A"
   },
   {
     "patient_id": "P222",
@@ -105,7 +116,8 @@
     "risk_level": "中",
     "allergy":"",
     "room_id": "206",
-    "bed_number": 1
+    "bed_number": 1,
+    "team": "A"
   },
   {
     "patient_id": "P223",
@@ -114,7 +126,8 @@
     "risk_level": "中",
     "allergy":"",
     "room_id": "206",
-    "bed_number": 2
+    "bed_number": 2,
+    "team": "A"
   },
   {
     "patient_id": "P224",
@@ -123,7 +136,8 @@
     "risk_level": "中",
     "allergy":"",
     "room_id": "206",
-    "bed_number": 3
+    "bed_number": 3,
+    "team": "A"
   },
   {
     "patient_id": "P225",
@@ -132,6 +146,17 @@
     "risk_level": "中",
     "allergy":"",
     "room_id": "206",
-    "bed_number": 4
+    "bed_number": 4,
+    "team": "A"
+  },
+  {
+    "patient_id": "P226",
+    "name": "中村 朝陽",
+    "adl": "自立",
+    "risk_level": "中",
+    "allergy":"",
+    "room_id": "207",
+    "bed_number": 4,
+    "team": "B"
   }
 ]

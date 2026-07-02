@@ -1,311 +1,45 @@
-import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import { DndContext, DragOverlay } from '@dnd-kit/core';
 import TimelineSidebar from "../components/Timeline/TimelineSidebar.tsx"; 
 import TimelineMain from "../components/Timeline/TimelineMain.tsx";  
-import { TimelineRow } from '../components/Timeline/TimelineRow.tsx'
 import { TaskCard } from '../components/Timeline/TaskCard.tsx'; 
-import { groupTasks, ungroupTask } from '../utils/taskLogic';
 import { MemoCell } from '../components/Timeline/MemoCell.tsx';
-import type { TaskStatus,ExtendedTask } from '../types/types.ts';
 import { getTaskStyles } from '../utils/taskStyles';
 import { handleCardClick } from '../utils/taskLogic';
-import { useDndCollision } from '../hooks/useDndCollision';
-import type { DragEndEvent, DragStartEvent } from '@dnd-kit/core';
-import {
-  DndContext, 
-  DragOverlay, 
-  pointerWithin,
-  useSensor,    
-  useSensors,  
-  PointerSensor 
-} from '@dnd-kit/core';
-import { arrayMove } from '@dnd-kit/sortable';
+import { useTimelineDnd } from '../hooks/useTimelineDnd';
 
 interface TimelineProps {
   selectedPatients: string[];
 }
 
 export default function Timeline({ selectedPatients }: TimelineProps) {
-  // 💡 フックから衝突判定関数を取得
-  const { customCollisionDetection } = useDndCollision();
+  // カスタムフックからすべてのデータと関数を1行で呼び出す
+  const {
+    allTasks,
+    memos,
+    loading,
+    groupingMode,
+    setGroupingMode,
+    activeId,
+    sensors,
+    customCollisionDetection,
+    handleDragStart,
+    handleDragEnd,
+    handleGroupTasks,
+    handleUpdateTaskPeriod,
+    handleUpdateStatus,
+    handleStartGrouping,
+    handleUngroupTask,
+    handleSaveMemo,
+    handleDeleteMemo,
+    poolTasks,
+    timedTasks,
+    hasPendingTasks
+  } = useTimelineDnd({ selectedPatients });
 
-  const sensors = useSensors(
-    useSensor(PointerSensor, {
-      activationConstraint: { distance: 5 },
-    })
-  );
-  const [activeId, setActiveId] = useState<string | null>(null);
-  const [allTasks, setAllTasks] = useState<ExtendedTask[]>([]); // 🔥 これを一番上に！
-  const [memos, setMemos] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [groupingMode, setGroupingMode] = useState<string | null>(null);
-  const draggedTaskRef = useRef<ExtendedTask | null>(null);
-
-  const handleGroupTasks = useCallback((draggedId: string, targetId: string) => {
-    const targetTask = allTasks.find(t => String(t.task_id) === String(targetId));
-    const originalDraggedTask = draggedTaskRef.current;
-
-    setAllTasks((prev) => {
-      // 💡 どちらのタスクも存在し、かつ午前・午後が違う場合はここで厳密に弾く！
-      if (originalDraggedTask && targetTask) {
-        const getCat = (p: string) => (p === '午前' ? 'AM' : p === '午後' ? 'PM' : 'ANY');
-        const draggedCat = getCat(originalDraggedTask.display_period);
-        const targetCat = getCat(targetTask.display_period);
-
-        if (draggedCat !== 'ANY' && targetCat !== 'ANY' && draggedCat !== targetCat) {
-          alert(`エラー：${originalDraggedTask.display_period}のタスクを${targetTask.display_period}のグループに入れることはできません。`);
-          return prev; // 状態を更新せずにそのまま返す（混入を阻止！）
-        }
-      }
-
-      // 💡 チェックを通過、または通常のドラッグなら、元の groupTasks（ID渡し）を実行
-      return groupTasks(prev, draggedId, targetId);
-    });
-  }, [allTasks]);
-
-  const handleDragStart = (event: DragStartEvent) => {
-  const { active } = event;
-  // allTasks から対象を検索し、型を確定させる
-  const task = allTasks.find(t => String(t.task_id) === String(active.id));
-    if (task) {
-      draggedTaskRef.current = task;
-    }
-    setActiveId(String(active.id));
-  };
-
-  const handleDragEnd = (event: DragEndEvent) => {
-  const { active, over } = event;
-  console.log("🚨【最優先ログ】実際に届いた active.id:", active?.id, "型:", typeof active?.id);
-  console.log("🚨【最優先ログ】実際に届いた over.id:", over?.id);
-  
-  setActiveId(null);
-
-  if (!over || active.id === over.id) return;
-
-  const draggedId = String(active.id);
-  const overId = String(over.id);
-
-  // 🚀 【重要】「memo-」の処理（既存のまま）
-  if (draggedId.startsWith('memo-')) {
-  // 💡 比較用に、頭の 'memo-' を削った純粋な元のIDを作っておく
-  const pureMemoId = draggedId.replace('memo-', ''); 
-
-  if (overId.startsWith('memo-drop-')) {
-    const targetTime = overId.replace('memo-drop-', '');
-    setMemos(prev => prev.map(m => String(m.id) === pureMemoId ? { ...m, time: targetTime } : m));
-  } else if (overId.includes(':')) {
-    // 💡 ログに出ている「09:30」はここにヒットします
-    setMemos(prev => prev.map(m => String(m.id) === pureMemoId ? { ...m, time: overId } : m));
+  // 読み込み中ならぐるぐる画面を出す
+  if (loading) {
+    return <div className="flex w-full h-full justify-center items-center">データを読み込み中...</div>;
   }
-  
-  setActiveId(null);
-  return; // 🛑 タスク側のロジックにいかせない
-}
-
-  // ─── グループ内の子要素同士の並び替え処理（既存のまま） ───
-  if (active.id !== over.id) {
-    let isInternalSort = false;
-    setAllTasks((prevTasks: any[]) => {
-      return prevTasks.map((task: any) => {
-        if (!task.isGroup || !task.children) return task;
-        const hasActive = task.children.some((c: any) => String(c.task_id) === String(active.id));
-        const hasOver = task.children.some((c: any) => String(c.task_id) === String(over.id));
-
-        if (hasActive && hasOver) {
-          isInternalSort = true;
-          const oldIndex = task.children.findIndex((c: any) => String(c.task_id) === String(active.id));
-          const newIndex = task.children.findIndex((c: any) => String(c.task_id) === String(over.id));
-          return {
-            ...task,
-            children: arrayMove(task.children, oldIndex, newIndex)
-          };
-        }
-        return task;
-      });
-    });
-
-    if (isInternalSort) {
-      setActiveId(null);
-      return;
-    }
-  }
-
-  // ─── 🚀 時間移動 or グループ化の分岐 ───
-  console.log("🔥 最終ドロップ検知:", draggedId, overId);
-
-  // 1. 時間軸のセルへの移動処理
-  if (overId.includes(':')) {
-    console.log(`⏰ タスク ${draggedId} を新しい時間 ${overId} へ移動します`);
-    handleUpdateTaskPeriod(draggedId, overId);
-    setActiveId(null);
-    return;
-  }
-
-  // 2. タスク同士のグループ化処理（モードに応じた動的ガード）
-  const targetTask = allTasks.find(t => String(t.task_id) === overId);
-  const originalDraggedTask = draggedTaskRef.current;
-
-  if (originalDraggedTask && targetTask) {
-    
-    // 💡 ターゲット（親カード）の groupType が「'patient'」の時だけ、他人の混入を弾く！
-    const isPatientGroupingMode = targetTask.groupType === 'patient';
-
-    if (isPatientGroupingMode) {
-      if (originalDraggedTask.patient_id !== targetTask.patient_id) {
-        console.log(`❌ 患者名グループのため拒否: ${originalDraggedTask.patient_name} !== ${targetTask.patient_name}`);
-        alert(`【エラー】患者名グループ化の時は、異なる患者のタスクをまとめることはできません。`);
-        setActiveId(null);
-        draggedTaskRef.current = null;
-        return; 
-      }
-    }
-
-    // 💡 既存の「午前・午後・随時」のルーツチェック（これはタスク名グループ化でも共通ルールなら残す）
-    const draggedRoot = originalDraggedTask.initial_period;
-    const targetRoot = targetTask.initial_period;
-    const isAny隨時 = draggedRoot?.includes('随時') || targetRoot?.includes('随時');
-
-    if (!isAny隨時 && draggedRoot && targetRoot && draggedRoot !== targetRoot) {
-      console.log(`❌ ルーツ不一致のためグループ化拒否: ${draggedRoot} !== ${targetRoot}`);
-      alert(`【エラー】元の区分が異なるタスク（元の時間：${draggedRoot} と ${targetRoot}）をグループ化することはできません。`);
-      setActiveId(null);
-      draggedTaskRef.current = null;
-      return; 
-    }
-  }
-
-  // 💡 チェックを通過した場合のみグループ化を実行
-  handleGroupTasks(draggedId, overId);
-  setActiveId(null);
-  draggedTaskRef.current = null;
-};
-  
-  useEffect(() => {
-    async function loadTimelineData() {
-      try {
-        const [tasksRes, patientsRes] = await Promise.all([
-          fetch('/data/tasks.json'),
-          fetch('/data/patients.json')
-        ]);
-
-        if (!tasksRes.ok || !patientsRes.ok) throw new Error('データ取得に失敗');
-
-        const tasksData = await tasksRes.json();
-        const patientsData = await patientsRes.json();
-
-        const mergedTasks = tasksData.map((task: any) => {
-          const targetPatient = patientsData.find((p: any) => p.patient_id === task.patient_id);
-          return {
-            ...task,
-            patient_name: targetPatient ? targetPatient.name : '不明な患者',
-            initial_period: task.display_period
-          };
-        });
-
-        setAllTasks(mergedTasks);
-      } catch (err) {
-        console.error('タイムラインデータ読み込みエラー:', err);
-      } finally {
-        setLoading(false);
-      }
-    }
-
-    loadTimelineData();
-  }, []);
-
-  const handleUpdateTaskPeriod = (taskId: string, newPeriod: string) => {
-    setAllTasks((prevTasks) =>
-      prevTasks.map((task) =>
-        task.task_id === taskId ? { ...task, display_period: newPeriod } : task
-      )
-    );
-  };
-
-  const { poolTasks, timedTasks } = useMemo(() => {
-    const patientTasks = allTasks.filter(task => selectedPatients.includes(task.patient_id));
-    return {
-      poolTasks: patientTasks.filter(task => !task.display_period.includes(':')),
-      timedTasks: patientTasks.filter(task => task.display_period.includes(':'))
-    };
-  }, [allTasks, selectedPatients]);
-
-  const hasPendingTasks = timedTasks.some(task => task.status === 'pending');
-
-  const handleUpdateStatus = (taskId: string, newStatus: TaskStatus) => {
-  setAllTasks(prev => 
-    prev.map(task => {
-      // 1. 通常の単体タスク、または親グループ自体のステータス変更の場合
-      if (task.task_id === taskId) {
-        return { ...task, status: newStatus };
-      }
-      
-      // 2. 🚀 【ここが重要】グループの中の「特定の1つの子タスク」が更新された場合
-      if (task.isGroup && task.children) {
-        // children の中に、今回更新された taskId を持つ子がいるか探す
-        const hasTargetChild = task.children.some(child => String(child.task_id) === String(taskId));
-        
-        if (hasTargetChild) {
-          // 対象の子タスクだけを newStatus に更新する
-          const updatedChildren = task.children.map(child => 
-            String(child.task_id) === String(taskId) ? { ...child, status: newStatus } : child
-          );
-
-          // 💡 追加の看護師目線ロジック: 
-          // もしグループ内の「すべての」子タスクが完了（'completed'）になったら、
-          // 親グループ自体も自動的に完了にする、という連動を入れるとさらに便利です。
-          const isAllChildrenCompleted = updatedChildren.every(child => child.status === 'completed');
-
-          return {
-            ...task,
-            status: isAllChildrenCompleted ? 'completed' : task.status, // 全員完了なら親も完了
-            children: updatedChildren
-          };
-        }
-      }
-
-      return task;
-    })
-  );
-};
-
-const handleStartGrouping = useCallback((taskId: string) => {
-  console.log("🔥 親の handleStartGrouping が発火！ 押されたタスクID:", taskId);
-  
-  setGroupingMode(prev => {
-    // 💡 もしすでに「今押されたタスク」が選択中なら、通常モードに戻す（解除）
-    if (prev === taskId) {
-      return null;
-    }
-    // 選ばれていなければ、そのタスクを選択中にする
-    return taskId;
-  });
-}, []);
-
-const handleUngroupTask = (groupId: string, childTaskId: string, currentPeriod: string) => {
-  setAllTasks((prev) => ungroupTask(prev, groupId, childTaskId, currentPeriod));
-};
-
-  // 💡 【ここを追加】React側でメモを保存・更新する関数
-const handleSaveMemo = (updatedMemo: any) => {
-  setMemos((prevMemos) => {
-    const exists = prevMemos.some((m) => m.id === updatedMemo.id);
-    if (exists) {
-      // 既存メモの更新
-      return prevMemos.map((m) => (m.id === updatedMemo.id ? updatedMemo : m));
-    } else {
-      // 新規メモの追加
-      return [...prevMemos, updatedMemo];
-    }
-  });
-};
-
-// 💡 【ここを追加】React側でメモを削除する関数
-  const handleDeleteMemo = (memoId: string) => {
-    if (confirm("このメモを削除してもよろしいですか？")) {
-      setMemos((prevMemos) => prevMemos.filter((m) => m.id !== memoId));
-    }
-  };
-
-  
 
   return (
     <DndContext 
@@ -315,7 +49,7 @@ const handleSaveMemo = (updatedMemo: any) => {
       onDragEnd={handleDragEnd}
     >
       <main 
-      onMouseDownCapture={() => console.log("🔍 mainタグまでイベントが来ているか？")}
+        onMouseDownCapture={() => console.log("🔍 mainタグまでイベントが来ているか？")}
         className={`flex flex-row w-full h-full bg-gray-50 overflow-hidden select-none ${
           hasPendingTasks ? 'pb-28' : ''
         }`}
@@ -325,7 +59,8 @@ const handleSaveMemo = (updatedMemo: any) => {
           <TimelineSidebar 
             tasks={poolTasks || []} 
             groupingMode={groupingMode}
-            onStartGrouping={handleStartGrouping}/>
+            onStartGrouping={handleStartGrouping}
+          />
         </div>
 
         <div className="flex-1 min-w-0 overflow-auto bg-white">
@@ -345,12 +80,11 @@ const handleSaveMemo = (updatedMemo: any) => {
           />
         </div>
       </main>
+
       <DragOverlay>
         {activeId ? (() => {
-          // 💡 もしドラッグされているのが「メモ」だった場合
           if (String(activeId).startsWith('memo-')) {
             const pureActiveId = String(activeId).replace('memo-', '');
-            // 💡 State内の m.id と比較できるように純粋なIDで探す
             const activeMemo = memos.find(m => String(m.id) === pureActiveId); 
             if (!activeMemo) return null;
             return (
@@ -360,7 +94,6 @@ const handleSaveMemo = (updatedMemo: any) => {
             );
           }
 
-          // ─── 以下は既存のタスクカード用の処理 ───
           const activeTask = allTasks.find(t => t.task_id === activeId);
           if (!activeTask) return null;
           
@@ -372,7 +105,7 @@ const handleSaveMemo = (updatedMemo: any) => {
               onStartGrouping={handleStartGrouping}
               groupingMode={groupingMode}
               cardColorClass={cardColorClass} 
-              borderStyle={borderStyle}       
+              borderStyle={borderStyle}      
               className="shadow-2xl cursor-grabbing scale-105" 
               onClick={() => handleCardClick(activeTask)}
             />

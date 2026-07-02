@@ -1,8 +1,11 @@
+import { useTimer } from "../hooks/useTimer";
+
 interface HeaderProps {
   currentPage: "login" | "patientSelect";
 }
 
 export default function Header({ currentPage }: HeaderProps) {
+  const { time } = useTimer();
   const isLoggedIn = currentPage !== "login";
 
   return (
@@ -21,9 +24,9 @@ export default function Header({ currentPage }: HeaderProps) {
       {isLoggedIn && (
         <div className="ml-auto text-sm flex items-center gap-4 text-gray-700">
           <div>
-            <p>現在時刻：--:--</p>
-            <p>ログイン者：---</p>
-          </div>
+          <p>現在時刻：<span id="header-time">{time}</span></p>
+          <p>ログイン者：<span id="header-user-name">---</span></p>
+        </div>
 
           <div className="cursor-pointer text-center text-xs">
             <img
