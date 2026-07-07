@@ -1,31 +1,15 @@
 import React from 'react';
-import type { Memo } from '../../types/types';
+import { useTimelineStore } from '../../stores/useTimelineStore'; // ★追加
 import { MemoPopup } from './MemoPopup';
 
-interface MemoManagerProps {
-  activeMemoTime: string | null;
-  editingMemo: Memo | null;
-  newMemoText: string;
-  setNewMemoText: (text: string) => void;
-  onClose: () => void;
-  onSave: (data: Memo) => void;
-  onDelete: (id: string) => void;
-}
+export const MemoManager: React.FC = () => {
+  // ★ストアから開くかどうかの判定用データだけを一本釣りする
+  const activeMemoTime = useTimelineStore((state) => state.activeMemoTime);
+  const editingMemo = useTimelineStore((state) => state.editingMemo);
 
-export const MemoManager: React.FC<MemoManagerProps> = ({
-  activeMemoTime, editingMemo, newMemoText, setNewMemoText, onClose, onSave, onDelete
-}) => {
+  // どちらの状態も空なら、何も表示しない（門番の役割）
   if (!activeMemoTime && !editingMemo) return null;
 
-  return (
-    <MemoPopup
-      editingMemo={editingMemo}
-      activeMemoTime={activeMemoTime}
-      newMemoText={newMemoText}
-      setNewMemoText={setNewMemoText}
-      onClose={onClose}
-      onSave={onSave}
-      onDelete={onDelete}
-    />
-  );
+  // 💡 下の MemoPopup も自力でストアを見るようになったので、Propsのバケツリレーはゼロ！
+  return <MemoPopup />;
 };

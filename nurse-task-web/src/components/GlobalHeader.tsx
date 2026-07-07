@@ -21,21 +21,6 @@ export default function GlobalHeader({ currentPage, onNavigate, onLogout }: Glob
       
       <nav className="w-72">
         <ul className="flex justify-between text-center">
-          
-          {/* 🗓️ タイムライン */}
-          {/* 💡 onClick で timeline を指定 */}
-          <li className="cursor-pointer" onClick={() => onNavigate('timeline')}>
-            <img 
-              src={currentPage === 'timeline' 
-                ? "/icon_active/event_note_48dp_155DFC_FILL1_wght400_GRAD0_opsz48.png" 
-                : "/icon_b/event_note_48dp.png"
-              } 
-              alt="タイムライン" 
-              className="mx-auto w-10 h-10" 
-            />
-            <span className={currentPage === 'timeline' ? "text-blue-600 font-bold" : "text-gray-600"}>タイムライン</span>
-          </li>
-
           {/* 👥 患者マスター */}
           {/* 💡 クリックしたら 'patientMaster' 画面へ遷移。表示条件は isMasterActive を使う */}
           <li className="cursor-pointer" onClick={() => onNavigate('patientMaster')}>
@@ -50,6 +35,20 @@ export default function GlobalHeader({ currentPage, onNavigate, onLogout }: Glob
             <span className={isMasterActive ? "text-blue-600 font-bold" : "text-gray-600"}>
               患者マスター
             </span>
+          </li>
+          
+          {/* 🗓️ タイムライン */}
+          {/* 💡 onClick で timeline を指定 */}
+          <li className="cursor-pointer" onClick={() => onNavigate('timeline')}>
+            <img 
+              src={currentPage === 'timeline' 
+                ? "/icon_active/event_note_48dp_155DFC_FILL1_wght400_GRAD0_opsz48.png" 
+                : "/icon_b/event_note_48dp.png"
+              } 
+              alt="タイムライン" 
+              className="mx-auto w-10 h-10" 
+            />
+            <span className={currentPage === 'timeline' ? "text-blue-600 font-bold" : "text-gray-600"}>タイムライン</span>
           </li>
 
           {/* 📍 マップ */}

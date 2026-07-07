@@ -1,7 +1,7 @@
 import { useState } from 'react';
-import Login from './Login';
 import Header from '../components/Header'; 
 import Footer from '../components/Footer';
+import Login from './Login';
 import PatientSelect from "./PatientSelect.tsx"; 
 import Timeline from "./Timeline.tsx";
 import PatientMasterPage from "./PatientMaster.tsx";
@@ -71,7 +71,7 @@ export default function App() {
            */}
             <PatientSelect onSelectComplete={(list) => {
               setSelectedPatients(list);
-              setCurrentScreen('timeline'); 
+              setCurrentScreen('patientMaster'); 
             }} />
           </main>
           <Footer />
@@ -79,17 +79,18 @@ export default function App() {
       )}
 
       {/* ─── 【B：ログイン後の世界（GlobalHeaderを使うグループ）】 ─── */}
-      {(currentScreen === 'timeline' || currentScreen === 'patientMaster' || currentScreen === 'map') && (
+      {(currentScreen === 'patientMaster' || currentScreen === 'timeline' || currentScreen === 'map') && (
         <MainLayout currentScreen={currentScreen} onNavigate={(screen) => setCurrentScreen(screen)}>
           
           {/* この中身が、MainLayout の {children} の部分にスポッと収まります */}
-          {currentScreen === 'timeline' && (
-            <Timeline selectedPatients={selectedPatients} />
-          )}
-
           {/* 💡 患者マスター画面（ダッシュボード） */}
           {currentScreen === 'patientMaster' && (
             <PatientMasterPage selectedIds={selectedPatients} />
+          )}
+
+          {/* 💡 タイムライン画面 */}
+          {currentScreen === 'timeline' && (
+            <Timeline selectedPatients={selectedPatients} />
           )}
 
           {/* {currentScreen === 'map' && (

@@ -1,14 +1,17 @@
-// ⭕ MemoCell.tsx 修正版
+import React from 'react';
 import type { Memo } from '../../types/types';
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
+import { useTimelineStore } from '../../stores/useTimelineStore'; // ★追加
 
 interface MemoCellProps {
   memo: Memo;
-  onEdit: (memo: Memo) => void;
 }
 
-export const MemoCell = ({ memo, onEdit }: MemoCellProps) => {
+export const MemoCell = ({ memo }: MemoCellProps) => {
+  // 🎯 ストアから、メモ編集ポップアップを開くためのアクションを一本釣り
+  const setEditingMemo = useTimelineStore((state) => state.setEditingMemo);
+
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: `memo-${memo.id}`,
   });
@@ -24,23 +27,20 @@ export const MemoCell = ({ memo, onEdit }: MemoCellProps) => {
         ? `${(dateObj.getMonth() + 1).toString().padStart(2, '0')}/${dateObj.getDate().toString().padStart(2, '0')} ${dateObj.getHours().toString().padStart(2, '0')}:${dateObj.getMinutes().toString().padStart(2, '0')}`
         : null;
 
-  // 💡 独自のログを出しつつ、@dnd-kit のイベントも安全に実行するマージ関数
+  // 💡 あなたが実装したポインターイベントのマージ関数（そのまま完全流用）
   const handlePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
-    console.log("① ポインター押した（ハンドル）");
     if (listeners?.onPointerDown) {
-      listeners.onPointerDown(e); // 👈 これで @dnd-kit にイベントを伝える
+      listeners.onPointerDown(e);
     }
   };
 
   const handlePointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
-    console.log("② ポインター動かした");
     if (listeners?.onPointerMove) {
       listeners.onPointerMove(e);
     }
   };
 
   const handlePointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
-    console.log("③ ポインター離した");
     if (listeners?.onPointerUp) {
       listeners.onPointerUp(e);
     }
@@ -55,11 +55,11 @@ export const MemoCell = ({ memo, onEdit }: MemoCellProps) => {
       }}
       className="w-full text-[12px] bg-yellow-100 p-1.5 rounded shadow-sm border border-yellow-300 mb-1 flex items-start gap-1 select-none hover:bg-yellow-200 transition-colors"
     >
-      {/* 💡 ⠿ ハンドル部分にのみドラッグ権限を与える */}
+      {/* ⠿ ハンドル部分 */}
       <div 
         {...attributes}
-        {...listeners} // 👈 基本イベントを展開
-        onPointerDown={handlePointerDown} // 👈 独自マージした関数で上書き
+        {...listeners}
+        onPointerDown={handlePointerDown}
         onPointerMove={handlePointerMove}
         onPointerUp={handlePointerUp}
         className="cursor-grab active:cursor-grabbing text-yellow-500 font-bold px-0.5 text-xs select-none"
@@ -67,12 +67,12 @@ export const MemoCell = ({ memo, onEdit }: MemoCellProps) => {
         ⠿
       </div>
 
-      {/* 💡 テキストエリア（クリックで編集を開く） */}
+      {/* 💡 クリックで直接ストアの編集用ステートへこのメモを叩き込む */}
       <div 
         className="flex-1 min-w-0 cursor-pointer" 
         onClick={(e) => { 
           e.stopPropagation(); 
-          onEdit(memo); 
+          setEditingMemo(memo); // ⚡親を経由せず、直接エディタを起動！
         }}
       >
         <div className="font-bold border-b border-yellow-300/60 mb-0.5">{memo.time}</div>

@@ -300,7 +300,7 @@ export default function PatientSelect({ onSelectComplete }: PatientSelectProps) 
             className="text-[1.25em] !bg-[#1A365D] !text-white rounded-[10px] !p-[0.5em] !mt-[1em] !rounded w-fit text-center !font-bold hover:bg-[#112540] transition-colors mt-4"
             onClick={() => onSelectComplete(selectedPatientIds)} 
           >
-            タスク取得（タイムライン表示）
+            タスク取得（患者マスター表示）
           </button>
         </div>
       </div>

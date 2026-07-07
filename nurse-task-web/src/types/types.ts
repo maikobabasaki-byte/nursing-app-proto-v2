@@ -67,20 +67,12 @@ export  interface TimelineControlsProps {
   setGroupingMode: (id: string | null) => void; 
 }
 
-export  interface TimelineMainProps {
-    allTasks: ExtendedTask[];
-    timedTasks: Task[]; 
-    onUpdateTaskPeriod: (taskId: string, newPeriod: string) => void; 
-    onUpdateTaskStatus?: (taskId: string, newStatus: ExtendedTaskStatus) => void;
-    onGroupTasks: (draggedId: string, targetId: string) => void;
-    onUngroupTask: (groupId: string, childTaskId: string, currentPeriod: string) => void;
-    groupingMode: string | null;
-    setGroupingMode: (id: string | null) => void;
-    onStartGrouping: (taskId: string) => void;
-    memos: any[];
-    onSaveMemo: (updatedMemo: any) => void;
-    onDeleteMemo: (memoId: string) => void;
-  }
+export interface TimelineMainProps {
+  timedTasks: ExtendedTask[];
+  groupingMode: string | null;
+  setGroupingMode: (mode: string | null) => void;
+  memos: Memo[];
+}
 
 export interface TaskCardPropsInner {
   task: Task;
