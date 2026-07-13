@@ -1,19 +1,16 @@
 import { useDraggable, useDroppable } from '@dnd-kit/core'; 
 import type { ExtendedTask } from '../../types/types';
+import type { GroupParentCardProps } from '../../types/types';
 import { GroupingButton } from './GroupingButton';
+import { useTimelineStore } from '../../stores/useTimelineStore';
 
-// 💡 Propsの型定義から「groupingMode」と「onStartGrouping」を完全に排除！
-interface GroupParentCardProps {
-  task: ExtendedTask;
-  isExpanded: boolean;
-  onClick: () => void;
-}
 
 export const GroupParentCard = ({ 
   task, 
   isExpanded, 
-  onClick 
+  onClick
 }: GroupParentCardProps) => {
+  const handleStartGrouping = useTimelineStore((state) => state.handleStartGrouping); // ストアから取得
   const childCount = task.children?.length || 0;
 
   // 全ての子タスクが完了、またはこの親グループ自体が完了状態か判定
@@ -85,7 +82,10 @@ export const GroupParentCard = ({
           <span className="text-sm font-bold opacity-90">{task.display_period}</span>
           
           {/* 💡 引数は task だけでOK（中で自力でストアを見に行きます） */}
-          <GroupingButton task={task} />
+          <GroupingButton
+            task={task}
+            onClick={() => handleStartGrouping(task.task_id)}
+            />
         </div>
         
         {/* 中段：モード別によるタイトル切り替え表示 */}

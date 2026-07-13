@@ -36,7 +36,18 @@ interface TimelineStore {
   handleSaveMemo: (memo: Memo) => void;
   handleDeleteMemo: (memoId: string) => void;
 }
+/**
+ * @typedef {Object} TimelineState
+ * @property {Task[]} allTasks - システム全体で管理される全タスクの配列
+ * @property {Memo[]} memos - システム全体で管理されるメモの配列
+ * @property {function} setTasks - 全タスクを更新するアクション
+ * @property {function} setMemos - メモを更新するアクション
+ */
 
+/**
+ * Zustand を使用したタイムライン状態管理ストア
+ * アプリ内の全データ操作の起点となります。
+ */
 export const useTimelineStore = create<TimelineStore>((set) => ({
   // ==========================================
   // 💾 初期状態 (Initial State)
@@ -69,7 +80,10 @@ export const useTimelineStore = create<TimelineStore>((set) => ({
   // ==========================================
   
   // グループ化モードの切り替え
-  handleStartGrouping: (taskId) => set({ groupingMode: taskId }),
+  handleStartGrouping: (taskId) => set((state) => ({
+    // ここで比較してトグルさせるのがコツです
+    groupingMode: state.groupingMode === taskId ? null : taskId
+})),
 
   // ステータス変更 (実施開始、中断、記録中、記録完了など)
   handleUpdateStatus: (taskId, status) => set((state) => {
@@ -101,22 +115,26 @@ export const useTimelineStore = create<TimelineStore>((set) => ({
   })),
 
   // グループから子タスクを「外す」ロジック
-  handleUngroupTask: (groupId, childId, period) => set((state) => {
-    const updatedTasks = state.allTasks.map((task) => {
-      // 親グループから子タスクを削除
-      if (task.task_id === groupId && task.children) {
-        const newChildren = task.children.filter((c) => c.task_id !== childId);
-        return { ...task, children: newChildren };
-      }
-      // 外された子タスク単体を、独立した通常タスクとして時間軸に戻す
-      if (task.task_id === childId) {
-        return { ...task, isChild: false, display_period: period };
-      }
-      return task;
-    });
-    return { allTasks: updatedTasks };
-  }),
-
+  handleUngroupTask: (groupId, childId) => set((state) => {
+  const updatedTasks = state.allTasks.map((task) => {
+    // 1. 親グループから子を削除
+    if (task.task_id === groupId && task.children) {
+      return { ...task, children: task.children.filter(c => c.task_id !== childId) };
+    }
+    
+    // 2. 外した子タスクを独立させる（期間はそのまま！）
+    if (task.task_id === childId) {
+      return { 
+        ...task, 
+        isGroup: false,
+        isChild: false // これで子要素ではなくなる
+        // display_period は変更しない（元の行に留まる）
+      };
+    }
+    return task;
+  });
+  return { allTasks: updatedTasks };
+}),
   // ==========================================
   // 📝 メモ操作ロジック
   // ==========================================

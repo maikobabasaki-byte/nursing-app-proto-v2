@@ -1,18 +1,19 @@
 import type { TaskCardPropsInner } from "../../types/types";
 import { useDraggable,useDroppable } from '@dnd-kit/core';
+import { useTimelineStore } from "../../stores/useTimelineStore";
 
 export const TaskCard = (props: TaskCardPropsInner) => {
+  const handleStartGrouping = useTimelineStore((state) => state.handleStartGrouping);
   // ここでデフォルト値を設定すれば、プロパティが渡されなくても絶対にエラーにならない
   const { 
     task, 
-    onStartGrouping,
     groupingMode,
+    onEdit,         // 必須
+    style,          // 任意
+    originalTime,   // 任意
     cardColorClass = 'bg-white border-gray-200',
     borderStyle = 'border-solid',
-    originalTime, 
-    onEdit,
-    style, 
-    className = '' ,
+    className = '',
   } = props;
   // 3. ドラッグの設定
   const { attributes, listeners, setNodeRef: setDraggableRef, transform } = useDraggable({
@@ -37,23 +38,14 @@ export const TaskCard = (props: TaskCardPropsInner) => {
     (task.isGroup && task.children?.some(child => child.task_id === groupingMode));
 
   const handleGroupingClick = (e: React.MouseEvent) => {
-  e.stopPropagation(); // 発火を止める
-  
-  // 💡 【追加】もし onEdit が渡されていない（＝DragOverlay側の身代わりカードである）場合は、処理を完全にスルーする
-  if (!onEdit) {
-    console.log("⚠️ DragOverlay側のカードがクリックされたため無視します");
-    return;
-  }
+  e.stopPropagation();
+  if (!onEdit) return;
 
-  console.log("🚨 [TaskCard] 正真正銘のプール側/タイムライン側のボタンがクリックされました！タスクID:", task?.task_id);
-  
-  if (onStartGrouping) {
-    onStartGrouping(task.task_id);
-  } else {
-    console.error("❌ [TaskCard] onStartGrouping 関数が Props から渡されていません！");
-  }
+  // ボタンを押した時、ストアの handleStartGrouping が呼ばれる
+  // ストア側で (state) => ({ groupingMode: state.groupingMode === taskId ? null : taskId }) 
+  // のようなロジックになっていれば、これで自然とトグルします。
+  handleStartGrouping(task.task_id);
 };
-
 
   return (
     <div 

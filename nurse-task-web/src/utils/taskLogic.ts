@@ -5,7 +5,6 @@ export const handleCardClick = (task: ExtendedTask) => {
     alert("このタスクは重要度が高いため、グループ化できません");
     return;
   }
-  onStartGrouping(task.task_id);
 };
 
 const getCat = (period: string) => {

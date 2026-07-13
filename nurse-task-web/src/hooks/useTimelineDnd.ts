@@ -20,8 +20,11 @@ export function useTimelineDnd({ selectedPatients }: UseTimelineDndProps) {
         })
     );
 
+    const groupingMode = useTimelineStore((state) => state.groupingMode);
+    const setGroupingMode = useTimelineStore((state) => state.setGroupingMode); // ※ストアに未定義なら追加
+    const handleStartGrouping = useTimelineStore((state) => state.handleStartGrouping);
+
     const [activeId, setActiveId] = useState<string | null>(null);
-    const [groupingMode, setGroupingMode] = useState<string | null>(null);
     const draggedTaskRef = useRef<ExtendedTask | null>(null);
 
     // 1. 状態の宣言部分から、ローカルの loading を一旦無くすか、以下のように変更します
@@ -73,6 +76,9 @@ useEffect(() => {
     loadTimelineData();
 // ⚠️ 依存配列に allTasks.length を入れることで、「データが入った瞬間」にuseEffectが安全に終了します
 }, [setTasks, allTasks.length]);
+    // const handleStartGroupingLocal = useCallback((taskId: string) => {
+    //     handleStartGrouping(taskId); // ストアのロジックを実行
+    // }, [handleStartGrouping]);
 
     // 🎯 3. 各ハンドラーも Zustand ストアの内容を直接更新するように変更
     const handleUpdateTaskPeriod = (taskId: string, newPeriod: string) => {
@@ -187,7 +193,18 @@ useEffect(() => {
             }
         }
 
-        handleGroupTasks(draggedId, overId);
+        if (groupingMode !== null) {
+            // グループ化モード中であれば、対象のグループに対してのみ実行を許可する
+            if (overId === groupingMode) {
+                handleGroupTasks(draggedId, overId);
+            } else {
+                alert("そのグループには追加できません（または対象外です）");
+            }
+        } else {
+            // 💡 通常のドラッグ時（モードOFF）はグループ化処理を走らせない
+            console.log("グループ化モードではないため、グループ化処理をスキップしました");
+        }
+
         draggedTaskRef.current = null;
     };
 
@@ -222,9 +239,9 @@ useEffect(() => {
         );
     };
 
-    const handleStartGrouping = useCallback((taskId: string) => {
-        setGroupingMode(prev => (prev === taskId ? null : taskId));
-    }, []);
+    // const handleStartGrouping = useCallback((taskId: string) => {
+    //     setGroupingMode(prev => (prev === taskId ? null : taskId));
+    // }, []);
 
     const handleUngroupTask = (groupId: string, childTaskId: string, currentPeriod: string) => {
         setTasks(ungroupTask(allTasks, groupId, childTaskId, currentPeriod));
@@ -254,6 +271,8 @@ useEffect(() => {
     }, [allTasks, selectedPatients]);
     
     const hasPendingTasks = timedTasks.some(task => task.status === 'pending');
+
+    console.log("🔍 現在の groupingMode の値:", groupingMode);
     
     return {
         allTasks,

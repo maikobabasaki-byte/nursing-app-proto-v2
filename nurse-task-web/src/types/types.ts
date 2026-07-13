@@ -82,7 +82,6 @@ export interface TaskCardPropsInner {
   onEdit?: () => void;
   style?: React.CSSProperties;
   className?: string;
-  onStartGrouping?: (taskId: string) => void;
   groupingMode?: string | null;
   onClick?: () => void;
 }
@@ -111,14 +110,13 @@ export interface GroupParentCardProps {
   task: ExtendedTask;
   isExpanded: boolean;
   onClick: () => void;
-  groupingMode: string | null;            
-  onStartGrouping: (id: string) => void; 
+  groupingMode: string | null;
+  onStartGrouping: (taskId: string) => void;
 }
 
 export interface GroupingProps {
-  task: any;
-  groupingMode: string | null;
-  onClick: () => void; // ここがポイント！親から処理を受け取る
+  task: ExtendedTask;
+  onClick: () => void; 
 }
 
 export interface Memo {

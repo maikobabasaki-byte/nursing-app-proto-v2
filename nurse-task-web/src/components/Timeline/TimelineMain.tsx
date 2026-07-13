@@ -87,6 +87,7 @@ export default function TimelineMain({
       <TimelineControls 
         timelineMode={timelineMode} 
         setTimelineMode={setTimelineMode}
+        // 現在のタスク選択中かどうかだけを渡す（モードそのものは親で管理）
         groupingMode={groupingMode}        
         setGroupingMode={setGroupingMode}  
       />

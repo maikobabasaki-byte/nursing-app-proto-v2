@@ -1,4 +1,5 @@
 import type { ExtendedTask } from '../../types/types';
+import { useTimelineStore } from '../../stores/useTimelineStore';
 // 🔥 dnd-kit の並び替え用コンポーネントをインポート
 import { SortableContext, verticalListSortingStrategy, useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
@@ -9,10 +10,10 @@ interface GroupAccordionProps {
   task: ExtendedTask;
   isExpanded: boolean;
   onChildClick: (taskId: string) => void;
-  onUngroup: (groupId: string, childId: string, period: string) => void;
 }
 
-export const GroupAccordion = ({ task, isExpanded, onChildClick, onUngroup }: GroupAccordionProps) => {
+export const GroupAccordion = ({ task, isExpanded, onChildClick }: GroupAccordionProps) => {
+  const groupingMode = useTimelineStore((state) => state.groupingMode);
   if (!isExpanded) return null;
 
   const childIds = task.children?.map(c => c.task_id) || [];
@@ -26,7 +27,6 @@ export const GroupAccordion = ({ task, isExpanded, onChildClick, onUngroup }: Gr
             child={child} 
             parentTaskId={task.task_id}
             onChildClick={onChildClick}
-            onUngroup={onUngroup}
           />
         ))}
       </SortableContext>
@@ -34,12 +34,12 @@ export const GroupAccordion = ({ task, isExpanded, onChildClick, onUngroup }: Gr
   );
 };
 
-const SortableChildItem = ({ child, parentTaskId, onChildClick, onUngroup }: { 
-  child: any, parentTaskId: string, onChildClick: any, onUngroup: any 
+const SortableChildItem = ({ child, parentTaskId, onChildClick }: { 
+  child: any, parentTaskId: string, onChildClick: any 
 }) => {
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
-    id: child.task_id,
-  });
+  const handleUngroupTask = useTimelineStore((state) => state.handleUngroupTask);
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: child.task_id });
+  const groupingMode = useTimelineStore((state) => state.groupingMode);
 
   // 🎨 【完璧な同期】
   // 新しくなった getTaskStyles に子フラグを渡して、完璧にトリアージされたスタイルを受け取る
@@ -84,7 +84,13 @@ const SortableChildItem = ({ child, parentTaskId, onChildClick, onUngroup }: {
       className={`p-2 rounded-lg text-xs mb-2 cursor-grab active:cursor-grabbing hover:opacity-90 transition-all ${cardColorClass} ${borderStyle}`}
       onClick={(e) => { 
         e.stopPropagation(); 
-        onChildClick(child.task_id); 
+        // 🎯 モード中ならグループ化操作、そうでなければ詳細ポップアップという分岐
+        if (groupingMode !== null) {
+          console.log("グループ化対象として選択されました:", child.task_id);
+          // ここで必要に応じてグループ化処理を実行
+        } else {
+          onChildClick(child.task_id);
+        }
       }}
     >
       <div className="font-bold flex justify-between items-center mb-0.5">
@@ -94,7 +100,7 @@ const SortableChildItem = ({ child, parentTaskId, onChildClick, onUngroup }: {
           onPointerDown={(e) => e.stopPropagation()} 
           onClick={(e) => { 
             e.stopPropagation(); 
-            onUngroup(parentTaskId, child.task_id, child.display_period); 
+            handleUngroupTask(parentTaskId, child.task_id, child.display_period); // ★ストアの関数を直接呼ぶ
           }}
           className="!bg-black/10 hover:!bg-black/20 !text-current !px-1.5 !py-0.5 !rounded !font-bold transition-colors cursor-pointer"
         >
