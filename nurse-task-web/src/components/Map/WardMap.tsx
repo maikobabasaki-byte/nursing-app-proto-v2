@@ -1,8 +1,8 @@
 import React from 'react';
 
-interface Room { room_id: string; name: string; x: number; y: number; cols: number; rows: number; }
-interface Facility { room_id: string; name: string; x: number; y: number; w: number; h: number; }
-interface Patient { patient_id: string; name: string; adl: string; risk_level: string; allergy: string; room_id: string; bed_number: number; team: string; }
+export interface Room { room_id: string; name: string; x: number; y: number; cols: number; rows: number; }
+export interface Facility { room_id: string; name: string; x: number; y: number; w: number; h: number; }
+export interface Patient { patient_id: string; name: string; adl: string; risk_level: string; allergy: string; room_id: string; bed_number: number; team: string; }
 
 interface WardMapProps {
   rooms: Room[];

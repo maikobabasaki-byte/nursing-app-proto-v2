@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import WardMap from '../components/Map/WardMap';
+import type{ Patient, Room, Facility } from '../components/Map/WardMap';
 
 const LeftPanel: React.FC = () => (
   <div style={{ width: '200px', flexShrink: 0, backgroundColor: '#ffebee', padding: '20px', borderRight: '1px solid #e0e0e0', boxSizing: 'border-box' }}>
@@ -16,9 +17,9 @@ const RightPanel: React.FC = () => (
 );
 
 export default function MapContainer(): React.JSX.Element {
-  const [patients, setPatients] = useState<any[]>([]);
-  const [rooms, setRooms] = useState<any[]>([]);
-  const [facilities, setFacilities] = useState<any[]>([]); // 💡 施設もStateで管理
+  const [patients, setPatients] = useState<Patient[]>([]);
+  const [rooms, setRooms] = useState<Room[]>([]);
+  const [facilities, setFacilities] = useState<Facility[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
 
   useEffect(() => {
