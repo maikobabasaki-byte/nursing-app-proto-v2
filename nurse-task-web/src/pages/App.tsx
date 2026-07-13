@@ -2,10 +2,11 @@ import { useState } from 'react';
 import Header from '../components/Header'; 
 import Footer from '../components/Footer';
 import Login from './Login';
-import PatientSelect from "./PatientSelect.tsx"; 
-import Timeline from "./Timeline.tsx";
-import PatientMasterPage from "./PatientMaster.tsx";
-import MainLayout from "../components/MainLayout.tsx"; 
+import PatientSelect from "./PatientSelect"; 
+import PatientMasterPage from "./PatientMaster";
+import Timeline from "./Timeline";
+import MapContainer from "./Map"
+import MainLayout from "../components/MainLayout"; 
 
 export default function App() {
   /**
@@ -79,6 +80,7 @@ export default function App() {
       )}
 
       {/* ─── 【B：ログイン後の世界（GlobalHeaderを使うグループ）】 ─── */}
+      
       {(currentScreen === 'patientMaster' || currentScreen === 'timeline' || currentScreen === 'map') && (
         <MainLayout currentScreen={currentScreen} onNavigate={(screen) => setCurrentScreen(screen)}>
           
@@ -93,9 +95,9 @@ export default function App() {
             <Timeline selectedPatients={selectedPatients} />
           )}
 
-          {/* {currentScreen === 'map' && (
-            <WardMap onRoomChange={(roomId) => console.log(roomId)} />
-          )} */}
+          {currentScreen === 'map' && (
+            <MapContainer />
+          )}
           
         </MainLayout>
       )}
