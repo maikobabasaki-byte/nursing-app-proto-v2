@@ -1,6 +1,7 @@
 import type { TaskCardPropsInner } from "../../types/types";
 import { useDraggable,useDroppable } from '@dnd-kit/core';
 import { useTimelineStore } from "../../stores/useTimelineStore";
+import { GroupingButton } from "./GroupingButton";
 
 export const TaskCard = (props: TaskCardPropsInner) => {
   const handleStartGrouping = useTimelineStore((state) => state.handleStartGrouping);
@@ -86,22 +87,7 @@ export const TaskCard = (props: TaskCardPropsInner) => {
               </span>
             )}
           </div>
-          <button 
-            onClick={handleGroupingClick}
-            disabled={task.priority === 'high'} 
-            className={`!text-xs !px-1 !rounded transition-colors ${
-              task.priority === 'high'
-                ? '!bg-gray-400 !cursor-not-allowed opacity-60' 
-                : (groupingMode === task.task_id 
-                    ? '!bg-orange-500 !text-white' 
-                    : '!bg-blue-500 !text-white') 
-            }`}
-          >
-            {task.priority === 'high' 
-              ? '制限中' 
-              : (isCurrentlySelected ? '選択中' : 'グループ化') 
-            }
-          </button>
+          <GroupingButton task={task} />
         </div>
         
         <div className="grid grid-cols-3 gap-1 mb-1 text-sm">

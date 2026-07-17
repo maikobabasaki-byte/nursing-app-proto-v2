@@ -82,10 +82,7 @@ export const GroupParentCard = ({
           <span className="text-sm font-bold opacity-90">{task.display_period}</span>
           
           {/* 💡 引数は task だけでOK（中で自力でストアを見に行きます） */}
-          <GroupingButton
-            task={task}
-            onClick={() => handleStartGrouping(task.task_id)}
-            />
+          <GroupingButton task={task} />
         </div>
         
         {/* 中段：モード別によるタイトル切り替え表示 */}
