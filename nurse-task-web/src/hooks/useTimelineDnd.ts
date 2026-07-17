@@ -6,6 +6,9 @@ import { groupTasks, ungroupTask } from '../utils/taskLogic';
 import { useDndCollision } from './useDndCollision';
 import type { ExtendedTask, TaskStatus } from '../types/types';
 import { useTimelineStore } from '../stores/useTimelineStore'; // ★Zustandをインポート
+import { collection, onSnapshot } from 'firebase/firestore'; // 追加
+import { db } from '../lib/firebase'; // 既存のdbエクスポートを使用
+import { updateTask } from '../hooks/useTaskUpdate';
 
 interface UseTimelineDndProps {
     selectedPatients: string[];
@@ -39,43 +42,29 @@ const setMemos = useTimelineStore((state) => state.setMemos);
 const loading = allTasks.length === 0; 
 
 useEffect(() => {
-    // 💡 すでにデータが存在するなら、二度とフェッチに走らせないガード
-    if (allTasks.length > 0) return;
+    // Firestoreの "tasks" コレクションをリアルタイム監視
+    const unsubscribe = onSnapshot(collection(db, "tasks"), (snapshot) => {
+    // 1. 各ドキュメントのデータを取得し、IDを含めてキャストする
+    const firestoreTasks = snapshot.docs.map((doc) => {
+    const data = doc.data();
+    
+    return {
+        ...data,
+        task_id: doc.id,
+        // 💡 ここで display_period が "undefined" という文字列なら空文字に強制変換する
+        display_period: (data.display_period === "undefined" || !data.display_period) 
+            ? "" 
+            : data.display_period,
+    } as ExtendedTask;
+});
 
-    async function loadTimelineData() {
-        try {
-            const [tasksRes, patientsRes] = await Promise.all([
-                fetch('/data/tasks.json'),
-                fetch('/data/patients.json')
-            ]);
+    // 2. Zustandにセット
+    setTasks(firestoreTasks);
+});
 
-            if (!tasksRes.ok || !patientsRes.ok) throw new Error('データ取得に失敗');
-
-            const tasksData = await tasksRes.json();
-            const patientsData = await patientsRes.json();
-
-            const mergedTasks = tasksData.map((task: any) => {
-                const targetPatient = patientsData.find((p: any) => p.patient_id === task.patient_id);
-                return {
-                    ...task,
-                    patient_name: targetPatient ? targetPatient.name : '不明な患者',
-                    initial_period: task.display_period
-                };
-            });
-
-            // ⚡ ここでZustandの配列にデータがドカンと入る
-            setTasks(mergedTasks);
-            
-        } catch (err) {
-            console.error('タイムラインデータ読み込みエラー:', err);
-            // 💡 万が一失敗した時だけ、ダミーでも空配列を入れて loading を強制解除する
-            setTasks([]); 
-        }
-    }
-
-    loadTimelineData();
-// ⚠️ 依存配列に allTasks.length を入れることで、「データが入った瞬間」にuseEffectが安全に終了します
-}, [setTasks, allTasks.length]);
+    // クリーンアップ処理
+    return () => unsubscribe();
+}, [setTasks]); // 依存配列もシンプルに
     // const handleStartGroupingLocal = useCallback((taskId: string) => {
     //     handleStartGrouping(taskId); // ストアのロジックを実行
     // }, [handleStartGrouping]);
@@ -117,14 +106,13 @@ useEffect(() => {
         setActiveId(String(active.id));
     };
 
-    const handleDragEnd = (event: DragEndEvent) => {
+    const handleDragEnd = async (event: DragEndEvent) => { // async を追加
         const { active, over } = event;
         setActiveId(null);
         if (!over || active.id === over.id) return;
 
         const draggedId = String(active.id);
         const overId = String(over.id);
-
         // メモのドロップ処理
         if (draggedId.startsWith('memo-')) {
             const pureMemoId = draggedId.replace('memo-', '');
@@ -166,9 +154,11 @@ useEffect(() => {
 
         // 時間移動
         if (overId.includes(':')) {
-            handleUpdateTaskPeriod(draggedId, overId);
-            return;
-        }
+        handleUpdateTaskPeriod(draggedId, overId);
+        // ★ここに保存処理を追加
+        await updateTask(draggedId, { time: overId }); 
+        return;
+    }
 
         const targetTask = allTasks.find(t => String(t.task_id) === overId);
         const originalDraggedTask = draggedTaskRef.current;
@@ -194,18 +184,16 @@ useEffect(() => {
         }
 
         if (groupingMode !== null) {
-            // グループ化モード中であれば、対象のグループに対してのみ実行を許可する
-            if (overId === groupingMode) {
-                handleGroupTasks(draggedId, overId);
-            } else {
-                alert("そのグループには追加できません（または対象外です）");
-            }
+        if (overId === groupingMode) {
+            handleGroupTasks(draggedId, overId);
+            // ★ここに保存処理を追加（グループ化＝状態変更とみなす場合）
+            await updateTask(draggedId, { /* 必要なら新しいステータスなど */ });
         } else {
-            // 💡 通常のドラッグ時（モードOFF）はグループ化処理を走らせない
-            console.log("グループ化モードではないため、グループ化処理をスキップしました");
+            alert("そのグループには追加できません");
         }
+    }
 
-        draggedTaskRef.current = null;
+    draggedTaskRef.current = null;
     };
 
     const handleUpdateStatus = (taskId: string, newStatus: TaskStatus) => {
@@ -264,12 +252,18 @@ useEffect(() => {
 
     const { poolTasks, timedTasks } = useMemo(() => {
         const patientTasks = allTasks.filter(task => selectedPatients.includes(task.patient_id));
+        
+        // デバッグログ：全タスクの情報を詳細に出力
+        patientTasks.forEach(task => {
+            const hasColon = task.display_period?.includes(':');
+            console.log(`Debug Task: ${task.title}, Period: "${task.display_period}", HasColon: ${hasColon}`);
+        });
+
         return {
-            poolTasks: patientTasks.filter(task => !task.display_period.includes(':')),
-            timedTasks: patientTasks.filter(task => task.display_period.includes(':'))
+            poolTasks: patientTasks.filter(task => !task.display_period || !task.display_period.includes(':')),
+            timedTasks: patientTasks.filter(task => task.display_period && task.display_period.includes(':'))
         };
     }, [allTasks, selectedPatients]);
-    
     const hasPendingTasks = timedTasks.some(task => task.status === 'pending');
 
     console.log("🔍 現在の groupingMode の値:", groupingMode);

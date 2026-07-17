@@ -4,7 +4,7 @@
     "name": "山崎 陽向",
     "adl": "全介助",
     "risk_level": "中",
-    "allergy":"",
+    "allergy": "",
     "room_id": "201",
     "bed_number": 1,
     "team": "A"
@@ -14,7 +14,7 @@
     "name": "森 碧",
     "adl": "自立",
     "risk_level": "高",
-    "allergy":"",
+    "allergy": "",
     "room_id": "202",
     "bed_number": 1,
     "team": "A"
@@ -24,7 +24,7 @@
     "name": "池田 悠",
     "adl": "自立",
     "risk_level": "高",
-    "allergy":"",
+    "allergy": "",
     "room_id": "202",
     "bed_number": 2,
     "team": "A"
@@ -34,7 +34,7 @@
     "name": "橋本 瑞希",
     "adl": "一部介助",
     "risk_level": "高",
-    "allergy":"アルコール綿",
+    "allergy": "アルコール綿",
     "room_id": "203",
     "bed_number": 1,
     "team": "A"
@@ -44,7 +44,7 @@
     "name": "阿部 飛鳥",
     "adl": "全介助",
     "risk_level": "低",
-    "allergy":"",
+    "allergy": "",
     "room_id": "203",
     "bed_number": 2,
     "team": "A"
@@ -54,7 +54,7 @@
     "name": "石川 凪沙",
     "adl": "全介助",
     "risk_level": "低",
-    "allergy":"",
+    "allergy": "",
     "room_id": "203",
     "bed_number": 3,
     "team": "A"
@@ -64,7 +64,7 @@
     "name": "山下 光",
     "adl": "全介助",
     "risk_level": "低",
-    "allergy":"",
+    "allergy": "",
     "room_id": "203",
     "bed_number": 4,
     "team": "A"
@@ -74,7 +74,7 @@
     "name": "中島 伊織",
     "adl": "自立",
     "risk_level": "中",
-    "allergy":"",
+    "allergy": "",
     "room_id": "205",
     "bed_number": 1,
     "team": "A"
@@ -84,7 +84,7 @@
     "name": "石井 望",
     "adl": "自立",
     "risk_level": "中",
-    "allergy":"",
+    "allergy": "",
     "room_id": "205",
     "bed_number": 2,
     "team": "A"
@@ -94,7 +94,7 @@
     "name": "吉田 陽葵",
     "adl": "自立",
     "risk_level": "高",
-    "allergy":"",
+    "allergy": "",
     "room_id": "205",
     "bed_number": 3,
     "team": "A"
@@ -104,7 +104,7 @@
     "name": "山田 紬",
     "adl": "自立",
     "risk_level": "中",
-    "allergy":"",
+    "allergy": "",
     "room_id": "205",
     "bed_number": 4,
     "team": "A"
@@ -114,7 +114,7 @@
     "name": "佐藤 蓮",
     "adl": "自立",
     "risk_level": "中",
-    "allergy":"",
+    "allergy": "",
     "room_id": "206",
     "bed_number": 1,
     "team": "A"
@@ -124,7 +124,7 @@
     "name": "鈴木 陽翔",
     "adl": "自立",
     "risk_level": "中",
-    "allergy":"",
+    "allergy": "",
     "room_id": "206",
     "bed_number": 2,
     "team": "A"
@@ -134,7 +134,7 @@
     "name": "高橋 湊",
     "adl": "自立",
     "risk_level": "中",
-    "allergy":"",
+    "allergy": "",
     "room_id": "206",
     "bed_number": 3,
     "team": "A"
@@ -144,7 +144,7 @@
     "name": "田中 悠真",
     "adl": "自立",
     "risk_level": "中",
-    "allergy":"",
+    "allergy": "",
     "room_id": "206",
     "bed_number": 4,
     "team": "A"
@@ -154,9 +154,179 @@
     "name": "中村 朝陽",
     "adl": "自立",
     "risk_level": "中",
-    "allergy":"",
+    "allergy": "",
     "room_id": "207",
     "bed_number": 4,
+    "team": "B"
+  },
+  {
+    "patient_id": "P227",
+    "name": "小林 結菜",
+    "adl": "一部介助",
+    "risk_level": "高",
+    "allergy": "ペニシリン",
+    "room_id": "207",
+    "bed_number": 1,
+    "team": "B"
+  },
+  {
+    "patient_id": "P228",
+    "name": "加藤 健太",
+    "adl": "全介助",
+    "risk_level": "高",
+    "allergy": "",
+    "room_id": "207",
+    "bed_number": 2,
+    "team": "B"
+  },
+  {
+    "patient_id": "P229",
+    "name": "渡辺 咲良",
+    "adl": "一部介助",
+    "risk_level": "中",
+    "allergy": "",
+    "room_id": "207",
+    "bed_number": 3,
+    "team": "B"
+  },
+  {
+    "patient_id": "P230",
+    "name": "東 拓海",
+    "adl": "自立",
+    "risk_level": "低",
+    "allergy": "",
+    "room_id": "208",
+    "bed_number": 1,
+    "team": "B"
+  },
+  {
+    "patient_id": "P231",
+    "name": "佐々木 澪",
+    "adl": "一部介助",
+    "risk_level": "中",
+    "allergy": "牛乳",
+    "room_id": "208",
+    "bed_number": 2,
+    "team": "B"
+  },
+  {
+    "patient_id": "P232",
+    "name": "松本 大輝",
+    "adl": "全介助",
+    "risk_level": "高",
+    "allergy": "",
+    "room_id": "208",
+    "bed_number": 3,
+    "team": "B"
+  },
+  {
+    "patient_id": "P233",
+    "name": "井上 美羽",
+    "adl": "自立",
+    "risk_level": "低",
+    "allergy": "",
+    "room_id": "208",
+    "bed_number": 4,
+    "team": "B"
+  },
+  {
+    "patient_id": "P234",
+    "name": "木村 陸斗",
+    "adl": "一部介助",
+    "risk_level": "中",
+    "allergy": "",
+    "room_id": "210",
+    "bed_number": 1,
+    "team": "B"
+  },
+  {
+    "patient_id": "P235",
+    "name": "林 結衣",
+    "adl": "全介助",
+    "risk_level": "高",
+    "allergy": "",
+    "room_id": "210",
+    "bed_number": 2,
+    "team": "B"
+  },
+  {
+    "patient_id": "P244",
+    "name": "岡田 翔太",
+    "adl": "自立",
+    "risk_level": "中",
+    "allergy": "",
+    "room_id": "210",
+    "bed_number": 3,
+    "team": "B"
+  },
+  {
+    "patient_id": "P245",
+    "name": "三浦 葵",
+    "adl": "一部介助",
+    "risk_level": "低",
+    "allergy": "",
+    "room_id": "210",
+    "bed_number": 4,
+    "team": "B"
+  },
+  {
+    "patient_id": "P236",
+    "name": "清水 翔太",
+    "adl": "自立",
+    "risk_level": "中",
+    "allergy": "",
+    "room_id": "211",
+    "bed_number": 1,
+    "team": "B"
+  },
+  {
+    "patient_id": "P237",
+    "name": "山内 莉子",
+    "adl": "一部介助",
+    "risk_level": "高",
+    "allergy": "ラテックス",
+    "room_id": "211",
+    "bed_number": 2,
+    "team": "B"
+  },
+  {
+    "patient_id": "P246",
+    "name": "長谷川 健",
+    "adl": "全介助",
+    "risk_level": "高",
+    "allergy": "",
+    "room_id": "211",
+    "bed_number": 3,
+    "team": "B"
+  },
+  {
+    "patient_id": "P247",
+    "name": "坂本 さくら",
+    "adl": "自立",
+    "risk_level": "低",
+    "allergy": "",
+    "room_id": "211",
+    "bed_number": 4,
+    "team": "B"
+  },
+  {
+    "patient_id": "P238",
+    "name": "山口 太陽",
+    "adl": "自立",
+    "risk_level": "低",
+    "allergy": "",
+    "room_id": "212",
+    "bed_number": 1,
+    "team": "B"
+  },
+  {
+    "patient_id": "P239",
+    "name": "斉藤 萌",
+    "adl": "全介助",
+    "risk_level": "高",
+    "allergy": "",
+    "room_id": "212",
+    "bed_number": 2,
     "team": "B"
   }
 ]

@@ -41,9 +41,14 @@ export default function Timeline({ selectedPatients }: TimelineProps) {
   }
 
   // 🎯 3. ストアの全タスクから、現在選択されている患者かつ時間軸付き(timed)のタスクだけをフィルタリング
-  const timedTasks = storeAllTasks.filter(
-    task => selectedPatients.includes(task.patient_id) && task.display_period.includes(':')
+  const timedTasks = storeAllTasks.filter((task) => {
+  // task 自体と、display_period が存在することを確認してから .includes を実行
+  return (
+    task && 
+    selectedPatients.includes(task.patient_id) && 
+    task.display_period?.includes(':')
   );
+});
 
   return (
     <DndContext 

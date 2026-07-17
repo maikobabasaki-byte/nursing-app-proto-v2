@@ -1,4 +1,7 @@
-import { useState } from 'react';
+import { useState,useEffect } from 'react';
+import { onAuthStateChanged } from 'firebase/auth'; // 追加
+import type{ User } from 'firebase/auth';
+import { auth } from '../lib/firebase';           // 追加
 import Header from '../components/Header'; 
 import Footer from '../components/Footer';
 import Login from './Login';
@@ -8,7 +11,10 @@ import Timeline from "./Timeline";
 import MapContainer from "./Map"
 import MainLayout from "../components/MainLayout"; 
 
+
 export default function App() {
+  const [user, setUser] = useState<User | null>(null);
+  const [userName, setUserName] = useState<string>('');
   /**
  * 現在アプリに表示している画面の識別子
  * - `login`: 初期画面。認証を行う
@@ -21,7 +27,24 @@ export default function App() {
  * |（または）で繋ぐことで、「この5つの文字列のどれか」という限定された型（ユニオン型）を作っている
  */
   const [currentScreen, setCurrentScreen] = useState<'login' | 'patientSelect' | 'timeline'| 'patientMaster' | 'map'>('login');
-
+  useEffect(() => {
+  const unsubscribe = onAuthStateChanged(auth, (user) => {
+    if (user && user.email) {
+      const id = user.email.split('@')[0];
+      setUserName(id);
+      
+      // ★ 現在が 'login' 画面の時だけ 'patientSelect' に切り替える
+      // これにより、既に画面遷移している場合に勝手に戻されるのを防げます
+      if (currentScreen === 'login') {
+        setCurrentScreen('patientSelect');
+      }
+    } else {
+      setUserName('');
+      setCurrentScreen('login');
+    }
+  });
+  return () => unsubscribe();
+}, [currentScreen]);
   /**
  * 現在ログイン中の看護師が「本日担当する」として選択した患者のIDリスト
  * * @example `['patient_001', 'patient_002']`
@@ -51,7 +74,7 @@ export default function App() {
         <>
           <Header currentPage="login" />
           <main className="flex-1 !flex items-center justify-center bg-gray-50">
-            <Login onLoginSuccess={() => setCurrentScreen('patientSelect')} />
+            <Login />
           </main>
           <Footer />
         </>

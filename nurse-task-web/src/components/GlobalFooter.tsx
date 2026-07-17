@@ -2,7 +2,7 @@ export default function GlobalFooter() {
   return (
     // 💡 !つけることで、既存の強固なCSS（space-betweenなど）が外側にあっても
     // 確実にTailwindのスタイル（高さ、背景色、文字色、パディング）を適用させます。
-    <footer className="w-full min-h-[50px] bg-sky-200 text-gray-700 flex justify-between items-center px-6 py-3">
+    <footer className="w-full min-h-[50px] bg-sky-200 text-gray-700 flex justify-between items-center px-6">
       
       {/* ⚙️ 左側：システム設定（クリックできるようにcursor-pointerを付与） */}
       <div className="setting flex items-center cursor-pointer hover:opacity-80 transition-opacity">

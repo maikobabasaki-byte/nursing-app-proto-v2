@@ -1,4 +1,6 @@
 import { useTimer } from "../hooks/useTimer";
+import { useUserName } from "../hooks/useUserName";
+import { useLogout } from '../hooks/useLogout';
 
 interface HeaderProps {
   currentPage: "login" | "patientSelect";
@@ -7,7 +9,9 @@ interface HeaderProps {
 export default function Header({ currentPage }: HeaderProps) {
   const { time } = useTimer();
   const isLoggedIn = currentPage !== "login";
+  const logout = useLogout();
 
+  const userName = useUserName();
   return (
     <header className="h-18 bg-sky-200 text-slate-900 flex items-center px-4 shadow-md shrink-0">
       <h1 className="flex items-center gap-2">
@@ -25,7 +29,7 @@ export default function Header({ currentPage }: HeaderProps) {
         <div className="ml-auto text-sm flex items-center gap-4 text-gray-700">
           <div>
           <p>現在時刻：<span id="header-time">{time}</span></p>
-          <p>ログイン者：<span id="header-user-name">---</span></p>
+          <p>ログイン者：<span>{userName}</span></p>
         </div>
 
           <div className="cursor-pointer text-center text-xs">
@@ -33,6 +37,7 @@ export default function Header({ currentPage }: HeaderProps) {
               src="/icon_b/logout_48dp.png"
               alt="ログアウト"
               className="mx-auto w-6 h-6"
+              onClick={logout}
             />
             <p>ログアウト</p>
           </div>

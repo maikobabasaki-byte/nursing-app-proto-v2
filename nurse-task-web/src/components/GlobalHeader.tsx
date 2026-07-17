@@ -1,4 +1,6 @@
 import { useTimer } from "../hooks/useTimer";
+import { useUserName } from '../hooks/useUserName';
+import { useLogout } from '../hooks/useLogout';
 
 interface GlobalHeaderProps {
   currentPage: 'login' | 'patientSelect' | 'patientMaster' | 'timeline' | 'map';
@@ -9,11 +11,13 @@ interface GlobalHeaderProps {
 
 export default function GlobalHeader({ currentPage, onNavigate, onLogout }: GlobalHeaderProps) {
    const { time } = useTimer();
+   const userName = useUserName();
+   const logout = useLogout();
   // 💡 「患者マスター」タブを青くアクティブにする条件（マスター画面 or 患者選択画面のとき）
   const isMasterActive = currentPage === 'patientMaster' || currentPage === 'patientSelect';
 
   return (
-    <header className="flex justify-between items-center p-4 bg-sky-200 border-b w-full">
+    <header className="flex justify-between items-center p-2 bg-sky-200 border-b w-full">
       <h1>
         <img src="/icon_b/local_hospital_48dp.png" alt="NurseFlow Dashboard" className="w-8 h-8 inline mr-2" />
         <span className="header-title-text font-bold text-lg">NurseFlowApp</span>
@@ -71,13 +75,13 @@ export default function GlobalHeader({ currentPage, onNavigate, onLogout }: Glob
       <div className="w-50 text-sm flex items-center space-x-4 text-gray-700">
         <div>
           <p>現在時刻：<span id="header-time">{time}</span></p>
-          <p>ログイン者：<span id="header-user-name">---</span></p>
+          <p>ログイン者：<span>{userName}</span></p>
         </div>
         {/* 💡 必要であればログアウト処理を繋ぎ込めるように */}
         <div 
           className="logout cursor-pointer text-center text-xs" 
           id="logout-btn"
-          onClick={onLogout}
+          onClick={logout}
         >
           <img src="/icon_b/logout_48dp.png" alt="ログアウト" className="mx-auto w-6 h-6" />
           <p>ログアウト</p>

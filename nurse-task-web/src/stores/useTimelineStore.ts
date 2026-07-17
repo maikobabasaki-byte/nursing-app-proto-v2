@@ -6,14 +6,14 @@ interface TimelineStore {
   allTasks: ExtendedTask[];
   memos: Memo[];
   loading: boolean;
-  groupingMode: string | null;      // グループ化対象の親タスクID
-  activeId: string | null;          // dnd-kitで現在ドラッグ中の要素ID
-  activePopupTaskId: string | null; // 現在詳細ポップアップを開いているタスクID
+  groupingMode: string | null;
+  activeId: string | null;
+  activePopupTaskId: string | null;
   
   // 💾 メモ専用の State
-  activeMemoTime: string | null;    // 新規メモ作成時に対象となるタイムライン時間（例: "09:00"）
-  editingMemo: Memo | null;        // 現在編集中のメモオブジェクト
-  newMemoText: string;             // 新規作成中のメモテキスト
+  activeMemoTime: string | null;
+  editingMemo: Memo | null;
+  newMemoText: string;
 
   // ⚡ Actions (基本セッター)
   setTasks: (tasks: ExtendedTask[]) => void;
@@ -24,6 +24,7 @@ interface TimelineStore {
   setActiveMemoTime: (time: string | null) => void;
   setEditingMemo: (memo: Memo | null) => void;
   setNewMemoText: (text: string) => void;
+  setGroupingMode: (mode: string | null) => void; // ★追加
   
   // 🛠️ 業務ロジック Actions
   handleStartGrouping: (taskId: string | null) => void;
@@ -31,23 +32,15 @@ interface TimelineStore {
   handleUpdateTaskPeriod: (taskId: string, period: string) => void;
   handleUngroupTask: (groupId: string, childId: string, period: string) => void;
   
+  // 🚨 SOS専用の Actions
+  toggleTaskSos: (taskId: string, reason?: string) => void;
+  
   // 📝 メモ専用の Actions
   closeMemoPopup: () => void;
   handleSaveMemo: (memo: Memo) => void;
   handleDeleteMemo: (memoId: string) => void;
 }
-/**
- * @typedef {Object} TimelineState
- * @property {Task[]} allTasks - システム全体で管理される全タスクの配列
- * @property {Memo[]} memos - システム全体で管理されるメモの配列
- * @property {function} setTasks - 全タスクを更新するアクション
- * @property {function} setMemos - メモを更新するアクション
- */
 
-/**
- * Zustand を使用したタイムライン状態管理ストア
- * アプリ内の全データ操作の起点となります。
- */
 export const useTimelineStore = create<TimelineStore>((set) => ({
   // ==========================================
   // 💾 初期状態 (Initial State)
@@ -74,25 +67,21 @@ export const useTimelineStore = create<TimelineStore>((set) => ({
   setActiveMemoTime: (time) => set({ activeMemoTime: time }),
   setEditingMemo: (memo) => set({ editingMemo: memo }),
   setNewMemoText: (text) => set({ newMemoText: text }),
+  setGroupingMode: (mode) => set({ groupingMode: mode }), // ★追加
 
   // ==========================================
   // 🏥 看護業務・タスク操作ロジック
   // ==========================================
   
-  // グループ化モードの切り替え
   handleStartGrouping: (taskId) => set((state) => ({
-    // ここで比較してトグルさせるのがコツです
     groupingMode: state.groupingMode === taskId ? null : taskId
-})),
+  })),
 
-  // ステータス変更 (実施開始、中断、記録中、記録完了など)
   handleUpdateStatus: (taskId, status) => set((state) => {
     const updatedTasks = state.allTasks.map((task) => {
-      // 1. 通常タスクまたは親グループ自体が一致した場合
       if (task.task_id === taskId) {
         return { ...task, status };
       }
-      // 2. グループ化された「子タスク」の中に一致するものがある場合
       if (task.isGroup && task.children) {
         const hasChild = task.children.some(c => c.task_id === taskId);
         if (hasChild) {
@@ -107,46 +96,67 @@ export const useTimelineStore = create<TimelineStore>((set) => ({
     return { allTasks: updatedTasks };
   }),
 
-  // タスクの配置時間軸（period）の更新 (ドラッグ＆ドロップ移動など)
   handleUpdateTaskPeriod: (taskId, period) => set((state) => ({
     allTasks: state.allTasks.map(t => 
       t.task_id === taskId ? { ...t, display_period: period } : t
     )
   })),
 
-  // グループから子タスクを「外す」ロジック
   handleUngroupTask: (groupId, childId) => set((state) => {
-  const updatedTasks = state.allTasks.map((task) => {
-    // 1. 親グループから子を削除
-    if (task.task_id === groupId && task.children) {
-      return { ...task, children: task.children.filter(c => c.task_id !== childId) };
-    }
-    
-    // 2. 外した子タスクを独立させる（期間はそのまま！）
-    if (task.task_id === childId) {
-      return { 
-        ...task, 
-        isGroup: false,
-        isChild: false // これで子要素ではなくなる
-        // display_period は変更しない（元の行に留まる）
-      };
-    }
-    return task;
-  });
-  return { allTasks: updatedTasks };
-}),
-  // ==========================================
-  // 📝 メモ操作ロジック
-  // ==========================================
-  
-  // メモポップアップのクリーンアップクローズ
+    const updatedTasks = state.allTasks.map((task) => {
+      if (task.task_id === groupId && task.children) {
+        return { ...task, children: task.children.filter(c => c.task_id !== childId) };
+      }
+      if (task.task_id === childId) {
+        return { 
+          ...task, 
+          isGroup: false,
+          isChild: false
+        };
+      }
+      return task;
+    });
+    return { allTasks: updatedTasks };
+  }),
+
+  toggleTaskSos: (taskId, reason) => set((state) => {
+    const updatedTasks = state.allTasks.map((task) => {
+      if (task.task_id === taskId) {
+        const nextIsSos = !task.is_sos;
+        return {
+          ...task,
+          is_sos: nextIsSos,
+          sos_reason: nextIsSos ? (reason || "緊急応援要請が発生しました") : ""
+        };
+      }
+      if (task.isGroup && task.children) {
+        const hasChild = task.children.some(c => c.task_id === taskId);
+        if (hasChild) {
+          const newChildren = task.children.map(c => {
+            if (c.task_id === taskId) {
+              const nextIsSos = !c.is_sos;
+              return {
+                ...c,
+                is_sos: nextIsSos,
+                sos_reason: nextIsSos ? (reason || "緊急応援要請が発生しました") : ""
+              };
+            }
+            return c;
+          });
+          return { ...task, children: newChildren };
+        }
+      }
+      return task;
+    });
+    return { allTasks: updatedTasks };
+  }),
+
   closeMemoPopup: () => set({
     activeMemoTime: null,
     editingMemo: null,
     newMemoText: ""
   }),
 
-  // メモの保存 (新規追加 ＆ 既存編集のコンビネーション)
   handleSaveMemo: (memoToSave) => set((state) => {
     const isEdit = state.memos.some(m => m.id === memoToSave.id);
     const updatedMemos = isEdit
@@ -161,7 +171,6 @@ export const useTimelineStore = create<TimelineStore>((set) => ({
     };
   }),
 
-  // メモの削除
   handleDeleteMemo: (memoId) => set((state) => ({
     memos: state.memos.filter(m => m.id !== memoId),
     activeMemoTime: null,

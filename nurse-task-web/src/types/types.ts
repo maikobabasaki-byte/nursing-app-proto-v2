@@ -24,6 +24,9 @@ export interface Task {
   room_id: string;
   patient_name: string;
 
+  is_sos?: boolean; 
+  sos_reason?: string;
+
   isGroup?: boolean;
   groupType?: 'patient' | 'task'; // ハイブリッド対応
   children?: Task[]; // グループ内のタスク
@@ -33,16 +36,36 @@ export interface Task {
 // 1. 基本となるタスクステータスの拡張
 export type ExtendedTaskStatus = TaskStatus | 'record_pending';
 
-// 2. 拡張されたタスク型（単一の定義に統合）
-export interface ExtendedTask extends Omit<Task, 'status'> {
-  patient_name: string;      // 既存の拡張分
-  status: ExtendedTaskStatus; // ステータスの型を上書き
+// --- 1. DB保存用の純粋なデータ型 ---
+// これを Firebase (Firestore) の保存単位として使います
+export interface TaskDocument {
+  task_id: string;
+  title: string;
+  details: string;
+  status: ExtendedTaskStatus;
+  display_period: string;
+  initial_period: string;
+  priority: 'high' | 'medium' | 'low';
+  scheduled_at: string;
+  patient_id: string;
+  room_id: string;
+  patient_name: string;
+  parent_id?: string | null;
+  is_sos?: boolean; 
+  sos_reason?: string;
+  updated_by?: string;
+}
+
+// --- 2. 画面表示用の型 ---
+// TaskDocumentを継承し、UI制御用のプロパティだけを足します
+export interface ExtendedTask extends TaskDocument {
   isChild?: boolean;
   isGroup?: boolean;
-  children?: ExtendedTask[];
-  initial_period?: string;
-  priority: 'high' | 'medium' | 'low';
-  parent_id?: string | null;
+  children?: ExtendedTask[]; // 子タスクもUI表示用に含めます
+  // ↓ DBには保存しない、見た目制御専用のプロパティ
+  groupType?: 'patient' | 'task';
+  cardColorClass?: string;
+  borderStyle?: string;
 }
 
 export interface TaskCardProps {
