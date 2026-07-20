@@ -9,7 +9,7 @@ interface GlobalHeaderProps {
   onLogout?: () => void; // ログアウト用（必要に応じて）
 }
 
-export default function GlobalHeader({ currentPage, onNavigate, onLogout }: GlobalHeaderProps) {
+export default function GlobalHeader({ currentPage, onNavigate}: GlobalHeaderProps) {
    const { time } = useTimer();
    const userName = useUserName();
    const logout = useLogout();
@@ -77,7 +77,7 @@ export default function GlobalHeader({ currentPage, onNavigate, onLogout }: Glob
           <p>現在時刻：<span id="header-time">{time}</span></p>
           <p>ログイン者：<span>{userName}</span></p>
         </div>
-        {/* 💡 必要であればログアウト処理を繋ぎ込めるように */}
+
         <div 
           className="logout cursor-pointer text-center text-xs" 
           id="logout-btn"

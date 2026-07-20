@@ -6,13 +6,13 @@ import type { TaskStatus } from '../types/types';
 import { doc, updateDoc, serverTimestamp } from 'firebase/firestore';
 
 const firebaseConfig = {
-  apiKey: "AIzaSyC-JC9si3Oawa9yGswP9mDHXkrBpN-J1Dw",
-  authDomain: "nursing-task-app.firebaseapp.com",
-  projectId: "nursing-task-app",
-  storageBucket: "nursing-task-app.firebasestorage.app",
-  messagingSenderId: "586377660681",
-  appId: "1:586377660681:web:beadc127edf565d7bc2bd8",
-  measurementId: "G-FDPWTSC6MG"
+ apiKey: import.meta.env.VITE_FIREBASE_API_KEY,                                                                                                                                                  
+    authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,                                                                                                                                          
+    projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,                                                                                                                                            
+    storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,                                                                                                                                    
+    messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,                                                                                                                           
+    appId: import.meta.env.VITE_FIREBASE_APP_ID,                                                                                                                                                    
+    measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID
 };
 
 const app = initializeApp(firebaseConfig);

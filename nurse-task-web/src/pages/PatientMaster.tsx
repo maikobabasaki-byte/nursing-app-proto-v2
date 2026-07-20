@@ -1,4 +1,5 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
+import { useTimelineStore } from '../stores/useTimelineStore';
 
 // --- 型定義 ---
 interface Patient {
@@ -27,51 +28,51 @@ interface DashboardProps {
 }
 
 export default function PatientMasterPage({ selectedIds }: DashboardProps) {
-  const [patients, setPatients] = useState<Patient[]>([]);
+  const [rawPatients, setRawPatients] = useState<Patient[]>([]);
+  const allTasks = useTimelineStore((state) => state.allTasks);
 
   // 検索ワードを管理するStateを追加
   const [searchWord, setSearchWord] = useState('');
 
+  // 1. マウント時に患者マスタの静的データだけを取得
   useEffect(() => {
     console.log("🚀 データ取得開始: /data/patients.json");
-    // 🌟Promise.all を使って、患者データとタスクデータを同時に取得する
-    Promise.all([
-      fetch('/data/patients.json').then((res) => {
-      if (!res.ok) throw new Error("patients.json が見つかりません");
-      return res.json();
-    }),
-      fetch('/data/tasks.json').then((res) => {
-      if (!res.ok) throw new Error("tasks.json が見つかりません");
-      return res.json();
-    })
-    ])
-      .then(([rawPatients, rawTasks]: [Patient[], Task[]]) => {
-        
-        // 1. 患者データにタスクデータを紐づける
-        const mergedPatients = rawPatients.map(patient => {
-          const myTasks = rawTasks.filter(task => task.patient_id === patient.patient_id);
-          return {
-            ...patient,
-            tasks: myTasks
-          };
-        });
-
-        // 2. 部屋番号 ➡️ ベッド番号の順でソート
-        const sortedData = mergedPatients.sort((a, b) => {
-          if (a.room_id !== b.room_id) return a.room_id.localeCompare(b.room_id);
-          return a.bed_number - b.bed_number;
-        });
-
-        // 3. 選択された患者だけに絞り込む
-        const filteredData = sortedData.filter((p) => selectedIds.includes(p.patient_id));
-        console.log("🔍 紐付け後の患者データ例:", mergedPatients[0]);// 💡 これが出るか確認
-        setPatients(filteredData);
+    fetch('/data/patients.json')
+      .then((res) => {
+        if (!res.ok) throw new Error("patients.json が見つかりません");
+        return res.json();
+      })
+      .then((data) => {
+        setRawPatients(data);
       })
       .catch((err) => {
-    console.error('❌ データ取得失敗:', err);
-    alert("エラー: " + err.message + "\npublic/data/ フォルダにJSONがあるか確認してください！");
-  });
-        }, [selectedIds]);
+        console.error('❌ 患者データ取得失敗:', err);
+        alert("エラー: " + err.message + "\npublic/data/ フォルダにJSONがあるか確認してください！");
+      });
+  }, []);
+
+  // 2. リアルタイムのタスクデータと結合し、フィルタリング・ソートを行う
+  const patients = useMemo(() => {
+    if (rawPatients.length === 0) return [];
+
+    const mergedPatients = rawPatients.map(patient => {
+      // グループそのものを除外した、純粋なタスク群を紐付け
+      const myTasks = allTasks.filter(task => task.patient_id === patient.patient_id && !task.isGroup) as any[];
+      return {
+        ...patient,
+        tasks: myTasks
+      };
+    });
+
+    // 部屋番号 ➡️ ベッド番号の順でソート
+    const sortedData = mergedPatients.sort((a, b) => {
+      if (a.room_id !== b.room_id) return a.room_id.localeCompare(b.room_id);
+      return a.bed_number - b.bed_number;
+    });
+
+    // 選択された受け持ち患者に絞り込み
+    return sortedData.filter((p) => selectedIds.includes(p.patient_id));
+  }, [rawPatients, allTasks, selectedIds]);
 
 // 🌟 3. 表示する直前で、検索ワードにヒットする患者だけに絞り込む
   const filteredPatients = patients.filter((patient) => {
