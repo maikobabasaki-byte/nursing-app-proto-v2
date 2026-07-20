@@ -49,10 +49,9 @@ export default function MapContainer(): React.JSX.Element {
   const [facilities, setFacilities] = useState<Facility[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
 
-  // 💡 Zustandストアから状態とアクションを取得（★setTasks を追加）
+  // 💡 Zustandストアから状態とアクションを取得
   const allTasks = useTimelineStore((state) => state.allTasks);
   const toggleTaskSos = useTimelineStore((state) => state.toggleTaskSos);
-  const setTasks = useTimelineStore((state) => state.setTasks); // ★追加
 
   useEffect(() => {
     Promise.all([
@@ -63,22 +62,12 @@ export default function MapContainer(): React.JSX.Element {
       fetch('/data/rooms.json').then((res) => {
         if (!res.ok) throw new Error("rooms.jsonの取得失敗");
         return res.json();
-      }),
-      // 💡 ★タスクのダミーデータ（JSON）も一緒にロードする
-      // (※実際のタスク用JSONファイルのパスに合わせて調整してください。例: '/data/tasks.json')
-      fetch('/data/tasks.json').then((res) => {
-        if (!res.ok) throw new Error("tasks.jsonの取得失敗");
-        return res.json();
       })
     ])
-      .then(([patientsData, roomsData, tasksData]) => {
+      .then(([patientsData, roomsData]) => {
         setPatients(patientsData);
         setRooms(roomsData.rooms || []);
         setFacilities(roomsData.facilities || []);
-        
-        // 💡 ★ロードしたタスクをZustandストアにセットする！
-        // これで allTasks にデータが入り、右クリックの検索がヒットするようになります
-        setTasks(tasksData); 
         
         setLoading(false);
       })
@@ -86,7 +75,7 @@ export default function MapContainer(): React.JSX.Element {
         console.error("❌ データ反映エラー:", err);
         setLoading(false);
       });
-  }, [setTasks]); // 💡 依存配列に setTasks を追加
+  }, []);
 
   // 💡 マップ上の患者が右クリックされた時のイベント
   const handlePatientRightClick = (taskId: string, patientName: string) => {

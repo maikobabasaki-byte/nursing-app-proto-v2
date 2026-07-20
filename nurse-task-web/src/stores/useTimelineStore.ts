@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import type { ExtendedTask, Memo, ExtendedTaskStatus } from '../types/types';
+import { updateTask } from '../hooks/useTaskUpdate';
 
 interface TimelineStore {
   // 💾 State (状態)
@@ -120,35 +121,44 @@ export const useTimelineStore = create<TimelineStore>((set) => ({
   }),
 
   toggleTaskSos: (taskId, reason) => set((state) => {
-    const updatedTasks = state.allTasks.map((task) => {
-      if (task.task_id === taskId) {
-        const nextIsSos = !task.is_sos;
-        return {
-          ...task,
-          is_sos: nextIsSos,
-          sos_reason: nextIsSos ? (reason || "緊急応援要請が発生しました") : ""
-        };
-      }
-      if (task.isGroup && task.children) {
-        const hasChild = task.children.some(c => c.task_id === taskId);
-        if (hasChild) {
-          const newChildren = task.children.map(c => {
-            if (c.task_id === taskId) {
-              const nextIsSos = !c.is_sos;
-              return {
-                ...c,
-                is_sos: nextIsSos,
-                sos_reason: nextIsSos ? (reason || "緊急応援要請が発生しました") : ""
-              };
-            }
-            return c;
-          });
-          return { ...task, children: newChildren };
+    const task = state.allTasks.find(t => t.task_id === taskId) ||
+                 state.allTasks.flatMap(t => t.children || []).find(c => c.task_id === taskId);
+    if (task) {
+      const nextIsSos = !task.is_sos;
+      const nextSosReason = nextIsSos ? (reason || "緊急応援要請が発生しました") : "";
+
+      // Firestoreの更新処理を呼ぶ
+      updateTask(taskId, { is_sos: nextIsSos, sos_reason: nextSosReason });
+
+      const updatedTasks = state.allTasks.map((t) => {
+        if (t.task_id === taskId) {
+          return {
+            ...t,
+            is_sos: nextIsSos,
+            sos_reason: nextSosReason
+          };
         }
-      }
-      return task;
-    });
-    return { allTasks: updatedTasks };
+        if (t.isGroup && t.children) {
+          const hasChild = t.children.some(c => c.task_id === taskId);
+          if (hasChild) {
+            const newChildren = t.children.map(c => {
+              if (c.task_id === taskId) {
+                return {
+                  ...c,
+                  is_sos: nextIsSos,
+                  sos_reason: nextSosReason
+                };
+              }
+              return c;
+            });
+            return { ...t, children: newChildren };
+          }
+        }
+        return t;
+      });
+      return { allTasks: updatedTasks };
+    }
+    return {};
   }),
 
   closeMemoPopup: () => set({

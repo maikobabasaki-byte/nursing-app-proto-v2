@@ -1,75 +1,111 @@
-import { useState,useEffect } from 'react';
-import { onAuthStateChanged } from 'firebase/auth'; // 追加
-import type{ User } from 'firebase/auth';
-import { auth } from '../lib/firebase';           // 追加
-import Header from '../components/Header'; 
+import { useState, useEffect } from 'react';
+import { onAuthStateChanged } from 'firebase/auth';
+import type { User } from 'firebase/auth';
+import { auth, db } from '../lib/firebase';
+import { collection, onSnapshot } from 'firebase/firestore';
+import { reconstructGroups } from '../utils/taskLogic';
+import { useTimelineStore } from '../stores/useTimelineStore';
+import type { ExtendedTask } from '../types/types';
+import Header from '../components/Header';
 import Footer from '../components/Footer';
 import Login from './Login';
-import PatientSelect from "./PatientSelect"; 
+import PatientSelect from "./PatientSelect";
 import PatientMasterPage from "./PatientMaster";
 import Timeline from "./Timeline";
-import MapContainer from "./Map"
-import MainLayout from "../components/MainLayout"; 
+import MapContainer from "./Map";
+import MainLayout from "../components/MainLayout";
 
+type ScreenType = 'login' | 'patientSelect' | 'timeline' | 'patientMaster' | 'map';
 
 export default function App() {
   const [user, setUser] = useState<User | null>(null);
   const [userName, setUserName] = useState<string>('');
-  /**
- * 現在アプリに表示している画面の識別子
- * - `login`: 初期画面。認証を行う
- * - `patientSelect`: 担当患者の選択画面
- * - `timeline`: タイムライン（タスクを時間ごとに表示する画面）
- * - `patientMaster`: 患者情報の登録・編集（タスクを患者ごとに管理）
- * - `map`: 看護師の動線や位置情報を可視化するマップ画面
- * useState<...>（ジェネリクス）useState に対して、「今回はこの型専用のStateとして使いますよ」と型を外から注入してあげる仕組み
- * 「文字列（string）」ではなく、「この特定の文字列そのもの」を型として扱っている（リテラル型）
- * |（または）で繋ぐことで、「この5つの文字列のどれか」という限定された型（ユニオン型）を作っている
- */
-  const [currentScreen, setCurrentScreen] = useState<'login' | 'patientSelect' | 'timeline'| 'patientMaster' | 'map'>('login');
-  useEffect(() => {
-  const unsubscribe = onAuthStateChanged(auth, (user) => {
-    if (user && user.email) {
-      const id = user.email.split('@')[0];
-      setUserName(id);
-      
-      // ★ 現在が 'login' 画面の時だけ 'patientSelect' に切り替える
-      // これにより、既に画面遷移している場合に勝手に戻されるのを防げます
-      if (currentScreen === 'login') {
-        setCurrentScreen('patientSelect');
-      }
-    } else {
-      setUserName('');
-      setCurrentScreen('login');
-    }
+  const [loading, setLoading] = useState<boolean>(true);
+  const setTasks = useTimelineStore((state) => state.setTasks);
+
+  // 1. localStorageから現在の画面状態を復元（なければ 'login'）
+  const [currentScreen, setCurrentScreen] = useState<ScreenType>(() => {
+    const savedScreen = localStorage.getItem('currentScreen');
+    return (savedScreen as ScreenType) || 'login';
   });
-  return () => unsubscribe();
-}, [currentScreen]);
-  /**
- * 現在ログイン中の看護師が「本日担当する」として選択した患者のIDリスト
- * * @example `['patient_001', 'patient_002']`
- * @description タイムライン画面や動線マップ画面で、表示対象を絞り込むために使用
- * <string[]> （型の指定）このStateの中に「何を入れるか」を指定。string ＝ 文字列（患者IDや名前など）[] ＝ 配列（データのリスト）合わせて string[] で「文字列が複数入る配列」という意味
- */
-  const [selectedPatients, setSelectedPatients] = useState<string[]>([]);
-  
+
+  // 2. localStorageから選択患者リストを復元（なければ空配列）
+  const [selectedPatients, setSelectedPatients] = useState<string[]>(() => {
+    const savedPatients = localStorage.getItem('selectedPatients');
+    return savedPatients ? JSON.parse(savedPatients) : [];
+  });
+
+  // 画面が変わるたびにlocalStorageを更新
+  useEffect(() => {
+    localStorage.setItem('currentScreen', currentScreen);
+  }, [currentScreen]);
+
+  // 患者リストが変わるたびにlocalStorageを更新
+  useEffect(() => {
+    localStorage.setItem('selectedPatients', JSON.stringify(selectedPatients));
+  }, [selectedPatients]);
+
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+      if (currentUser && currentUser.email) {
+        setUser(currentUser);
+        const id = currentUser.email.split('@')[0];
+        setUserName(id);
+        
+        // ログイン済みの場合、login画面のままであればpatientSelectへ
+        if (currentScreen === 'login') {
+          setCurrentScreen('patientSelect');
+        }
+      } else {
+        setUser(null);
+        setUserName('');
+        setCurrentScreen('login');
+        // ログアウト時はストレージもクリア
+        localStorage.removeItem('currentScreen');
+        localStorage.removeItem('selectedPatients');
+        setSelectedPatients([]);
+      }
+      setLoading(false);
+    });
+    return () => unsubscribe();
+  }, []); // currentScreenを依存に含めないことで、画面遷移時にリセットされないようにする
+
+  // Firestoreのリアルタイム監視とZustandストアへの同期
+  useEffect(() => {
+    if (!user) return;
+
+    const unsubscribe = onSnapshot(collection(db, "tasks"), (snapshot) => {
+      const firestoreTasks = snapshot.docs.map((doc) => {
+        const data = doc.data();
+        return {
+          ...data,
+          task_id: doc.id,
+          display_period: (data.display_period === "undefined" || !data.display_period) 
+              ? "" 
+              : data.display_period,
+        } as ExtendedTask;
+      });
+
+      // グループ構造を再構築した上でZustandにセット
+      const reconstructed = reconstructGroups(firestoreTasks);
+      setTasks(reconstructed);
+    });
+
+    return () => unsubscribe();
+  }, [user, setTasks]);
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <p>読み込み中...</p>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen flex flex-col bg-gray-50">
       
       {/* ─── 【A：ログイン前の世界】 ─── */}
-        {/**
-      * 【条件付きレンダリング（画面切り替えの制御）】
-      * * 1. `currentScreen === 'login'` (条件チェック)
-      * 現在の画面ステートが 'login' の場合のみ評価を次に進めます。
-      * * 2. `&&` (レンダリングスイッチ)
-      * 左側の条件が true のとき「だけ」、右側の JSX (画面部品) をブラウザに描画します。
-      * 別の画面に切り替わると条件が false になり、このログイン画面一式は自動で消去されます。
-      * * 3. `<>` ... `</>` (React Fragment)
-      * Reactの「複数のタグを1つの親要素で包まなければならない」というルールを満たすための透明な袋です。
-      * 無駄な <div></div> タグを増やしてCSSやレイアウトが崩れるのを防ぎます。
-      * * 4. `onLoginSuccess` (画面遷移のトリガー)
-      * ログインコンポーネント内での認証成功を検知し、ステートを 'patientSelect' (患者選択画面) へ更新します。
-      */}
       {currentScreen === 'login' && (
         <>
           <Header currentPage="login" />
@@ -84,36 +120,23 @@ export default function App() {
         <>
           <Header currentPage="patientSelect" />
           <main className="flex-1 !flex items-center justify-center bg-gray-50">
-            {/**
-           * 【担当患者の選択完了イベント】
-           * * 1. `onSelectComplete={(list) => ...}`
-           * 患者選択画面(子)でユーザーが選択を完了した際に、選択された患者IDのリスト(`list`)を受け取ります。子で定義している `onSelectComplete` イベントを親で受け取り、次の処理に繋げます。
-           * * 2. `setSelectedPatients(list)`
-           * 受け取ったリストを親のStateに保存し、アプリ全体(タイムラインやマップ)で共有できるようにします。
-           * * 3. `setCurrentScreen('timeline')`
-           * データの保存と同時に、画面をメイン機能である「タイムライン画面」へと遷移させます。
-           */}
             <PatientSelect onSelectComplete={(list) => {
               setSelectedPatients(list);
-              setCurrentScreen('patientMaster'); 
+              setCurrentScreen('patientMaster');
             }} />
           </main>
           <Footer />
         </>
       )}
 
-      {/* ─── 【B：ログイン後の世界（GlobalHeaderを使うグループ）】 ─── */}
-      
+      {/* ─── 【B：ログイン後の世界（MainLayoutを使うグループ）】 ─── */}
       {(currentScreen === 'patientMaster' || currentScreen === 'timeline' || currentScreen === 'map') && (
         <MainLayout currentScreen={currentScreen} onNavigate={(screen) => setCurrentScreen(screen)}>
           
-          {/* この中身が、MainLayout の {children} の部分にスポッと収まります */}
-          {/* 💡 患者マスター画面（ダッシュボード） */}
           {currentScreen === 'patientMaster' && (
             <PatientMasterPage selectedIds={selectedPatients} />
           )}
 
-          {/* 💡 タイムライン画面 */}
           {currentScreen === 'timeline' && (
             <Timeline selectedPatients={selectedPatients} />
           )}
@@ -126,5 +149,5 @@ export default function App() {
       )}
 
     </div>
-  ); 
+  );
 }

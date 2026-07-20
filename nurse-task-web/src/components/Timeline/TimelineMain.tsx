@@ -9,6 +9,8 @@ import { TimelineToast } from './TimelineToast';
 import { TimelinePopupButtons } from './TimelinePopupButtons';
 import { PendingTray } from './PendingTray';
 import { useTimelineStore } from '../../stores/useTimelineStore'; // ★追加
+import { updateTask } from '../../hooks/useTaskUpdate';
+
 
 export default function TimelineMain({ 
   timedTasks, 
@@ -163,6 +165,8 @@ export default function TimelineMain({
                 });
                 
                 handleUpdateStatus(t.task_id, s);
+                // Firestoreにステータス変更を保存
+                updateTask(t.task_id, { status: s });
 
                 setTimeout(() => {
                   setToast(prev => ({ ...prev, visible: false }));

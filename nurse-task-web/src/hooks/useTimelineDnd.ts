@@ -2,12 +2,10 @@ import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import type { DragStartEvent, DragEndEvent } from '@dnd-kit/core';
 import { useSensors, useSensor, PointerSensor } from '@dnd-kit/core';
 import { arrayMove } from '@dnd-kit/sortable';
-import { groupTasks, ungroupTask } from '../utils/taskLogic';
+import { groupTasks, ungroupTask, reconstructGroups } from '../utils/taskLogic';
 import { useDndCollision } from './useDndCollision';
 import type { ExtendedTask, TaskStatus } from '../types/types';
 import { useTimelineStore } from '../stores/useTimelineStore'; // ★Zustandをインポート
-import { collection, onSnapshot } from 'firebase/firestore'; // 追加
-import { db } from '../lib/firebase'; // 既存のdbエクスポートを使用
 import { updateTask } from '../hooks/useTaskUpdate';
 
 interface UseTimelineDndProps {
@@ -41,30 +39,7 @@ const setMemos = useTimelineStore((state) => state.setMemos);
 // 💡 ローカルStateとしての loading ではなく、「データが空ならloading」という絶対ルールにする
 const loading = allTasks.length === 0; 
 
-useEffect(() => {
-    // Firestoreの "tasks" コレクションをリアルタイム監視
-    const unsubscribe = onSnapshot(collection(db, "tasks"), (snapshot) => {
-    // 1. 各ドキュメントのデータを取得し、IDを含めてキャストする
-    const firestoreTasks = snapshot.docs.map((doc) => {
-    const data = doc.data();
-    
-    return {
-        ...data,
-        task_id: doc.id,
-        // 💡 ここで display_period が "undefined" という文字列なら空文字に強制変換する
-        display_period: (data.display_period === "undefined" || !data.display_period) 
-            ? "" 
-            : data.display_period,
-    } as ExtendedTask;
-});
 
-    // 2. Zustandにセット
-    setTasks(firestoreTasks);
-});
-
-    // クリーンアップ処理
-    return () => unsubscribe();
-}, [setTasks]); // 依存配列もシンプルに
     // const handleStartGroupingLocal = useCallback((taskId: string) => {
     //     handleStartGrouping(taskId); // ストアのロジックを実行
     // }, [handleStartGrouping]);
@@ -78,7 +53,7 @@ useEffect(() => {
         );
     };
 
-    const handleGroupTasks = useCallback((draggedId: string, targetId: string) => {
+    const handleGroupTasks = useCallback(async (draggedId: string, targetId: string) => {
         const targetTask = allTasks.find(t => String(t.task_id) === String(targetId));
         const originalDraggedTask = draggedTaskRef.current;
 
@@ -91,11 +66,19 @@ useEffect(() => {
                 alert(`エラー：${originalDraggedTask.display_period}のタスクを${targetTask.display_period}のグループに入れることはできません。`);
                 return;
             }
-        }
 
-        // ⚡ Zustandにグループ化後のデータをセット
-        setTasks(groupTasks(allTasks, draggedId, targetId));
-    }, [allTasks, setTasks]);
+            // ⚡ Firestore の更新
+            // 1. ドラッグされたタスクの親IDと表示期間を設定
+            await updateTask(draggedId, {
+                parent_id: targetId,
+                display_period: targetTask.display_period
+            });
+            // 2. ターゲットタスクの親ID自身をセットして親ノードと識別できるようにする
+            await updateTask(targetId, {
+                parent_id: targetId
+            });
+        }
+    }, [allTasks]);
 
     const handleDragStart = (event: DragStartEvent) => {
         const { active } = event;
@@ -231,8 +214,24 @@ useEffect(() => {
     //     setGroupingMode(prev => (prev === taskId ? null : taskId));
     // }, []);
 
-    const handleUngroupTask = (groupId: string, childTaskId: string, currentPeriod: string) => {
-        setTasks(ungroupTask(allTasks, groupId, childTaskId, currentPeriod));
+    const handleUngroupTask = async (groupId: string, childTaskId: string, currentPeriod: string) => {
+        // 1. 解除された子タスクの親IDをnullにし、新しい表示期間を設定してFirestoreに保存
+        await updateTask(childTaskId, {
+            parent_id: null,
+            display_period: currentPeriod
+        });
+
+        // 2. 残ったグループの子タスクが1つだけになる場合、その最後のタスクもグループから解除する
+        const targetGroup = allTasks.find(t => t.task_id === groupId);
+        if (targetGroup && targetGroup.children) {
+            const remainingChildren = targetGroup.children.filter(c => c.task_id !== childTaskId);
+            if (remainingChildren.length === 1) {
+                const lastChild = remainingChildren[0];
+                await updateTask(lastChild.task_id, {
+                    parent_id: null
+                });
+            }
+        }
     };
 
     const handleSaveMemo = (updatedMemo: any) => {

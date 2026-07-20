@@ -95,6 +95,72 @@ export const ungroupTask = (prevTasks: ExtendedTask[], groupId: string, childTas
   return [...newTasks, { ...targetChild, display_period: currentPeriod, isChild: false, parent_id: null }];
 };
 
+/**
+ * Firestoreから取得した平坦なタスク一覧から、parent_idを基にグループ構造を再構築する
+ */
+export const reconstructGroups = (flatTasks: ExtendedTask[]): ExtendedTask[] => {
+  const groupsMap: Record<string, ExtendedTask[]> = {};
+  const ungroupedTasks: ExtendedTask[] = [];
+
+  // 1. 各タスクをグループ(parent_idあり)と単体タスクに振り分ける
+  flatTasks.forEach((task) => {
+    if (task.parent_id) {
+      if (!groupsMap[task.parent_id]) {
+        groupsMap[task.parent_id] = [];
+      }
+      groupsMap[task.parent_id].push({
+        ...task,
+        isChild: true,
+      });
+    } else {
+      ungroupedTasks.push(task);
+    }
+  });
+
+  const result: ExtendedTask[] = [...ungroupedTasks];
+
+  // 2. 各グループの親ノードを仮想的に作成し、子タスクを格納する
+  Object.entries(groupsMap).forEach(([parentId, children]) => {
+    // 親となるオリジナルのタスクデータを探す
+    const originalParentTask = children.find((c) => c.task_id === parentId);
+    if (!originalParentTask) {
+      // 親タスクが見つからない場合は、子タスクをフラットな状態として扱う
+      result.push(...children.map((c) => ({ ...c, isChild: false, parent_id: null })));
+      return;
+    }
+
+    // ドラッグしたカードと、重ねられたカードのタイトルが同じなら 'task_name'、違えば 'patient'
+    const firstOther = children.find((c) => c.task_id !== parentId);
+    const currentGroupType = firstOther && originalParentTask.title === firstOther.title ? 'task_name' : 'patient';
+
+    // グループ全体のステータスを判定
+    const isAllTreatmentDone = children.every(child => 
+      ['completed', 'record_start', 'record_pending', 'record_complete'].includes(child.status)
+    );
+    const isAllRecordDone = children.every(child => child.status === 'record_complete');
+    let parentStatus = originalParentTask.status;
+    if (isAllRecordDone) {
+      parentStatus = 'record_complete';
+    } else if (isAllTreatmentDone) {
+      parentStatus = 'completed';
+    }
+
+    const groupNode: ExtendedTask = {
+      ...originalParentTask,
+      task_id: `group-${parentId}`,
+      isGroup: true,
+      isChild: false,
+      groupType: currentGroupType,
+      status: parentStatus,
+      children: children,
+    };
+
+    result.push(groupNode);
+  });
+
+  return result;
+};
+
 function onStartGrouping(task_id: string) {
     throw new Error('Function not implemented.');
 }
