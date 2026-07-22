@@ -79,21 +79,57 @@ export const useTimelineStore = create<TimelineStore>((set) => ({
   })),
 
   handleUpdateStatus: (taskId, status) => set((state) => {
-    const updatedTasks = state.allTasks.map((task) => {
-      if (task.task_id === taskId) {
-        return { ...task, status };
-      }
-      if (task.isGroup && task.children) {
-        const hasChild = task.children.some(c => c.task_id === taskId);
-        if (hasChild) {
-          const newChildren = task.children.map(c => 
-            c.task_id === taskId ? { ...c, status } : c
-          );
-          return { ...task, children: newChildren };
+    let targetPreviousProgressingId: string | null = null;
+
+    // もし今回「実施中 (progressing)」にするなら、いま現在 progressing だった別のタスクIDを探す
+    if (status === 'progressing') {
+      state.allTasks.forEach(task => {
+        if (task.status === 'progressing' && task.task_id !== taskId) {
+          targetPreviousProgressingId = task.task_id;
         }
+        task.children?.forEach(child => {
+          if (child.status === 'progressing' && child.task_id !== taskId) {
+            targetPreviousProgressingId = child.task_id;
+          }
+        });
+      });
+    }
+
+    // ★ もし元々実施中だった別タスクがあれば、強制的に Firestore 側も 'pending' に更新する
+    if (targetPreviousProgressingId) {
+      updateTask(targetPreviousProgressingId, { status: 'pending' });
+    }
+
+    // 以下、従来のステータス更新処理
+    const updatedTasks = state.allTasks.map((task) => {
+      let newParentStatus = task.status;
+
+      if (task.task_id === taskId) {
+        newParentStatus = status;
+      } else if (status === 'progressing' && task.status === 'progressing') {
+        newParentStatus = 'pending';
       }
-      return task;
+
+      let updatedChildren = task.children;
+      if (task.children) {
+        updatedChildren = task.children.map((child) => {
+          if (child.task_id === taskId) {
+            return { ...child, status };
+          }
+          if (status === 'progressing' && child.status === 'progressing') {
+            return { ...child, status: 'pending' };
+          }
+          return child;
+        });
+      }
+
+      return {
+        ...task,
+        status: newParentStatus,
+        children: updatedChildren,
+      };
     });
+
     return { allTasks: updatedTasks };
   }),
 

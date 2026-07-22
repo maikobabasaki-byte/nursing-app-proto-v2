@@ -1,4 +1,6 @@
-export const getTaskStyles = (task: any, isPastTime: (period: string) => boolean) => {
+import type{ ExtendedTask } from '../types/types';
+
+export const getTaskStyles = (task: ExtendedTask, isPastTime: (period: string) => boolean) => {
   const isRecordDone = task.status === 'record_complete';
   const isActionRequiredDone = ['completed', 'record_start', 'record_pending'].includes(task.status);
 
@@ -49,10 +51,10 @@ export const getTaskStyles = (task: any, isPastTime: (period: string) => boolean
                     !isActionRequiredDone && 
                     task.status !== 'unexecuted'; 
 
-  const borderStyle = isOverdue
-    ? '!border-2 !border-red-600 shadow-md shadow-red-100'
-    : isProgressing 
-      ? '!border-2 !border-blue-600 shadow-md scale-[1.01]'
+  const borderStyle = isProgressing
+    ? '!border-2 !border-blue-600 shadow-md scale-[1.01]'
+    : isOverdue 
+      ? '!border-2 !border-red-600 shadow-md shadow-red-100'
       : 'border';
 
   return { cardColorClass, borderStyle };

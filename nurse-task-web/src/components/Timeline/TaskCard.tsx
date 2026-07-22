@@ -21,7 +21,7 @@ export const TaskCard = (props: TaskCardPropsInner) => {
     id: task.task_id,
   });
 
-  const { setNodeRef: setDroppableRef, isOver } = useDroppable({
+  const { setNodeRef: setDroppableRef} = useDroppable({
     id: task.task_id, // 自分のIDをドロップ先IDとして登録
   });
 
