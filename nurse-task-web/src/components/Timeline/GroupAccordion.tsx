@@ -87,25 +87,26 @@ const SortableChildItem = ({ child, parentTaskId, onChildClick }: {
         // 🎯 モード中ならグループ化操作、そうでなければ詳細ポップアップという分岐
         if (groupingMode !== null) {
           console.log("グループ化対象として選択されました:", child.task_id);
-          // ここで必要に応じてグループ化処理を実行
         } else {
-          onChildClick(child.task_id);
+          onChildClick?.(child.task_id); // ★ ?. を追加！
         }
       }}
     >
       <div className="font-bold flex justify-between items-center mb-0.5">
         <span className="opacity-75">{child.room_id}号室</span>
-        <button 
-          type="button"
-          onPointerDown={(e) => e.stopPropagation()} 
-          onClick={(e) => { 
-            e.stopPropagation(); 
-            handleUngroupTask(parentTaskId, child.task_id, child.display_period); // ★ストアの関数を直接呼ぶ
-          }}
-          className="!bg-black/10 hover:!bg-black/20 !text-current !px-1.5 !py-0.5 !rounded !font-bold transition-colors cursor-pointer"
-        >
-          外す
-        </button>
+          <button 
+            type="button"
+            onPointerDown={(e) => e.stopPropagation()} 
+            onClick={(e) => { 
+              e.stopPropagation(); 
+              
+              // 💡 ストアに子タスクのIDを渡すだけ！あとはストアが勝手に同じ行に戻してくれます
+              handleUngroupTask(child.task_id);
+            }}
+            className="!bg-black/10 hover:!bg-black/20 !text-current !px-1.5 !py-0.5 !rounded !font-bold transition-colors cursor-pointer"
+          >
+            外す
+          </button>
       </div>
       
       {/* 📝 タイトルの前に、記録状態が一瞬でわかる絵文字（🔵 🟢 🟠 ✅）を自動で添える */}

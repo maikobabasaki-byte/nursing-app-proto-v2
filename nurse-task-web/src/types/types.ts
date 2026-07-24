@@ -98,7 +98,7 @@ export interface TimelineMainProps {
 }
 
 export interface TaskCardPropsInner {
-  task: Task;
+  task: ExtendedTask;
   cardColorClass?: string;
   borderStyle?: string;
   originalTime?: string;
@@ -133,8 +133,8 @@ export interface GroupParentCardProps {
   task: ExtendedTask;
   isExpanded: boolean;
   onClick: () => void;
-  groupingMode: string | null;
-  onStartGrouping: (taskId: string) => void;
+  groupingMode?: string | null;
+  onStartGrouping?: (taskId: string) => void;
 }
 
 export interface GroupingProps {

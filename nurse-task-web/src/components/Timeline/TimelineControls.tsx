@@ -6,7 +6,7 @@ export const TimelineControls = ({
   groupingMode, 
   setGroupingMode 
 }: TimelineControlsProps) => {
-  console.log("TimelineControls: 現在のgroupingModeは:", groupingMode);
+  // console.log("TimelineControls: 現在のgroupingModeは:", groupingMode);
   const configs = [
     { label: '1時間', value: 60 },
     { label: '30分', value: 30 },

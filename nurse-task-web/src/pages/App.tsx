@@ -14,6 +14,7 @@ import PatientMasterPage from "./PatientMaster";
 import Timeline from "./Timeline";
 import MapContainer from "./Map";
 import MainLayout from "../components/MainLayout";
+// import { seedDatabase } from "../scripts/seedDatabase";
 
 type ScreenType = 'login' | 'patientSelect' | 'timeline' | 'patientMaster' | 'map';
 
@@ -34,6 +35,11 @@ export default function App() {
     const savedPatients = localStorage.getItem('selectedPatients');
     return savedPatients ? JSON.parse(savedPatients) : [];
   });
+
+  // useEffect(() => {
+  //   // アプリ起動時にFirestoreが空なら自動でシードを流し込む
+  //   seedDatabase();
+  // }, []);
 
   // 画面が変わるたびにlocalStorageを更新
   useEffect(() => {

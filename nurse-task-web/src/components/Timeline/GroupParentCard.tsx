@@ -8,7 +8,7 @@ import { useTimelineStore } from '../../stores/useTimelineStore';
 export const GroupParentCard = ({ 
   task, 
   isExpanded, 
-  onClick
+  onClick,
 }: GroupParentCardProps) => {
   const handleStartGrouping = useTimelineStore((state) => state.handleStartGrouping); // ストアから取得
   const childCount = task.children?.length || 0;

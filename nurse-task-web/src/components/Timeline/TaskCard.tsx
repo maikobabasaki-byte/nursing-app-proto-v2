@@ -48,6 +48,16 @@ export const TaskCard = (props: TaskCardPropsInner) => {
   handleStartGrouping(task.task_id);
 };
 
+if (transform) {
+  console.log(`🔍 [ドラッグ中のタスク情報] ID: ${task.task_id} | ${task.title}`, {
+    parent_id: task.parent_id,
+    isGroup: task.isGroup,
+    isChild: task.isChild,
+    childrenCount: task.children?.length ?? 0,
+    childrenIDs: task.children?.map(c => c.task_id) ?? [],
+  });
+}
+
   return (
     <div 
       ref={setCombinedRef}

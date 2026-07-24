@@ -89,6 +89,10 @@ export function TimelineRow({
                 <GroupAccordion 
                   task={task} 
                   isExpanded={true}
+                  onChildClick={(childTask) => {
+                    // 子タスクをクリックしたときの処理（例: モーダルを開く、選択するなど）
+                    console.log("Clicked child:", childTask);
+                  }}
                 />
               )}
             </div>
