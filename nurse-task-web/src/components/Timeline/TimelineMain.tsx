@@ -7,6 +7,7 @@ import { TimelinePopup } from '../Timeline/TimelinePopup';
 import { MemoManager } from './MemoManager'; 
 import { TimelineToast } from './TimelineToast';
 import { TimelinePopupButtons } from './TimelinePopupButtons';
+import { UnexecutedReasonModal } from './UnexecutedReasonModal';
 import { PendingTray } from './PendingTray';
 import { useTimelineStore } from '../../stores/useTimelineStore'; // ★追加
 import { updateTask } from '../../hooks/useTaskUpdate';
@@ -84,6 +85,26 @@ export default function TimelineMain({
     return list;
   })();
 
+  const [unexecutedModalTask, setUnexecutedModalTask] = useState<ExtendedTask | null>(null);
+
+  const handleConfirmUnexecuted = (task: ExtendedTask, reason: string) => {
+    setActivePopupTaskId(null);
+    setUnexecutedModalTask(null);
+
+    setToast({
+      message: '未実施に設定しました',
+      visible: true,
+      status: 'unexecuted',
+    });
+
+    handleUpdateStatus(task.task_id, 'unexecuted', reason);
+    updateTask(task.task_id, { status: 'unexecuted', unexecuted_reason: reason });
+
+    setTimeout(() => {
+      setToast((prev) => ({ ...prev, visible: false }));
+    }, 1500);
+  };
+
   return (
     <div className="flex flex-col h-full p-4 select-none">
       <TimelineControls 
@@ -144,6 +165,11 @@ export default function TimelineMain({
             <TimelinePopupButtons 
               task={task} 
               onStatusChange={(t, s) => {
+                if (s === 'unexecuted') {
+                  setUnexecutedModalTask(t);
+                  return;
+                }
+
                 const messages: Record<ExtendedTaskStatus, string> = {
                   progressing: '実施を開始しました',
                   pending: '中断・保留しました',
@@ -165,8 +191,12 @@ export default function TimelineMain({
                 });
                 
                 handleUpdateStatus(t.task_id, s);
-                // Firestoreにステータス変更を保存
-                updateTask(t.task_id, { status: s });
+                // Firestoreにステータス変更を保存（未実施から別ステータスへ変わる場合は理由もクリア）
+                const firestoreUpdate: { status: typeof s; unexecuted_reason?: string } = { status: s };
+                if (t.status === 'unexecuted') {
+                  firestoreUpdate.unexecuted_reason = '';
+                }
+                updateTask(t.task_id, firestoreUpdate);
 
                 setTimeout(() => {
                   setToast(prev => ({ ...prev, visible: false }));
@@ -174,6 +204,15 @@ export default function TimelineMain({
               }}
             />
           )}
+        />
+      )}
+
+      {/* 未実施理由入力モーダル */}
+      {unexecutedModalTask && (
+        <UnexecutedReasonModal
+          task={unexecutedModalTask}
+          onConfirm={(reason) => handleConfirmUnexecuted(unexecutedModalTask, reason)}
+          onClose={() => setUnexecutedModalTask(null)}
         />
       )}
 

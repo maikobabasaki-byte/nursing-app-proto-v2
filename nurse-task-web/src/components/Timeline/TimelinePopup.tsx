@@ -58,7 +58,13 @@ export const TimelinePopup: React.FC<TimelinePopupProps> = ({ task, onClose, ren
           <div className="text-xl font-black mb-2">{task.patient_name} 様</div>
           <div className="text-sm font-bold border-b pb-2 mb-3">指示時間: {task.display_period}</div>
           <div className="text-base font-black mb-1">{task.title}</div>
-          <div className="text-xs opacity-80 mb-6 min-h-[40px] whitespace-pre-wrap text-left">{task.details || '詳細はありません'}</div>
+          <div className="text-xs opacity-80 mb-4 min-h-[40px] whitespace-pre-wrap text-left">{task.details || '詳細はありません'}</div>
+          {task.status === 'unexecuted' && task.unexecuted_reason && (
+            <div className="bg-red-100 border border-red-300 text-red-800 text-xs rounded-lg p-2.5 mb-4 text-left font-bold">
+              <div className="text-[10px] opacity-70 mb-0.5">⚠️ 未実施理由</div>
+              <div>{task.unexecuted_reason}</div>
+            </div>
+          )}
           {renderPopupButtons(task)} 
         </div>
       </div>

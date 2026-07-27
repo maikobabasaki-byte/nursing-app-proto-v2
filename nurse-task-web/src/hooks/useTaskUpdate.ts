@@ -5,7 +5,7 @@ import type { TaskStatus } from '../types/types';
 /**
  * Firestore上のタスク情報を更新する関数
  * @param taskId 更新対象のタスクID
- * @param data 更新するデータ（status, display_period, または互換用の time）
+ * @param data 更新するデータ
  */
 export const updateTask = async (
   taskId: string, 
@@ -16,12 +16,14 @@ export const updateTask = async (
     parent_id?: string | null;
     is_sos?: boolean;
     sos_reason?: string;
+    unexecuted_reason?: string;
+    initial_period?: string; // 型追加済み
   }
 ) => {
   try {
     const taskRef = doc(db, 'tasks', taskId);
     
-    // Firestore のドキュメント構造（display_period）にマッピングして保存
+    // Firestore のドキュメント構造にマッピングして保存
     const updatePayload: any = {
       updatedAt: serverTimestamp(),
     };
@@ -33,7 +35,6 @@ export const updateTask = async (
     if (data.display_period !== undefined) {
       updatePayload.display_period = data.display_period;
     } else if (data.time !== undefined) {
-      // 互換性のため、timeが渡された場合はdisplay_periodにマッピング
       updatePayload.display_period = data.time;
     }
 
@@ -47,6 +48,15 @@ export const updateTask = async (
 
     if (data.sos_reason !== undefined) {
       updatePayload.sos_reason = data.sos_reason;
+    }
+
+    if (data.unexecuted_reason !== undefined) {
+      updatePayload.unexecuted_reason = data.unexecuted_reason;
+    }
+
+    // 💡 initial_period も Firestore の更新対象に追加！
+    if (data.initial_period !== undefined) {
+      updatePayload.initial_period = data.initial_period;
     }
 
     await updateDoc(taskRef, updatePayload);

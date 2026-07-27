@@ -55,7 +55,7 @@ export function TimelineRow({
       {/* 中央：タスクカード配置エリア */}
       <div className="p-2 min-h-[60px] relative flex flex-wrap flex-1 gap-2">
         {placeholders.map(task => (
-           <div key={`placeholder-${task.task_id}`} className="w-60 border-2 border-dashed border-gray-300 bg-gray-50 text-gray-400 p-2 m-2 rounded shadow-sm flex flex-col justify-center items-center font-bold text-xs h-[84px]">
+           <div key={`placeholder-${task.task_id}`} className="w-64 border-2 border-dashed border-gray-300 bg-gray-50 text-gray-400 p-2 m-2 rounded shadow-sm flex flex-col justify-center items-center font-bold text-xs h-[84px]">
              【中断・保留中】{task.room_id}号室 {task.patient_name}様
            </div>
         ))}
@@ -89,9 +89,8 @@ export function TimelineRow({
                 <GroupAccordion 
                   task={task} 
                   isExpanded={true}
-                  onChildClick={(childTask) => {
-                    // 子タスクをクリックしたときの処理（例: モーダルを開く、選択するなど）
-                    console.log("Clicked child:", childTask);
+                  onChildClick={(childTaskId) => {
+                    setActivePopupTaskId(childTaskId);
                   }}
                 />
               )}

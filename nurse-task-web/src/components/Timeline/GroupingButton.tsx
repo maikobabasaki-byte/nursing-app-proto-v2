@@ -25,7 +25,7 @@ export const GroupingButton = ({ task }: GroupingButtonProps) => {
     <button 
       onClick={handleClick}
       disabled={disabled}
-      className={`!text-xs !px-1 !rounded transition-colors ${className}`}
+      className={`!text-xs !px-1.5 !py-0.5 !rounded transition-colors whitespace-nowrap flex-shrink-0 ${className}`}
     >
       {label}
     </button>

@@ -62,7 +62,7 @@ if (transform) {
     <div 
       ref={setCombinedRef}
       style={{ ...dndStyle, ...style }}
-      className={`relative w-55 p-2 m-2 rounded shadow-sm font-bold transition-all select-none flex items-start gap-2 ${cardColorClass} ${borderStyle} ${className}`}
+      className={`relative w-64 p-2.5 rounded shadow-sm font-bold transition-all select-none flex items-start gap-2 ${cardColorClass} ${borderStyle} ${className}`}
     >
       {/* 💡 左端エリア：ドラッグハンドルとステータスアイコンを綺麗に縦並びにする */}
       <div className="flex flex-col items-center gap-1 flex-shrink-0 w-5 select-none pt-0.5">
@@ -88,11 +88,11 @@ if (transform) {
 
       {/* 2. カードの内容（右側エリア：クリックで onEdit） */}
       <div className="flex-1 min-w-0 cursor-pointer" onClick={onEdit}>
-        <div className="flex items-center justify-between mb-1">
-          <div className="flex items-center gap-1.5">
-            <span className="text-sm font-bold">{task.display_period}</span>
+        <div className="flex items-center justify-between mb-1 gap-1 min-w-0">
+          <div className="flex items-center gap-1.5 min-w-0">
+            <span className="text-sm font-bold whitespace-nowrap flex-shrink-0">{task.display_period}</span>
             {originalTime && originalTime !== task.display_period && (
-              <span className="bg-gray-700 text-white text-[12px] px-1.5 py-0.5 rounded font-normal opacity-90">
+              <span className="bg-gray-700 text-white text-xs px-1.5 py-0.5 rounded font-normal whitespace-nowrap opacity-90 flex-shrink-0">
                 指示: {originalTime}
               </span>
             )}

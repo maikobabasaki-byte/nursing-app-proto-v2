@@ -19,13 +19,14 @@ export const GroupAccordion = ({ task, isExpanded, onChildClick }: GroupAccordio
   const childIds = task.children?.map(c => c.task_id) || [];
 
   return (
-    <div className="absolute top-[90%] left-2 w-60 bg-[#1e3a6a] rounded-xl p-2 z-30 shadow-xl border border-blue-900 animate-fade-in max-h-[320px] overflow-y-auto scrollbar-thin">
+    <div className="absolute top-[90%] left-2 w-64 bg-[#1e3a6a] rounded-xl p-2 z-30 shadow-xl border border-blue-900 animate-fade-in max-h-[320px] overflow-y-auto scrollbar-thin">
       <SortableContext items={childIds} strategy={verticalListSortingStrategy}>
         {task.children?.map((child) => (
           <SortableChildItem 
             key={child.task_id} 
             child={child} 
             parentTaskId={task.task_id}
+            parentDisplayPeriod={task.display_period}
             onChildClick={onChildClick}
           />
         ))}
@@ -34,8 +35,8 @@ export const GroupAccordion = ({ task, isExpanded, onChildClick }: GroupAccordio
   );
 };
 
-const SortableChildItem = ({ child, parentTaskId, onChildClick }: { 
-  child: any, parentTaskId: string, onChildClick: any 
+const SortableChildItem = ({ child, parentTaskId, parentDisplayPeriod, onChildClick }: { 
+  child: ExtendedTask, parentTaskId: string, parentDisplayPeriod: string, onChildClick: (taskId: string) => void 
 }) => {
   const handleUngroupTask = useTimelineStore((state) => state.handleUngroupTask);
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: child.task_id });
@@ -92,21 +93,28 @@ const SortableChildItem = ({ child, parentTaskId, onChildClick }: {
         }
       }}
     >
-      <div className="font-bold flex justify-between items-center mb-0.5">
-        <span className="opacity-75">{child.room_id}号室</span>
-          <button 
-            type="button"
-            onPointerDown={(e) => e.stopPropagation()} 
-            onClick={(e) => { 
-              e.stopPropagation(); 
-              
-              // 💡 ストアに子タスクのIDを渡すだけ！あとはストアが勝手に同じ行に戻してくれます
-              handleUngroupTask(child.task_id);
-            }}
-            className="!bg-black/10 hover:!bg-black/20 !text-current !px-1.5 !py-0.5 !rounded !font-bold transition-colors cursor-pointer"
-          >
-            外す
-          </button>
+      <div className="font-bold flex justify-between items-center mb-0.5 gap-1">
+        <div className="flex flex-wrap items-center gap-1">
+          <span className="opacity-75">{child.room_id}号室</span>
+          {child.initial_period && child.initial_period !== parentDisplayPeriod && (
+            <span className="bg-black/30 text-white text-[10px] px-1.5 py-0.5 rounded font-normal whitespace-nowrap">
+              指示: {child.initial_period}
+            </span>
+          )}
+        </div>
+        <button 
+          type="button"
+          onPointerDown={(e) => e.stopPropagation()} 
+          onClick={(e) => { 
+            e.stopPropagation(); 
+            
+            // 💡 ストアに子タスクのIDを渡すだけ！あとはストアが勝手に同じ行に戻してくれます
+            handleUngroupTask(child.task_id);
+          }}
+          className="!bg-black/10 hover:!bg-black/20 !text-current !px-1.5 !py-0.5 !rounded !font-bold transition-colors cursor-pointer flex-shrink-0"
+        >
+          外す
+        </button>
       </div>
       
       {/* 📝 タイトルの前に、記録状態が一瞬でわかる絵文字（🔵 🟢 🟠 ✅）を自動で添える */}

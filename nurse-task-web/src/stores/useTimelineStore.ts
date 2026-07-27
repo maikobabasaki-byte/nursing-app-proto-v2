@@ -5,7 +5,6 @@ import { collection, doc, setDoc, getDocs, deleteDoc } from "firebase/firestore"
 import { db } from "../lib/firebase";
 
 interface TimelineStore {
-  // 💾 State (状態)
   allTasks: ExtendedTask[];
   memos: Memo[];
   loading: boolean;
@@ -13,12 +12,10 @@ interface TimelineStore {
   activeId: string | null;
   activePopupTaskId: string | null;
   
-  // 💾 メモ専用の State
   activeMemoTime: string | null;
   editingMemo: Memo | null;
   newMemoText: string;
 
-  // ⚡ Actions (基本セッター)
   setTasks: (tasks: ExtendedTask[]) => void;
   setMemos: (memos: Memo[]) => void;
   setLoading: (loading: boolean) => void;
@@ -27,28 +24,65 @@ interface TimelineStore {
   setActiveMemoTime: (time: string | null) => void;
   setEditingMemo: (memo: Memo | null) => void;
   setNewMemoText: (text: string) => void;
-  setGroupingMode: (mode: string | null) => void; // ★追加
+  setGroupingMode: (mode: string | null) => void;
   
-  // 🛠️ 業務ロジック Actions
   handleStartGrouping: (taskId: string | null) => void;
-  handleUpdateStatus: (taskId: string, status: ExtendedTaskStatus) => void;
+  handleUpdateStatus: (taskId: string, status: ExtendedTaskStatus, unexecutedReason?: string) => void;
   handleUpdateTaskPeriod: (taskId: string, period: string) => void;
   handleGroupTasks: (draggedId: string, targetId: string) => Promise<void>;
-  handleUngroupTask: (childId: string) => void;
+  handleUngroupTask: (childId: string) => Promise<void>;
   
-  // 🚨 SOS専用の Actions
   toggleTaskSos: (taskId: string, reason?: string) => void;
   
-  // 📝 メモ専用の Actions
   closeMemoPopup: () => void;
   handleSaveMemo: (memo: Memo) => void;
   handleDeleteMemo: (memoId: string) => void;
 }
 
+/**
+ * 💡 オブジェクトから undefined のプロパティをすべて取り除くヘルパー
+ */
+const removeUndefined = (obj: any): any => {
+  if (obj === null || typeof obj !== 'object') return obj;
+  if (Array.isArray(obj)) return obj.map(removeUndefined);
+  return Object.fromEntries(
+    Object.entries(obj)
+      .filter(([_, v]) => v !== undefined)
+      .map(([k, v]) => [k, removeUndefined(v)])
+  );
+};
+
+/**
+ * 💡 指定したIDのタスクを、ルートおよびすべての階層（子孫含む）から完全に除外するヘルパー
+ */
+const removeTaskRecursive = (tasks: ExtendedTask[], targetIds: string[]): ExtendedTask[] => {
+  return tasks
+    .filter(t => !targetIds.includes(t.task_id))
+    .map(t => {
+      if (t.children && t.children.length > 0) {
+        const filteredChildren = removeTaskRecursive(t.children, targetIds);
+        return {
+          ...t,
+          children: filteredChildren,
+          isGroup: filteredChildren.length > 0
+        };
+      }
+      return t;
+    });
+};
+
+const getTaskCategory = (task: ExtendedTask) => {
+  const originalPeriod = task.initial_period || task.display_period;
+  
+  if (!originalPeriod) return 'ANY';
+  if (originalPeriod === '午前') return 'AM';
+  if (originalPeriod === '午後') return 'PM';
+  if (originalPeriod === '随時') return 'ANYTIME';
+  
+  return originalPeriod;
+};
+
 export const useTimelineStore = create<TimelineStore>((set, get) => ({
-  // ==========================================
-  // 💾 初期状態 (Initial State)
-  // ==========================================
   allTasks: [],
   memos: [],
   loading: false,
@@ -60,9 +94,6 @@ export const useTimelineStore = create<TimelineStore>((set, get) => ({
   editingMemo: null,
   newMemoText: "",
 
-  // ==========================================
-  // ⚡ 基本セッター (Basic Setters)
-  // ==========================================
   setTasks: (tasks) => set({ allTasks: tasks }),
   setMemos: (memos) => set({ memos }),
   setLoading: (loading) => set({ loading }),
@@ -71,20 +102,15 @@ export const useTimelineStore = create<TimelineStore>((set, get) => ({
   setActiveMemoTime: (time) => set({ activeMemoTime: time }),
   setEditingMemo: (memo) => set({ editingMemo: memo }),
   setNewMemoText: (text) => set({ newMemoText: text }),
-  setGroupingMode: (mode) => set({ groupingMode: mode }), // ★追加
+  setGroupingMode: (mode) => set({ groupingMode: mode }),
 
-  // ==========================================
-  // 🏥 看護業務・タスク操作ロジック
-  // ==========================================
-  
   handleStartGrouping: (taskId) => set((state) => ({
     groupingMode: state.groupingMode === taskId ? null : taskId
   })),
 
-  handleUpdateStatus: (taskId, status) => set((state) => {
+  handleUpdateStatus: (taskId, status, unexecutedReason) => set((state) => {
     let targetPreviousProgressingId: string | null = null;
 
-    // もし今回「実施中 (progressing)」にするなら、いま現在 progressing だった別のタスクIDを探す
     if (status === 'progressing') {
       state.allTasks.forEach(task => {
         if (task.status === 'progressing' && task.task_id !== taskId) {
@@ -98,12 +124,10 @@ export const useTimelineStore = create<TimelineStore>((set, get) => ({
       });
     }
 
-    // ★ もし元々実施中だった別タスクがあれば、強制的に Firestore 側も 'pending' に更新する
     if (targetPreviousProgressingId) {
       updateTask(targetPreviousProgressingId, { status: 'pending' });
     }
 
-    // 以下、従来のステータス更新処理
     const updatedTasks = state.allTasks.map((task) => {
       let newParentStatus = task.status;
 
@@ -117,7 +141,11 @@ export const useTimelineStore = create<TimelineStore>((set, get) => ({
       if (task.children) {
         updatedChildren = task.children.map((child) => {
           if (child.task_id === taskId) {
-            return { ...child, status };
+            return { 
+              ...child, 
+              status,
+              unexecuted_reason: status === 'unexecuted' ? (unexecutedReason || child.unexecuted_reason || '') : ''
+            };
           }
           if (status === 'progressing' && child.status === 'progressing') {
             return { ...child, status: 'pending' };
@@ -129,6 +157,7 @@ export const useTimelineStore = create<TimelineStore>((set, get) => ({
       return {
         ...task,
         status: newParentStatus,
+        unexecuted_reason: task.task_id === taskId ? (status === 'unexecuted' ? (unexecutedReason || task.unexecuted_reason || '') : '') : task.unexecuted_reason,
         children: updatedChildren,
       };
     });
@@ -136,11 +165,29 @@ export const useTimelineStore = create<TimelineStore>((set, get) => ({
     return { allTasks: updatedTasks };
   }),
 
-  handleUpdateTaskPeriod: (taskId, period) => set((state) => ({
-    allTasks: state.allTasks.map(t => 
-      t.task_id === taskId ? { ...t, display_period: period } : t
-    )
-  })),
+  handleUpdateTaskPeriod: (taskId, period) => {
+    const { allTasks } = get();
+    const task = allTasks.find(t => t.task_id === taskId);
+
+    if (task) {
+      const initialPeriodToSave = task.initial_period || task.display_period;
+
+      updateTask(taskId, { 
+        display_period: period, 
+        initial_period: initialPeriodToSave 
+      });
+
+      set((state) => ({
+        allTasks: state.allTasks.map(t => 
+          t.task_id === taskId ? { 
+            ...t, 
+            display_period: period,
+            initial_period: initialPeriodToSave 
+          } : t
+        )
+      }));
+    }
+  },
 
   handleGroupTasks: async (draggedId, targetId) => {
     const { allTasks } = get();
@@ -149,21 +196,34 @@ export const useTimelineStore = create<TimelineStore>((set, get) => ({
     let draggedTask: ExtendedTask | null = null;
     let targetTask: ExtendedTask | null = null;
 
-    for (const t of allTasks) {
-      if (t.task_id === draggedId) draggedTask = t;
-      if (t.task_id === targetId) targetTask = t;
-      t.children?.forEach((c: ExtendedTask) => {
-        if (c.task_id === draggedId) draggedTask = c;
-        if (c.task_id === targetId) targetTask = c;
-      });
-    }
+    // 探索
+    const findTaskRecursive = (list: ExtendedTask[]) => {
+      for (const t of list) {
+        if (t.task_id === draggedId) draggedTask = t;
+        if (t.task_id === targetId) targetTask = t;
+        if (t.children) findTaskRecursive(t.children);
+      }
+    };
+    findTaskRecursive(allTasks);
 
     if (!draggedTask || !targetTask) return;
 
-    const targetPeriod = targetTask.display_period || "09:00";
-    const groupTitle = targetTask.title; // 例: "バイタル測定"
+    const draggedCat = getTaskCategory(draggedTask);
+    const targetCat = getTaskCategory(targetTask);
 
-    // 💡 厳密な条件：同じ「タイトル」かつ同じ「時間帯」のグループがすでに存在するか探す
+    const isMismatched = 
+      draggedCat !== 'ANYTIME' && 
+      targetCat !== 'ANYTIME' && 
+      draggedCat !== targetCat;
+
+    if (isMismatched) {
+      alert("元の指示の時間帯や時間指定が異なるため、グループ化できません");
+      return;
+    }
+
+    const targetPeriod = targetTask.display_period || "09:00";
+    const groupTitle = targetTask.title;
+
     const existingGroup = allTasks.find(
       (t) => t.isGroup && t.title === groupTitle && t.display_period === targetPeriod
     );
@@ -171,7 +231,7 @@ export const useTimelineStore = create<TimelineStore>((set, get) => ({
     try {
       if (existingGroup) {
         // =========================================================
-        // 【統合】すでに同じ時間・同じ名前のグループがある場合：絶対に新しく作らず、そこへ完全に追加する
+        // 【パターンA】すでに親グループが存在する場合
         // =========================================================
         const newChild: ExtendedTask = {
           ...draggedTask,
@@ -181,7 +241,6 @@ export const useTimelineStore = create<TimelineStore>((set, get) => ({
           children: undefined,
         };
 
-        // すでに子として含まれていなければ追加
         const isAlreadyInside = existingGroup.children?.some(c => c.task_id === draggedId);
         const updatedChildren = isAlreadyInside 
           ? existingGroup.children 
@@ -192,29 +251,20 @@ export const useTimelineStore = create<TimelineStore>((set, get) => ({
           children: updatedChildren,
         };
 
-        // DB更新
         await updateTask(draggedId, { parent_id: existingGroup.task_id, display_period: targetPeriod });
 
         set((state) => {
-          const cleanedTasks = state.allTasks
-            .filter((t) => t.task_id !== draggedId)
-            .map((t) => {
-              if (t.task_id === existingGroup.task_id) {
-                return updatedGroup;
-              }
-              if (t.children) {
-                const nextChildren = t.children.filter((c: ExtendedTask) => c.task_id !== draggedId);
-                return { ...t, children: nextChildren };
-              }
-              return t;
-            });
-
-          return { allTasks: cleanedTasks };
+          // 💡 既存グループ以外の場所から draggedId を完全に排除する
+          const cleaned = removeTaskRecursive(state.allTasks, [draggedId]);
+          const finalTasks = cleaned.map((t) => 
+            t.task_id === existingGroup.task_id ? updatedGroup : t
+          );
+          return { allTasks: finalTasks };
         });
 
       } else {
         // =========================================================
-        // 【新規】完全に存在しない場合のみ、新しく1つだけ作る
+        // 【パターンB】新規グループを作成する場合
         // =========================================================
         const newGroupId = `group-${Date.now()}`;
         const currentGroupType = targetTask.title === draggedTask.title ? 'task' : 'patient';
@@ -246,22 +296,14 @@ export const useTimelineStore = create<TimelineStore>((set, get) => ({
           children: [childTarget, childDragged],
         };
 
-        await setDoc(doc(db, "tasks", newGroupId), groupNode);
+        await setDoc(doc(db, "tasks", newGroupId), removeUndefined(groupNode));
         await updateTask(draggedId, { parent_id: newGroupId, display_period: targetPeriod });
         await updateTask(targetId, { parent_id: newGroupId, display_period: targetPeriod });
 
         set((state) => {
-          const cleanedTasks = state.allTasks
-            .filter((t) => t.task_id !== draggedId && t.task_id !== targetId)
-            .map((t) => {
-              if (t.children) {
-                const nextChildren = t.children.filter((c: ExtendedTask) => c.task_id !== draggedId && c.task_id !== targetId);
-                return { ...t, isGroup: nextChildren.length > 0, children: nextChildren };
-              }
-              return t;
-            });
-
-          return { allTasks: [...cleanedTasks, groupNode] };
+          // 💡 draggedId と targetId を全階層から完全に排除してから、新しいグループノードを追加する
+          const cleaned = removeTaskRecursive(state.allTasks, [draggedId, targetId]);
+          return { allTasks: [...cleaned, groupNode] };
         });
       }
     } catch (error) {
@@ -269,48 +311,85 @@ export const useTimelineStore = create<TimelineStore>((set, get) => ({
     }
   },
 
-  handleUngroupTask: (childId: string) => set((state) => {
-    // 1. データベース(Firestore)側の親IDをクリアする
-    updateTask(childId, { parent_id: null });
+  handleUngroupTask: async (childId: string) => {
+    const { allTasks } = get();
 
-    // 2. Zustandストアの状態を更新
-    const updatedTasks = state.allTasks.map((task) => {
-      // もしこのタスクがグループ親で、childrenの中に該当の childId が含まれている場合
-      if (task.isGroup && task.children) {
-        const nextChildren = task.children.filter((c: ExtendedTask) => c.task_id !== childId);
-        
-        // もし子タスクが2つともなくなったら、親グループ自体を消す（あるいは維持する）
-        if (nextChildren.length === 0) {
-          return null; // 後でフィルタリングで消す
-        }
-
-        return {
-          ...task,
-          children: nextChildren,
-        };
+    // 解除対象の子タスクが所属する親グループを検索
+    let parentGroup: ExtendedTask | undefined;
+    allTasks.forEach((t) => {
+      if (t.isGroup && t.children?.some((c) => c.task_id === childId)) {
+        parentGroup = t;
       }
-      return task;
-    }).filter(Boolean) as ExtendedTask[]; // nullになった親グループを除外
-
-    // 3. 解除された子タスク自体をルートレベルに戻し、isGroup/isChildフラグをリセットする
-    // （もし allTasks の中にまだ独立したタスクとして存在していなければ追加する）
-    let targetChild: ExtendedTask | null = null;
-    
-    state.allTasks.forEach(task => {
-      task.children?.forEach((c: ExtendedTask) => {
-        if (c.task_id === childId) {
-          targetChild = { ...c, parent_id: null, isChild: false, isGroup: false };
-        }
-      });
     });
 
-    const finalTasks = [...updatedTasks];
-    if (targetChild && !finalTasks.some(t => t.task_id === childId)) {
-      finalTasks.push(targetChild);
+    // 解除されたタスクの parent_id を解除
+    await updateTask(childId, { parent_id: null });
+
+    if (parentGroup && parentGroup.children) {
+      const remainingChildren = parentGroup.children.filter((c) => c.task_id !== childId);
+
+      // 💡 残りが1個以下の場合は、残りの子タスクの parent_id も解除し、親ドキュメントを削除
+      if (remainingChildren.length <= 1) {
+        for (const child of remainingChildren) {
+          await updateTask(child.task_id, { parent_id: null });
+        }
+        await deleteDoc(doc(db, "tasks", parentGroup.task_id));
+      }
     }
 
-    return { allTasks: finalTasks };
-  }),
+    set((state) => {
+      const updatedTasks = state.allTasks
+        .map((task) => {
+          if (task.isGroup && task.children) {
+            const nextChildren = task.children.filter((c: ExtendedTask) => c.task_id !== childId);
+            
+            if (nextChildren.length <= 1) {
+              return null; // 親グループ自体を解体
+            }
+
+            return {
+              ...task,
+              children: nextChildren,
+            };
+          }
+          return task;
+        })
+        .filter(Boolean) as ExtendedTask[];
+
+      const releasedTasks: ExtendedTask[] = [];
+
+      state.allTasks.forEach((task) => {
+        if (task.isGroup && task.children) {
+          const isTargetGroup = task.children.some((c) => c.task_id === childId);
+          if (isTargetGroup) {
+            const nextChildren = task.children.filter((c) => c.task_id !== childId);
+            if (nextChildren.length <= 1) {
+              // 残りの全タスクを単体化
+              task.children.forEach((c) => {
+                releasedTasks.push({ ...c, parent_id: null, isChild: false, isGroup: false });
+              });
+            } else {
+              // 解除されたタスクのみ単体化
+              const target = task.children.find((c) => c.task_id === childId);
+              if (target) {
+                releasedTasks.push({ ...target, parent_id: null, isChild: false, isGroup: false });
+              }
+            }
+          }
+        }
+      });
+
+      const finalTasks = [...updatedTasks];
+      releasedTasks.forEach((rt) => {
+        if (!finalTasks.some((t) => t.task_id === rt.task_id)) {
+          finalTasks.push(rt);
+        }
+      });
+
+      return { allTasks: finalTasks };
+    });
+  },
+
   toggleTaskSos: (taskId, reason) => set((state) => {
     const task = state.allTasks.find(t => t.task_id === taskId) ||
                  state.allTasks.flatMap(t => t.children || []).find(c => c.task_id === taskId);
@@ -318,7 +397,6 @@ export const useTimelineStore = create<TimelineStore>((set, get) => ({
       const nextIsSos = !task.is_sos;
       const nextSosReason = nextIsSos ? (reason || "緊急応援要請が発生しました") : "";
 
-      // Firestoreの更新処理を呼ぶ
       updateTask(taskId, { is_sos: nextIsSos, sos_reason: nextSosReason });
 
       const updatedTasks = state.allTasks.map((t) => {

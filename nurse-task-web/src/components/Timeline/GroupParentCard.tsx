@@ -60,7 +60,7 @@ export const GroupParentCard = ({
       style={style}
       onClick={onClick}
       className={`
-        w-60 p-3 rounded-xl border-2 transition-all cursor-pointer shadow-sm flex gap-2 items-start
+        w-64 p-3 rounded-xl border-2 transition-all cursor-pointer shadow-sm flex gap-2 items-start
         ${getBackgroundColorClass()}
         ${isOver ? 'ring-4 ring-yellow-400 scale-105' : ''}
         ${isDragging ? 'opacity-50' : ''}
@@ -77,9 +77,16 @@ export const GroupParentCard = ({
 
       {/* カードのメインコンテンツ */}
       <div className="flex-1 min-w-0">
-        {/* 上段：時間 ＆ グループ解除ボタン */}
-        <div className="flex items-center justify-between mb-2">
-          <span className="text-sm font-bold opacity-90">{task.display_period}</span>
+        {/* 上段：時間 ＆ 指示バッジ ＆ グループ化ボタン */}
+        <div className="flex items-center justify-between mb-2 gap-1 min-w-0">
+          <div className="flex items-center gap-1.5 min-w-0">
+            <span className="text-sm font-bold opacity-90 whitespace-nowrap flex-shrink-0">{task.display_period}</span>
+            {task.initial_period && task.initial_period !== task.display_period && (
+              <span className="bg-white/20 text-white text-xs px-1.5 py-0.5 rounded font-normal whitespace-nowrap opacity-90 flex-shrink-0">
+                指示: {task.initial_period}
+              </span>
+            )}
+          </div>
           
           {/* 💡 引数は task だけでOK（中で自力でストアを見に行きます） */}
           <GroupingButton task={task} />

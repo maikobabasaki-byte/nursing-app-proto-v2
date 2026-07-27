@@ -26,6 +26,7 @@ export interface Task {
 
   is_sos?: boolean; 
   sos_reason?: string;
+  unexecuted_reason?: string;
 
   isGroup?: boolean;
   groupType?: 'patient' | 'task'; // ハイブリッド対応
@@ -53,6 +54,7 @@ export interface TaskDocument {
   parent_id?: string | null;
   is_sos?: boolean; 
   sos_reason?: string;
+  unexecuted_reason?: string;
   updated_by?: string;
 }
 
