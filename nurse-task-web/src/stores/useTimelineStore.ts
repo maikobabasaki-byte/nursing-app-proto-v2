@@ -4,9 +4,19 @@ import { updateTask } from '../hooks/useTaskUpdate';
 import { collection, doc, setDoc, getDocs, deleteDoc } from "firebase/firestore";
 import { db } from "../lib/firebase";
 
+export interface NursePin {
+  nurse_id: string;
+  name: string;
+  role?: string;
+  color: string;
+  x_percent: number; // 横方向の相対座標 (%)
+  y_percent: number; // 縦方向の相対座標 (%)
+}
+
 interface TimelineStore {
   allTasks: ExtendedTask[];
   memos: Memo[];
+  nurses: NursePin[];
   loading: boolean;
   groupingMode: string | null;
   activeId: string | null;
@@ -18,6 +28,8 @@ interface TimelineStore {
 
   setTasks: (tasks: ExtendedTask[]) => void;
   setMemos: (memos: Memo[]) => void;
+  setNurses: (nurses: NursePin[]) => void;
+  updateNursePosition: (nurseId: string, x_percent: number, y_percent: number) => void;
   setLoading: (loading: boolean) => void;
   setActiveId: (id: string | null) => void;
   setActivePopupTaskId: (id: string | null) => void;
@@ -39,9 +51,6 @@ interface TimelineStore {
   handleDeleteMemo: (memoId: string) => void;
 }
 
-/**
- * 💡 オブジェクトから undefined のプロパティをすべて取り除くヘルパー
- */
 const removeUndefined = (obj: any): any => {
   if (obj === null || typeof obj !== 'object') return obj;
   if (Array.isArray(obj)) return obj.map(removeUndefined);
@@ -52,9 +61,6 @@ const removeUndefined = (obj: any): any => {
   );
 };
 
-/**
- * 💡 指定したIDのタスクを、ルートおよびすべての階層（子孫含む）から完全に除外するヘルパー
- */
 const removeTaskRecursive = (tasks: ExtendedTask[], targetIds: string[]): ExtendedTask[] => {
   return tasks
     .filter(t => !targetIds.includes(t.task_id))
@@ -73,18 +79,23 @@ const removeTaskRecursive = (tasks: ExtendedTask[], targetIds: string[]): Extend
 
 const getTaskCategory = (task: ExtendedTask) => {
   const originalPeriod = task.initial_period || task.display_period;
-  
   if (!originalPeriod) return 'ANY';
   if (originalPeriod === '午前') return 'AM';
   if (originalPeriod === '午後') return 'PM';
   if (originalPeriod === '随時') return 'ANYTIME';
-  
   return originalPeriod;
 };
+
+const initialNurses: NursePin[] = [
+  { nurse_id: '001', name: 'テスト 太郎', role: 'リーダー', color: '#4f46e5', x_percent: 46.0, y_percent: 43.0 },
+  { nurse_id: '002', name: 'テスト 花子', role: 'メンバー', color: '#059669', x_percent: 52.0, y_percent: 43.0 },
+  { nurse_id: '003', name: 'テスト 次郎', role: 'メンバー', color: '#d97706', x_percent: 49.0, y_percent: 47.0 },
+];
 
 export const useTimelineStore = create<TimelineStore>((set, get) => ({
   allTasks: [],
   memos: [],
+  nurses: initialNurses,
   loading: false,
   groupingMode: null,
   activeId: null,
@@ -96,6 +107,12 @@ export const useTimelineStore = create<TimelineStore>((set, get) => ({
 
   setTasks: (tasks) => set({ allTasks: tasks }),
   setMemos: (memos) => set({ memos }),
+  setNurses: (nurses) => set({ nurses }),
+  updateNursePosition: (nurseId, x_percent, y_percent) => set((state) => ({
+    nurses: state.nurses.map((n) =>
+      n.nurse_id === nurseId ? { ...n, x_percent, y_percent } : n
+    ),
+  })),
   setLoading: (loading) => set({ loading }),
   setActiveId: (id) => set({ activeId: id }),
   setActivePopupTaskId: (id) => set({ activePopupTaskId: id }),
@@ -104,66 +121,74 @@ export const useTimelineStore = create<TimelineStore>((set, get) => ({
   setNewMemoText: (text) => set({ newMemoText: text }),
   setGroupingMode: (mode) => set({ groupingMode: mode }),
 
+  // 💡 修正：1回で確実にトグル（または解除）できるようにシンプル化
   handleStartGrouping: (taskId) => set((state) => ({
-    groupingMode: state.groupingMode === taskId ? null : taskId
+    groupingMode: taskId === null ? null : (state.groupingMode === taskId ? null : taskId)
   })),
 
-  handleUpdateStatus: (taskId, status, unexecutedReason) => set((state) => {
-    let targetPreviousProgressingId: string | null = null;
-
-    if (status === 'progressing') {
-      state.allTasks.forEach(task => {
-        if (task.status === 'progressing' && task.task_id !== taskId) {
-          targetPreviousProgressingId = task.task_id;
-        }
-        task.children?.forEach(child => {
-          if (child.status === 'progressing' && child.task_id !== taskId) {
-            targetPreviousProgressingId = child.task_id;
-          }
-        });
-      });
-    }
-
-    if (targetPreviousProgressingId) {
-      updateTask(targetPreviousProgressingId, { status: 'pending' });
-    }
-
-    const updatedTasks = state.allTasks.map((task) => {
-      let newParentStatus = task.status;
-
-      if (task.task_id === taskId) {
-        newParentStatus = status;
-      } else if (status === 'progressing' && task.status === 'progressing') {
-        newParentStatus = 'pending';
-      }
-
-      let updatedChildren = task.children;
-      if (task.children) {
-        updatedChildren = task.children.map((child) => {
-          if (child.task_id === taskId) {
-            return { 
-              ...child, 
-              status,
-              unexecuted_reason: status === 'unexecuted' ? (unexecutedReason || child.unexecuted_reason || '') : ''
-            };
-          }
-          if (status === 'progressing' && child.status === 'progressing') {
-            return { ...child, status: 'pending' };
-          }
-          return child;
-        });
-      }
-
-      return {
-        ...task,
-        status: newParentStatus,
-        unexecuted_reason: task.task_id === taskId ? (status === 'unexecuted' ? (unexecutedReason || task.unexecuted_reason || '') : '') : task.unexecuted_reason,
-        children: updatedChildren,
-      };
+  handleUpdateStatus: (taskId, status, unexecutedReason) => {
+    updateTask(taskId, {
+      status,
+      unexecuted_reason: status === 'unexecuted' ? unexecutedReason : ''
     });
 
-    return { allTasks: updatedTasks };
-  }),
+    set((state) => {
+      let targetPreviousProgressingId: string | null = null;
+
+      if (status === 'progressing') {
+        state.allTasks.forEach(task => {
+          if (task.status === 'progressing' && task.task_id !== taskId) {
+            targetPreviousProgressingId = task.task_id;
+          }
+          task.children?.forEach(child => {
+            if (child.status === 'progressing' && child.task_id !== taskId) {
+              targetPreviousProgressingId = child.task_id;
+            }
+          });
+        });
+      }
+
+      if (targetPreviousProgressingId) {
+        updateTask(targetPreviousProgressingId, { status: 'pending' });
+      }
+
+      const updatedTasks = state.allTasks.map((task) => {
+        let newParentStatus = task.status;
+
+        if (task.task_id === taskId) {
+          newParentStatus = status;
+        } else if (status === 'progressing' && task.status === 'progressing') {
+          newParentStatus = 'pending';
+        }
+
+        let updatedChildren = task.children;
+        if (task.children) {
+          updatedChildren = task.children.map((child) => {
+            if (child.task_id === taskId) {
+              return { 
+                ...child, 
+                status,
+                unexecuted_reason: status === 'unexecuted' ? (unexecutedReason || child.unexecuted_reason || '') : ''
+              };
+            }
+            if (status === 'progressing' && child.status === 'progressing') {
+              return { ...child, status: 'pending' };
+            }
+            return child;
+          });
+        }
+
+        return {
+          ...task,
+          status: newParentStatus,
+          unexecuted_reason: task.task_id === taskId ? (status === 'unexecuted' ? (unexecutedReason || task.unexecuted_reason || '') : '') : task.unexecuted_reason,
+          children: updatedChildren,
+        };
+      });
+
+      return { allTasks: updatedTasks };
+    });
+  },
 
   handleUpdateTaskPeriod: (taskId, period) => {
     const { allTasks } = get();
@@ -196,7 +221,6 @@ export const useTimelineStore = create<TimelineStore>((set, get) => ({
     let draggedTask: ExtendedTask | null = null;
     let targetTask: ExtendedTask | null = null;
 
-    // 探索
     const findTaskRecursive = (list: ExtendedTask[]) => {
       for (const t of list) {
         if (t.task_id === draggedId) draggedTask = t;
@@ -230,9 +254,6 @@ export const useTimelineStore = create<TimelineStore>((set, get) => ({
 
     try {
       if (existingGroup) {
-        // =========================================================
-        // 【パターンA】すでに親グループが存在する場合
-        // =========================================================
         const newChild: ExtendedTask = {
           ...draggedTask,
           isChild: true,
@@ -251,10 +272,8 @@ export const useTimelineStore = create<TimelineStore>((set, get) => ({
           children: updatedChildren,
         };
 
-        await updateTask(draggedId, { parent_id: existingGroup.task_id, display_period: targetPeriod });
-
+        // 🧠 1. 即座にUIを更新（グループ化完了）
         set((state) => {
-          // 💡 既存グループ以外の場所から draggedId を完全に排除する
           const cleaned = removeTaskRecursive(state.allTasks, [draggedId]);
           const finalTasks = cleaned.map((t) => 
             t.task_id === existingGroup.task_id ? updatedGroup : t
@@ -262,10 +281,10 @@ export const useTimelineStore = create<TimelineStore>((set, get) => ({
           return { allTasks: finalTasks };
         });
 
+        // 🧠 2. バックグラウンド通信
+        await updateTask(draggedId, { parent_id: existingGroup.task_id, display_period: targetPeriod });
+
       } else {
-        // =========================================================
-        // 【パターンB】新規グループを作成する場合
-        // =========================================================
         const newGroupId = `group-${Date.now()}`;
         const currentGroupType = targetTask.title === draggedTask.title ? 'task' : 'patient';
 
@@ -296,15 +315,16 @@ export const useTimelineStore = create<TimelineStore>((set, get) => ({
           children: [childTarget, childDragged],
         };
 
-        await setDoc(doc(db, "tasks", newGroupId), removeUndefined(groupNode));
-        await updateTask(draggedId, { parent_id: newGroupId, display_period: targetPeriod });
-        await updateTask(targetId, { parent_id: newGroupId, display_period: targetPeriod });
-
+        // 🧠 1. 即座にUIを更新（新規グループ作成）
         set((state) => {
-          // 💡 draggedId と targetId を全階層から完全に排除してから、新しいグループノードを追加する
           const cleaned = removeTaskRecursive(state.allTasks, [draggedId, targetId]);
           return { allTasks: [...cleaned, groupNode] };
         });
+
+        // 🧠 2. バックグラウンド通信
+        await setDoc(doc(db, "tasks", newGroupId), removeUndefined(groupNode));
+        await updateTask(draggedId, { parent_id: newGroupId, display_period: targetPeriod });
+        await updateTask(targetId, { parent_id: newGroupId, display_period: targetPeriod });
       }
     } catch (error) {
       console.error("❌ グループ化処理に失敗しました:", error);
@@ -314,7 +334,6 @@ export const useTimelineStore = create<TimelineStore>((set, get) => ({
   handleUngroupTask: async (childId: string) => {
     const { allTasks } = get();
 
-    // 解除対象の子タスクが所属する親グループを検索
     let parentGroup: ExtendedTask | undefined;
     allTasks.forEach((t) => {
       if (t.isGroup && t.children?.some((c) => c.task_id === childId)) {
@@ -322,13 +341,11 @@ export const useTimelineStore = create<TimelineStore>((set, get) => ({
       }
     });
 
-    // 解除されたタスクの parent_id を解除
     await updateTask(childId, { parent_id: null });
 
-    if (parentGroup && parentGroup.children) {
+    if (parentGroup && parentGroup.children && Array.isArray(parentGroup.children)) {
       const remainingChildren = parentGroup.children.filter((c) => c.task_id !== childId);
 
-      // 💡 残りが1個以下の場合は、残りの子タスクの parent_id も解除し、親ドキュメントを削除
       if (remainingChildren.length <= 1) {
         for (const child of remainingChildren) {
           await updateTask(child.task_id, { parent_id: null });
@@ -340,13 +357,11 @@ export const useTimelineStore = create<TimelineStore>((set, get) => ({
     set((state) => {
       const updatedTasks = state.allTasks
         .map((task) => {
-          if (task.isGroup && task.children) {
+          if (task.isGroup && task.children && Array.isArray(task.children)) {
             const nextChildren = task.children.filter((c: ExtendedTask) => c.task_id !== childId);
-            
             if (nextChildren.length <= 1) {
-              return null; // 親グループ自体を解体
+              return null;
             }
-
             return {
               ...task,
               children: nextChildren,
@@ -359,17 +374,15 @@ export const useTimelineStore = create<TimelineStore>((set, get) => ({
       const releasedTasks: ExtendedTask[] = [];
 
       state.allTasks.forEach((task) => {
-        if (task.isGroup && task.children) {
+        if (task.isGroup && task.children && Array.isArray(task.children)) {
           const isTargetGroup = task.children.some((c) => c.task_id === childId);
           if (isTargetGroup) {
             const nextChildren = task.children.filter((c) => c.task_id !== childId);
             if (nextChildren.length <= 1) {
-              // 残りの全タスクを単体化
               task.children.forEach((c) => {
                 releasedTasks.push({ ...c, parent_id: null, isChild: false, isGroup: false });
               });
             } else {
-              // 解除されたタスクのみ単体化
               const target = task.children.find((c) => c.task_id === childId);
               if (target) {
                 releasedTasks.push({ ...target, parent_id: null, isChild: false, isGroup: false });
@@ -407,7 +420,7 @@ export const useTimelineStore = create<TimelineStore>((set, get) => ({
             sos_reason: nextSosReason
           };
         }
-        if (t.isGroup && t.children) {
+        if (t.isGroup && t.children && Array.isArray(t.children)) {
           const hasChild = t.children.some(c => c.task_id === taskId);
           if (hasChild) {
             const newChildren = t.children.map(c => {

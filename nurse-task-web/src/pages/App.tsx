@@ -101,8 +101,23 @@ export default function App() {
         } as ExtendedTask;
       });
 
+      // 🧠 【チラつき完全防止】自分自身の書き込み中 (hasPendingWrites) の通知はローカル楽観Stateを優先してスキップ
+      if (snapshot.metadata.hasPendingWrites) {
+        return;
+      }
+
+      const currentLocalTasks = useTimelineStore.getState().allTasks;
+      const mergedTasks = firestoreTasks.map((ft) => {
+        const localMatch = currentLocalTasks.find(lt => lt.task_id === ft.task_id) ||
+                           currentLocalTasks.flatMap(lt => lt.children || []).find(c => c.task_id === ft.task_id);
+        if (localMatch && localMatch.parent_id !== undefined) {
+          return { ...ft, parent_id: localMatch.parent_id };
+        }
+        return ft;
+      });
+
       // グループ構造を再構築した上でZustandにセット
-      const reconstructed = reconstructGroups(firestoreTasks);
+      const reconstructed = reconstructGroups(mergedTasks);
       setTasks(reconstructed);
     });
 

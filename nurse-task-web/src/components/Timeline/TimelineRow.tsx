@@ -61,16 +61,20 @@ export function TimelineRow({
 
           let borderBgStyle = "border-gray-300 bg-gray-50 text-gray-500";
           let statusBadge = "【中断・保留中】";
+          let statusIcon = "🟠";
 
           if (isProgressing) {
             borderBgStyle = "border-sky-400 bg-sky-50/80 text-sky-900";
-            statusBadge = "🔵 【実施中】";
+            statusBadge = "【実施中】";
+            statusIcon = "🔵";
           } else if (isRecordStart) {
             borderBgStyle = "border-blue-400 bg-blue-50/80 text-blue-900";
-            statusBadge = "🟢 【記録中】";
+            statusBadge = "【記録中】";
+            statusIcon = "🟢";
           } else if (isRecordPending) {
             borderBgStyle = "border-orange-400 bg-orange-50/80 text-orange-900";
-            statusBadge = "🟠 【記録一時中断】";
+            statusBadge = "【記録一時中断】";
+            statusIcon = "🟠";
           }
 
           return (
@@ -81,12 +85,12 @@ export function TimelineRow({
             >
               <div className="flex justify-between items-center w-full text-[10px]">
                 <span className="font-extrabold flex items-center gap-1">
-                  {isProgressing && <span className="animate-pulse text-sky-600">●</span>}
-                  {statusBadge}
+                  <span>{statusIcon}</span>
+                  <span>{statusBadge}</span>
                 </span>
                 <span className="opacity-75">{task.room_id ? `${task.room_id}号室` : ''}</span>
               </div>
-              <div className="text-xs truncate text-left font-black">{task.patient_name}様</div>
+              <div className="text-xs truncate text-left font-black">{task.patient_name ? `${task.patient_name}様` : '患者名未設定'}</div>
               <div className="text-[11px] truncate text-left opacity-90">{task.title}</div>
             </div>
           );

@@ -2,331 +2,364 @@
   {
     "patient_id": "P211",
     "name": "山崎 陽向",
+    "gender": "男",
     "adl": "全介助",
     "risk_level": "中",
     "allergy": "",
+    "team": "A",
     "room_id": "201",
-    "bed_number": 1,
-    "team": "A"
+    "bed_number": 1
   },
   {
     "patient_id": "P212",
-    "name": "森 碧",
+    "name": "森 蒼真",
+    "gender": "男",
     "adl": "自立",
     "risk_level": "高",
     "allergy": "",
+    "team": "A",
     "room_id": "202",
-    "bed_number": 1,
-    "team": "A"
+    "bed_number": 1
   },
   {
     "patient_id": "P213",
     "name": "池田 悠",
+    "gender": "男",
     "adl": "自立",
     "risk_level": "高",
     "allergy": "",
+    "team": "A",
     "room_id": "202",
-    "bed_number": 2,
-    "team": "A"
+    "bed_number": 2
   },
   {
     "patient_id": "P214",
     "name": "橋本 瑞希",
+    "gender": "女",
     "adl": "一部介助",
     "risk_level": "高",
     "allergy": "アルコール綿",
+    "team": "A",
     "room_id": "203",
-    "bed_number": 1,
-    "team": "A"
+    "bed_number": 1
   },
   {
     "patient_id": "P215",
-    "name": "阿部 飛鳥",
+    "name": "阿部 明日香",
+    "gender": "女",
     "adl": "全介助",
     "risk_level": "低",
     "allergy": "",
+    "team": "A",
     "room_id": "203",
-    "bed_number": 2,
-    "team": "A"
+    "bed_number": 2
   },
   {
     "patient_id": "P216",
     "name": "石川 凪沙",
+    "gender": "女",
     "adl": "全介助",
     "risk_level": "低",
     "allergy": "",
+    "team": "A",
     "room_id": "203",
-    "bed_number": 3,
-    "team": "A"
+    "bed_number": 3
   },
   {
     "patient_id": "P217",
-    "name": "山下 光",
+    "name": "山下 ひかり",
+    "gender": "女",
     "adl": "全介助",
     "risk_level": "低",
     "allergy": "",
+    "team": "A",
     "room_id": "203",
-    "bed_number": 4,
-    "team": "A"
+    "bed_number": 4
   },
   {
     "patient_id": "P218",
     "name": "中島 伊織",
+    "gender": "女",
     "adl": "自立",
     "risk_level": "中",
     "allergy": "",
+    "team": "A",
     "room_id": "205",
-    "bed_number": 1,
-    "team": "A"
+    "bed_number": 1
   },
   {
     "patient_id": "P219",
-    "name": "石井 望",
+    "name": "石井 希美",
+    "gender": "女",
     "adl": "自立",
     "risk_level": "中",
     "allergy": "",
+    "team": "A",
     "room_id": "205",
-    "bed_number": 2,
-    "team": "A"
+    "bed_number": 2
   },
   {
     "patient_id": "P220",
     "name": "吉田 陽葵",
+    "gender": "女",
     "adl": "自立",
     "risk_level": "高",
     "allergy": "",
+    "team": "A",
     "room_id": "205",
-    "bed_number": 3,
-    "team": "A"
+    "bed_number": 3
   },
   {
     "patient_id": "P221",
     "name": "山田 紬",
+    "gender": "女",
     "adl": "自立",
     "risk_level": "中",
     "allergy": "",
+    "team": "A",
     "room_id": "205",
-    "bed_number": 4,
-    "team": "A"
+    "bed_number": 4
   },
   {
     "patient_id": "P222",
     "name": "佐藤 蓮",
+    "gender": "男",
     "adl": "自立",
     "risk_level": "中",
     "allergy": "",
+    "team": "A",
     "room_id": "206",
-    "bed_number": 1,
-    "team": "A"
+    "bed_number": 1
   },
   {
     "patient_id": "P223",
     "name": "鈴木 陽翔",
+    "gender": "男",
     "adl": "自立",
     "risk_level": "中",
     "allergy": "",
+    "team": "A",
     "room_id": "206",
-    "bed_number": 2,
-    "team": "A"
+    "bed_number": 2
   },
   {
     "patient_id": "P224",
     "name": "高橋 湊",
+    "gender": "男",
     "adl": "自立",
     "risk_level": "中",
     "allergy": "",
+    "team": "A",
     "room_id": "206",
-    "bed_number": 3,
-    "team": "A"
+    "bed_number": 3
   },
   {
     "patient_id": "P225",
     "name": "田中 悠真",
+    "gender": "男",
     "adl": "自立",
     "risk_level": "中",
     "allergy": "",
+    "team": "A",
     "room_id": "206",
-    "bed_number": 4,
-    "team": "A"
+    "bed_number": 4
   },
   {
     "patient_id": "P226",
-    "name": "中村 朝陽",
+    "name": "中村 彩音",
+    "gender": "女",
     "adl": "自立",
     "risk_level": "中",
     "allergy": "",
+    "team": "B",
     "room_id": "207",
-    "bed_number": 4,
-    "team": "B"
+    "bed_number": 4
   },
   {
     "patient_id": "P227",
     "name": "小林 結菜",
+    "gender": "女",
     "adl": "一部介助",
     "risk_level": "高",
     "allergy": "ペニシリン",
+    "team": "B",
     "room_id": "207",
-    "bed_number": 1,
-    "team": "B"
+    "bed_number": 1
   },
   {
     "patient_id": "P228",
-    "name": "加藤 健太",
+    "name": "加藤 栞",
+    "gender": "女",
     "adl": "全介助",
     "risk_level": "高",
     "allergy": "",
+    "team": "B",
     "room_id": "207",
-    "bed_number": 2,
-    "team": "B"
+    "bed_number": 2
   },
   {
     "patient_id": "P229",
     "name": "渡辺 咲良",
+    "gender": "女",
     "adl": "一部介助",
     "risk_level": "中",
     "allergy": "",
+    "team": "B",
     "room_id": "207",
-    "bed_number": 3,
-    "team": "B"
+    "bed_number": 3
   },
   {
     "patient_id": "P230",
     "name": "東 拓海",
+    "gender": "男",
     "adl": "自立",
     "risk_level": "低",
     "allergy": "",
+    "team": "B",
     "room_id": "208",
-    "bed_number": 1,
-    "team": "B"
+    "bed_number": 1
   },
   {
     "patient_id": "P231",
-    "name": "佐々木 澪",
+    "name": "佐々木 陸",
+    "gender": "男",
     "adl": "一部介助",
     "risk_level": "中",
     "allergy": "牛乳",
+    "team": "B",
     "room_id": "208",
-    "bed_number": 2,
-    "team": "B"
+    "bed_number": 2
   },
   {
     "patient_id": "P232",
     "name": "松本 大輝",
+    "gender": "男",
     "adl": "全介助",
     "risk_level": "高",
     "allergy": "",
+    "team": "B",
     "room_id": "208",
-    "bed_number": 3,
-    "team": "B"
+    "bed_number": 3
   },
   {
     "patient_id": "P233",
-    "name": "井上 美羽",
+    "name": "井上 翔",
+    "gender": "男",
     "adl": "自立",
     "risk_level": "低",
     "allergy": "",
+    "team": "B",
     "room_id": "208",
-    "bed_number": 4,
-    "team": "B"
+    "bed_number": 4
   },
   {
     "patient_id": "P234",
-    "name": "木村 陸斗",
+    "name": "木村 凛",
+    "gender": "女",
     "adl": "一部介助",
     "risk_level": "中",
     "allergy": "",
+    "team": "B",
     "room_id": "210",
-    "bed_number": 1,
-    "team": "B"
+    "bed_number": 1
   },
   {
     "patient_id": "P235",
     "name": "林 結衣",
+    "gender": "女",
     "adl": "全介助",
     "risk_level": "高",
     "allergy": "",
+    "team": "B",
     "room_id": "210",
-    "bed_number": 2,
-    "team": "B"
+    "bed_number": 2
   },
   {
     "patient_id": "P244",
-    "name": "岡田 翔太",
+    "name": "岡田 楓",
+    "gender": "女",
     "adl": "自立",
     "risk_level": "中",
     "allergy": "",
+    "team": "B",
     "room_id": "210",
-    "bed_number": 3,
-    "team": "B"
+    "bed_number": 3
   },
   {
     "patient_id": "P245",
     "name": "三浦 葵",
+    "gender": "女",
     "adl": "一部介助",
     "risk_level": "低",
     "allergy": "",
+    "team": "B",
     "room_id": "210",
-    "bed_number": 4,
-    "team": "B"
+    "bed_number": 4
   },
   {
     "patient_id": "P236",
     "name": "清水 翔太",
+    "gender": "男",
     "adl": "自立",
     "risk_level": "中",
     "allergy": "",
+    "team": "B",
     "room_id": "211",
-    "bed_number": 1,
-    "team": "B"
+    "bed_number": 1
   },
   {
     "patient_id": "P237",
-    "name": "山内 莉子",
+    "name": "山内 樹",
+    "gender": "男",
     "adl": "一部介助",
     "risk_level": "高",
     "allergy": "ラテックス",
+    "team": "B",
     "room_id": "211",
-    "bed_number": 2,
-    "team": "B"
+    "bed_number": 2
   },
   {
     "patient_id": "P246",
     "name": "長谷川 健",
+    "gender": "男",
     "adl": "全介助",
     "risk_level": "高",
     "allergy": "",
+    "team": "B",
     "room_id": "211",
-    "bed_number": 3,
-    "team": "B"
+    "bed_number": 3
   },
   {
     "patient_id": "P247",
-    "name": "坂本 さくら",
+    "name": "坂本 蒼",
+    "gender": "男",
     "adl": "自立",
     "risk_level": "低",
     "allergy": "",
+    "team": "B",
     "room_id": "211",
-    "bed_number": 4,
-    "team": "B"
+    "bed_number": 4
   },
   {
     "patient_id": "P238",
-    "name": "山口 太陽",
+    "name": "山口 ひなた",
+    "gender": "女",
     "adl": "自立",
     "risk_level": "低",
     "allergy": "",
+    "team": "B",
     "room_id": "212",
-    "bed_number": 1,
-    "team": "B"
+    "bed_number": 1
   },
   {
     "patient_id": "P239",
     "name": "斉藤 萌",
+    "gender": "女",
     "adl": "全介助",
     "risk_level": "高",
     "allergy": "",
+    "team": "B",
     "room_id": "212",
-    "bed_number": 2,
-    "team": "B"
+    "bed_number": 2
   }
 ]

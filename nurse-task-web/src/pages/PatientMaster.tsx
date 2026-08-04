@@ -6,12 +6,13 @@ import { normalizeToHHMM } from '../utils/taskLogic';
 interface Patient {
   patient_id: string;
   name: string;
+  gender?: string;
   adl: string;
   risk_level: string;
   allergy: string;
   room_id: string;
   bed_number: number;
-  tasks?: Task[]; // 💡 紐づけたタスクを格納する場所をオプショナルで定義
+  tasks?: Task[];
 }
 
 interface Task {
@@ -140,13 +141,41 @@ export default function PatientMasterPage({ selectedIds }: DashboardProps) {
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mt-1">
               {filteredPatients.map((patient, index) => (
                 <div key={`search-${patient.patient_id}`} className="bg-white rounded shadow-md border-2 border-cyan-400 flex flex-col min-h-[160px] overflow-hidden">
-                  <div className="px-4 pt-3 pb-2 border-b border-slate-100 flex justify-between items-center bg-cyan-50 text-xs">
-                    <span className="font-bold text-cyan-900 text-sm">
-                      {patient.room_id}号室 ({patient.bed_number}) {patient.name} 様
-                    </span>
-                    {(patient.risk_level === '高' || patient.risk_level === 'high') && (
-                      <span className="bg-red-100 text-red-700 px-1 py-0.5 rounded text-[10px] font-bold">転倒高リスク</span>
-                    )}
+                  <div className="px-4 pt-3 pb-2 border-b border-slate-100 flex flex-col gap-1.5 bg-cyan-50 text-xs">
+                    <div className="flex justify-between items-center">
+                      <span className="font-bold text-cyan-900 text-sm">
+                        {patient.room_id}号室 ({patient.bed_number}) {patient.name} 様
+                      </span>
+                    </div>
+                    {/* 💡 属性タグバー（絵文字なし・洗練されたフラットカラーデザイン） */}
+                    <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
+                      {patient.gender && (
+                        <span className={`px-1.5 py-0.5 rounded text-[11px] font-bold border ${
+                          patient.gender === '男' ? 'bg-blue-50 text-blue-700 border-blue-200' : 'bg-pink-50 text-pink-700 border-pink-200'
+                        }`}>
+                          {patient.gender === '男' ? '男' : '女'}
+                        </span>
+                      )}
+                      {patient.adl && (
+                        <span className="px-1.5 py-0.5 rounded text-[11px] bg-purple-50 text-purple-700 border border-purple-200">
+                          ADL: {patient.adl}
+                        </span>
+                      )}
+                      {patient.risk_level && (
+                        <span className={`px-1.5 py-0.5 rounded text-[11px] border ${
+                          patient.risk_level === '高' || patient.risk_level === 'high' 
+                            ? 'bg-red-50 text-red-700 border-red-200 font-bold' 
+                            : 'bg-slate-100 text-slate-600 border-slate-200'
+                        }`}>
+                          リスク: {patient.risk_level === 'high' ? '高' : patient.risk_level}
+                        </span>
+                      )}
+                      {patient.allergy && (
+                        <span className="px-1.5 py-0.5 rounded text-[11px] font-bold bg-rose-100 text-rose-800 border border-rose-300">
+                          アレルギー: {patient.allergy}
+                        </span>
+                      )}
+                    </div>
                   </div>
                   <div className="p-4 flex-1 flex flex-col gap-2 justify-center text-sm font-medium">
                     {patient.tasks?.map((task, idx) => (
@@ -180,11 +209,42 @@ export default function PatientMasterPage({ selectedIds }: DashboardProps) {
                 key={`normal-${patient.patient_id}`} 
                 className="bg-white rounded shadow-sm border border-slate-200 flex flex-col min-h-[160px] overflow-hidden opacity-95"
               >
-                <div className="px-4 pt-3 pb-2 border-b border-slate-100 flex justify-between items-center bg-slate-50/50 text-xs">
-                  <span className="text-slate-400 font-mono">{`[Alt+${index + 1}]`}</span>
-                  <span className="font-bold text-slate-700 text-sm">
-                    {patient.room_id}号室 ({patient.bed_number}) {patient.name} 様
-                  </span>
+                <div className="px-4 pt-3 pb-2 border-b border-slate-100 flex flex-col gap-1.5 bg-slate-50/70 text-xs">
+                  <div className="flex justify-between items-center">
+                    <span className="text-slate-400 font-mono">{`[Alt+${index + 1}]`}</span>
+                    <span className="font-bold text-slate-700 text-sm">
+                      {patient.room_id}号室 ({patient.bed_number}) {patient.name} 様
+                    </span>
+                  </div>
+                  {/* 💡 属性タグバー（絵文字なし・洗練されたフラットカラーデザイン） */}
+                  <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
+                    {patient.gender && (
+                      <span className={`px-1.5 py-0.5 rounded text-[11px] font-bold border ${
+                        patient.gender === '男' ? 'bg-blue-50 text-blue-700 border-blue-200' : 'bg-pink-50 text-pink-700 border-pink-200'
+                      }`}>
+                        {patient.gender === '男' ? '男' : '女'}
+                      </span>
+                    )}
+                    {patient.adl && (
+                      <span className="px-1.5 py-0.5 rounded text-[11px] bg-purple-50 text-purple-700 border border-purple-200">
+                        ADL: {patient.adl}
+                      </span>
+                    )}
+                    {patient.risk_level && (
+                      <span className={`px-1.5 py-0.5 rounded text-[11px] border ${
+                        patient.risk_level === '高' || patient.risk_level === 'high' 
+                          ? 'bg-red-50 text-red-700 border-red-200 font-bold' 
+                          : 'bg-slate-100 text-slate-600 border-slate-200'
+                      }`}>
+                        リスク: {patient.risk_level === 'high' ? '高' : patient.risk_level}
+                      </span>
+                    )}
+                    {patient.allergy && (
+                      <span className="px-1.5 py-0.5 rounded text-[11px] font-bold bg-rose-100 text-rose-800 border border-rose-300">
+                        アレルギー: {patient.allergy}
+                      </span>
+                    )}
+                  </div>
                 </div>
 
                 <div className="p-4 flex-1 flex flex-col gap-2 justify-center text-sm font-medium">

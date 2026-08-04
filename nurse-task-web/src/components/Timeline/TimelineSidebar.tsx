@@ -6,19 +6,22 @@ import { useUserName } from '../../hooks/useUserName';
 import { extractUserProgressingTasks } from '../../utils/taskLogic';
 
 interface TimelineSidebarProps { 
-  tasks: Task[]; 
-  groupingMode: string | null; 
-  onStartGrouping: (taskId: string) => void; 
+  selectedPatients: string[];
 }
 
 export default function TimelineSidebar({ 
-  tasks, 
-  groupingMode,
-  onStartGrouping
+  selectedPatients
 }: TimelineSidebarProps) {
   const userName = useUserName();
   const allTasks = useTimelineStore((state) => state.allTasks);
+  const groupingMode = useTimelineStore((state) => state.groupingMode);
+  const handleStartGrouping = useTimelineStore((state) => state.handleStartGrouping);
   const setActivePopupTaskId = useTimelineStore((state) => state.setActivePopupTaskId);
+
+  // 🎯 【Single Source of Truth】ストアの全タスクからプール用タスクを直算出
+  const poolTasks = allTasks.filter(task => 
+    selectedPatients.includes(task.patient_id) && !task.display_period?.includes(':')
+  );
 
   // Zustandの全タスクからログイン中のユーザーの「実施中・記録中タスク」を動的抽出
   const myProgressingTasks = extractUserProgressingTasks(allTasks, userName);
@@ -78,23 +81,23 @@ export default function TimelineSidebar({
             <span>タスクプール</span>
           </span>
           <span className="bg-sky-600 text-white text-xs px-2 py-0.5 rounded-full font-bold shadow-sm">
-            {tasks.length}件
+            {poolTasks.length}件
           </span>
         </div>
         
         <div className="flex-1 overflow-y-auto p-2 flex flex-col gap-2 scrollbar-thin">
-          {tasks.length === 0 ? (
+          {poolTasks.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-full py-6 text-gray-400 text-xs text-center border-2 border-dashed border-gray-200 rounded-lg m-1">
               <span className="text-xl mb-1">✨</span>
               <span>未割り当ての<br />タスクはありません</span>
             </div>
           ) : (
-            tasks.map(task => (
+            poolTasks.map(task => (
               <PoolTaskCard 
                 key={task.task_id} 
                 task={task} 
                 groupingMode={groupingMode} 
-                onStartGrouping={onStartGrouping} 
+                onStartGrouping={handleStartGrouping} 
               />
             ))
           )}

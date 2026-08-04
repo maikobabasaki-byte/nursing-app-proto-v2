@@ -69,7 +69,7 @@ const SortableChildItem = ({ child, parentTaskId, parentDisplayPeriod, onChildCl
           onChildClick(child.task_id); 
         }}
       >
-        <span>【中断・保留中】{child.room_id}号室 {child.patient_name}様</span>
+        <span>🟠 【中断・保留中】 {child.room_id ? `${child.room_id}号室 ` : ''}{child.patient_name ? `${child.patient_name}様` : '患者名未設定'}</span>
       </div>
     );
   }

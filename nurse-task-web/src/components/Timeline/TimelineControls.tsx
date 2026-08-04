@@ -1,11 +1,12 @@
 import type { TimelineControlsProps } from '../../types/types';
+import { useTimelineStore } from '../../stores/useTimelineStore';
 
 export const TimelineControls = ({ 
   timelineMode, 
   setTimelineMode,
-  groupingMode, 
-  setGroupingMode 
 }: TimelineControlsProps) => {
+  const groupingMode = useTimelineStore((state) => state.groupingMode);
+  const setGroupingMode = useTimelineStore((state) => state.setGroupingMode);
   // console.log("TimelineControls: 現在のgroupingModeは:", groupingMode);
   const configs = [
     { label: '1時間', value: 60 },
@@ -19,8 +20,13 @@ export const TimelineControls = ({
         <div className="p-2 bg-yellow-100 border border-yellow-300 text-yellow-800 rounded flex justify-between items-center text-sm font-bold shadow-sm">
           <span>グループ化ターゲットを選択中...</span>
           <button 
-            onClick={() => setGroupingMode(null)} 
-            className="bg-yellow-200 hover:bg-yellow-300 px-2 py-1 rounded text-xs"
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              e.preventDefault();
+              setGroupingMode(null);
+            }} 
+            className="bg-yellow-200 hover:bg-yellow-300 px-2 py-1 rounded text-xs cursor-pointer"
           >
             キャンセル
           </button>

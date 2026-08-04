@@ -33,13 +33,29 @@ export interface GASTaskResponse {
   priority?: 'high' | 'medium' | 'low';
 }
 
+export interface GASPatientResponse {
+  patient_id: string;
+  name?: string;
+  patient_name?: string;
+  gender?: string;
+  room_id?: string;
+  bed_number?: number | string;
+  team?: string;
+  [key: string]: any;
+}
+
+export interface GASFetchResult {
+  tasks: GASTaskResponse[];
+  patients: GASPatientResponse[];
+}
+
 /**
- * GASのGETエンドポイントから全タスクを取得
+ * GASのGETエンドポイントからタスク一覧と患者マスター一覧をまとめて取得
  */
-export const fetchTasksFromGAS = async (): Promise<GASTaskResponse[]> => {
+export const fetchGASData = async (): Promise<GASFetchResult> => {
   if (!GAS_API_URL) {
     console.warn("VITE_GAS_API_URL が設定されていません");
-    return [];
+    return { tasks: [], patients: [] };
   }
 
   try {
@@ -56,19 +72,32 @@ export const fetchTasksFromGAS = async (): Promise<GASTaskResponse[]> => {
 
     const data = await response.json();
     console.log("GASから取得したデータ:", data);
-    // 配列、もしくは { tasks: [...] } や { data: [...] } のラップに対応
+
+    let tasks: GASTaskResponse[] = [];
+    let patients: GASPatientResponse[] = [];
+
     if (Array.isArray(data)) {
-      return data;
-    } else if (data && Array.isArray(data.tasks)) {
-      return data.tasks;
-    } else if (data && Array.isArray(data.data)) {
-      return data.data;
+      tasks = data;
+    } else if (data && typeof data === 'object') {
+      if (Array.isArray(data.tasks)) tasks = data.tasks;
+      else if (Array.isArray(data.data)) tasks = data.data;
+
+      if (Array.isArray(data.patients)) patients = data.patients;
     }
-    return [];
+
+    return { tasks, patients };
   } catch (error) {
-    console.error("GASタスク取得エラー:", error);
-    return [];
+    console.error("GASデータ取得エラー:", error);
+    return { tasks: [], patients: [] };
   }
+};
+
+/**
+ * GASのGETエンドポイントから全タスクを取得 (後方互換用)
+ */
+export const fetchTasksFromGAS = async (): Promise<GASTaskResponse[]> => {
+  const result = await fetchGASData();
+  return result.tasks;
 };
 
 /**

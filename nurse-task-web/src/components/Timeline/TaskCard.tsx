@@ -87,7 +87,13 @@ if (transform) {
       </div>
 
       {/* 2. カードの内容（右側エリア：クリックで onEdit） */}
-      <div className="flex-1 min-w-0 cursor-pointer" onClick={onEdit}>
+      <div 
+        className="flex-1 min-w-0 cursor-pointer" 
+        onClick={(e) => {
+          if ((e.target as HTMLElement).closest('button')) return;
+          onEdit?.();
+        }}
+      >
         <div className="flex items-center justify-between mb-1 gap-1 min-w-0">
           <div className="flex items-center gap-1.5 min-w-0">
             <span className="text-sm font-bold whitespace-nowrap flex-shrink-0">{task.display_period}</span>
@@ -101,8 +107,8 @@ if (transform) {
         </div>
         
         <div className="grid grid-cols-3 gap-1 mb-1 text-sm">
-          <span>{task.room_id}号室</span>
-          <span className='col-span-2 text-left'>{task.patient_name}様</span>
+          <span>{task.room_id ? `${task.room_id}号室` : ''}</span>
+          <span className='col-span-2 text-left'>{task.patient_name ? `${task.patient_name}様` : '患者名未設定'}</span>
         </div>
         
         <div className="text-sm text-left">{task.title}</div>

@@ -1,15 +1,18 @@
 import React from 'react';
+import { useTimelineStore } from '../../stores/useTimelineStore';
+import { DraggableNursePin } from './DraggableNursePin';
 
 export interface Room { room_id: string; name: string; x: number; y: number; cols: number; rows: number; }
 export interface Facility { room_id: string; name: string; x: number; y: number; w: number; h: number; }
-export interface Patient { patient_id: string; name: string; adl: string; risk_level: string; allergy: string; room_id: string; bed_number: number; team: string; }
+export interface Patient { patient_id: string; name: string; gender?: string; adl: string; risk_level: string; allergy: string; room_id: string; bed_number: number; team: string; }
 
 interface WardMapProps {
   rooms: Room[];
   facilities: Facility[];
   patients: Patient[];
-  allTasks: any[]; // 💡 追加：ストアの全タスクを受け取る
-  onPatientRightClick?: (taskId: string, patientName: string) => void; // 💡 引数を「taskId」に変更！
+  allTasks: any[];
+  displayNurses?: any[];
+  onPatientRightClick?: (taskId: string, patientName: string) => void;
 }
 
 interface ContextMenuState {
@@ -18,7 +21,6 @@ interface ContextMenuState {
   y: number;
   patientId: string;
   patientName: string;
-  // 💡 その患者に関連するタスクを保持する配列を追加！
   patientTasks: any[]; 
 }
 
@@ -31,22 +33,23 @@ export default function WardMap({
   facilities, 
   patients, 
   allTasks,
+  displayNurses,
   onPatientRightClick
 }: WardMapProps): React.JSX.Element {
+  const storeNurses = useTimelineStore((state) => state.nurses);
+  const nurses = displayNurses || storeNurses;
 
   const [menu, setMenu] = React.useState<ContextMenuState>({
-  visible: false,
-  x: 0,
-  y: 0,
-  patientId: '',
-  patientName: '',
-  patientTasks: [] // 初期値は空
-});
+    visible: false,
+    x: 0,
+    y: 0,
+    patientId: '',
+    patientName: '',
+    patientTasks: []
+  });
 
-  // 2. メニュー要素を直接参照するためのRef（外側クリック検知用）
   const menuRef = React.useRef<HTMLDivElement>(null);
 
-  // 3. メニュー以外の場所をクリックしたときに自動で閉じる処理
   React.useEffect(() => {
     const handleOutsideClick = (e: MouseEvent) => {
       if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
@@ -58,29 +61,39 @@ export default function WardMap({
   }, []);
   
   return (
-    <div style={{ width: '100%', height: '100%', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
-      {/* 1. 既存のSVGマップ（レイアウトは一切変えずにそのままです） */}
-      <svg viewBox="0 0 1500 870" width="100%" height="100%" style={{ border: '1px solid #e0e0e0', backgroundColor: '#f9f9f9' }}>
+    <div style={{ width: '100%', height: '100%', display: 'flex', justifyContent: 'center', alignItems: 'center', boxSizing: 'border-box', overflow: 'hidden' }}>
+      {/* 🎯 SVGとHTMLオーバーレイの共通アスペクト比固定ラッパー (1500 : 870) */}
+      <div 
+        style={{ 
+          position: 'relative', 
+          width: '100%', 
+          maxWidth: '100%', 
+          maxHeight: '100%', 
+          aspectRatio: '1500 / 870', 
+          display: 'flex', 
+          justifyContent: 'center', 
+          alignItems: 'center' 
+        }}
+      >
+        {/* 1. 既存の純粋SVGマップ（背景レイヤー） */}
+        <svg viewBox="0 0 1500 870" width="100%" height="100%" style={{ border: '1px solid #e0e0e0', backgroundColor: '#f9f9f9', display: 'block' }}>
         
         {/* 1. 施設（ナースステーション・物品庫など） */}
         {facilities.map((fac) => (
           <g key={fac.room_id}>
             <rect x={fac.x - fac.w / 2} y={fac.y - fac.h / 2} width={fac.w} height={fac.h} fill="white" stroke="#b2ebf2" strokeWidth={2} />
-            <text x={fac.x} y={fac.y} textAnchor="middle" dominantBaseline="central" fontSize={24} fill="#333" fontWeight="bold">{fac.name}</text>
+            <text x={fac.x} y={fac.y - 20} textAnchor="middle" dominantBaseline="central" fontSize={24} fill="#333" fontWeight="bold">{fac.name}</text>
           </g>
         ))}
 
         {/* 2. 病室と患者 */}
         {rooms.map((room) => {
-          // 部屋全体の幅と高さをマスの数（cols, rows）から正しく計算
           const roomW = BED_W * room.cols;
           const roomH = (BED_H * room.rows) + HEADER_H;
           
-          // 画面の上側にある部屋（y < 300）か、下側にある部屋かで、ヘッダーの位置を上下に分ける
           const isTopRow = room.y < 300;
           const topY = isTopRow ? room.y : room.y - roomH;
           const headerY = isTopRow ? topY : topY + (BED_H * room.rows);
-
           const roomPatients = patients.filter((p) => p.room_id === room.room_id);
 
           return (
@@ -89,7 +102,7 @@ export default function WardMap({
               <rect x={room.x - roomW / 2} y={topY} width={roomW} height={roomH} fill="white" />
               {/* 部屋名の背景（薄い青のバー） */}
               <rect x={room.x - roomW / 2} y={headerY} width={roomW} height={HEADER_H} fill="#b2ebf2" />
-              <text x={room.x} y={headerY + HEADER_H / 2} textAnchor="middle" dominantBaseline="central" fontSize="20" fill="#333" fontWeight="bold">{room.name}</text>
+              <text x={room.x - roomW / 4} y={headerY + HEADER_H / 2} textAnchor="middle" dominantBaseline="central" fontSize="18" fill="#333" fontWeight="bold">{room.name}</text>
 
               {/* 💡 部屋のベッド枠（グリッド線）の描画 */}
               {Array.from({ length: room.cols * room.rows }).map((_, i) => {
@@ -175,16 +188,44 @@ export default function WardMap({
                       </g>
                     )}
 
+                    {/* 💡 転倒リスク「高」の患者への洗練されたテキスト赤タグ（絵文字なし） */}
+                    {(patient.risk_level === '高' || patient.risk_level === 'high') && (
+                      <g>
+                        <rect
+                          x={bedX + 6}
+                          y={bedTopY + 4}
+                          width={46}
+                          height={15}
+                          rx={3}
+                          fill="#fee2e2"
+                          stroke="#f87171"
+                          strokeWidth={1}
+                        />
+                        <text
+                          x={bedX + 29}
+                          y={bedTopY + 11.5}
+                          textAnchor="middle"
+                          dominantBaseline="central"
+                          fontSize="9"
+                          fill="#dc2626"
+                          fontWeight="bold"
+                        >
+                          高リスク
+                        </text>
+                      </g>
+                    )}
+
+                    {/* 💡 性別 (男)/(女) と患者名テキスト */}
                     <text 
                       x={textX} 
-                      y={textY} 
+                      y={textY + 2} 
                       textAnchor="middle" 
                       dominantBaseline="central" 
-                      fontSize="20" 
+                      fontSize="18" 
                       fill={hasSos ? "#c62828" : "#333"} 
                       fontWeight={hasSos ? "bold" : "500"}
                     >
-                      {patient.name}
+                      {patient.gender ? `(${patient.gender}) ` : ''}{patient.name}
                     </text>
                   </g>
                 );
@@ -193,6 +234,27 @@ export default function WardMap({
           );
         })}
       </svg>
+
+      {/* 2. 自由移動・自由配置用キャンバスレイヤー */}
+      <div 
+        style={{ 
+          position: 'absolute', 
+          top: 0, 
+          left: 0, 
+          width: '100%', 
+          height: '100%', 
+          pointerEvents: 'none', 
+          zIndex: 50 
+        }}
+      >
+        {nurses.map((nurse) => (
+          <div key={nurse.nurse_id} style={{ pointerEvents: 'auto' }}>
+            <DraggableNursePin nurse={nurse} />
+          </div>
+        ))}
+      </div>
+
+      </div>
 
       {/* 右クリックメニュー本体 */}
       {menu.visible && (

@@ -93,18 +93,13 @@ export interface TaskCardProps {
 export type TimelineMode = 15 | 30 | 60;
 
 
-export  interface TimelineControlsProps {
+export interface TimelineControlsProps {
   timelineMode: TimelineMode;
   setTimelineMode: (value: TimelineMode) => void;
-  groupingMode: string | null;            
-  setGroupingMode: (id: string | null) => void; 
 }
 
 export interface TimelineMainProps {
-  timedTasks: ExtendedTask[];
-  groupingMode: string | null;
-  setGroupingMode: (mode: string | null) => void;
-  memos: Memo[];
+  selectedPatients: string[];
 }
 
 export interface TaskCardPropsInner {

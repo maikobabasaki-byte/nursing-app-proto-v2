@@ -1,7 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import WardMap from '../components/Map/WardMap';
 import type { Patient, Room, Facility } from '../components/Map/WardMap';
-import { useTimelineStore } from '../stores/useTimelineStore';
+import { useTimelineStore, type NursePin } from '../stores/useTimelineStore';
+import { DndContext, DragOverlay, useSensor, useSensors, PointerSensor, type DragEndEvent, type DragStartEvent } from '@dnd-kit/core';
+import { DraggableNursePin } from '../components/Map/DraggableNursePin';
+import { useUserName } from '../hooks/useUserName';
 
 // 💡 左側のSOSパネル（LeftPanel）：ストアから切り取ってきたSOSタスクを流し込みます
 const LeftPanel: React.FC<{ sosTasks: any[] }> = ({ sosTasks }) => (
@@ -42,16 +45,56 @@ const RightPanel: React.FC = () => (
   </div>
 );
 
-// 💡 useTimelineStore から 'setTasks' も取得するように追加します
 export default function MapContainer(): React.JSX.Element {
   const [patients, setPatients] = useState<Patient[]>([]);
   const [rooms, setRooms] = useState<Room[]>([]);
   const [facilities, setFacilities] = useState<Facility[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
+  const [activeNurse, setActiveNurse] = useState<NursePin | null>(null);
+
+  const currentUserName = useUserName();
+  const myPinName = currentUserName || "ログイン看護師";
+  const myPinId = `nurse-me-${myPinName}`;
+  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
 
   // 💡 Zustandストアから状態とアクションを取得
   const allTasks = useTimelineStore((state) => state.allTasks);
+  const nurses = useTimelineStore((state) => state.nurses);
+  const setNurses = useTimelineStore((state) => state.setNurses);
   const toggleTaskSos = useTimelineStore((state) => state.toggleTaskSos);
+  const updateNursePosition = useTimelineStore((state) => state.updateNursePosition);
+
+  // 🧠 【100%確実表示＆重複ゼロ保証】ログイン中ユーザーのピンを自他判定しつつ完全1つに統一
+  const displayNurses = useMemo(() => {
+    const normalizedMyName = myPinName.replace(/[\s{1}]+/g, '');
+    const exists = nurses.some(
+      (n) => n.name.replace(/[\s　]+/g, '') === normalizedMyName || n.nurse_id === myPinId || n.nurse_id.includes('nurse-me')
+    );
+
+    let rawList = nurses;
+    if (!exists) {
+      const myNursePin: NursePin = {
+        nurse_id: myPinId,
+        name: myPinName,
+        role: '担当看護師(自分)',
+        color: '#7c3aed',
+        x_percent: 48.0,
+        y_percent: 45.0,
+      };
+      rawList = [myNursePin, ...nurses];
+    }
+
+    // 💡 名前（スペース無視）での重複排除フィルター
+    const seenNames = new Set<string>();
+    return rawList.filter((nurse) => {
+      const key = nurse.name.replace(/[\s　]+/g, '');
+      if (seenNames.has(key)) {
+        return false;
+      }
+      seenNames.add(key);
+      return true;
+    });
+  }, [currentUserName, myPinName, myPinId, nurses]);
 
   useEffect(() => {
     Promise.all([
@@ -76,9 +119,55 @@ export default function MapContainer(): React.JSX.Element {
       });
   }, []);
 
+  const mapContainerRef = React.useRef<HTMLDivElement>(null);
+
+  const handleDragStart = (event: DragStartEvent) => {
+    const activeData = event.active.data.current;
+    if (activeData?.type === 'nurse') {
+      setActiveNurse(activeData.nurse as NursePin);
+    }
+  };
+
+  const handleDragEnd = (event: DragEndEvent) => {
+    const { active, delta } = event;
+    setActiveNurse(null);
+
+    const activeNurseId = String(active.id).replace('nurse-', '');
+    const activeNurseObj = displayNurses.find(n => n.nurse_id === activeNurseId);
+
+    if (!activeNurseObj) return;
+
+    // 🧠 マップ実描画幅・高さ(px)を取得して移動量をパーセンテージに即時換算
+    const container = mapContainerRef.current;
+    if (container) {
+      const rect = container.getBoundingClientRect();
+      if (rect.width > 0 && rect.height > 0) {
+        const deltaXPercent = (delta.x / rect.width) * 100;
+        const deltaYPercent = (delta.y / rect.height) * 100;
+
+        const newXPercent = Math.min(Math.max(0, (activeNurseObj.x_percent || 50) + deltaXPercent), 92);
+        const newYPercent = Math.min(Math.max(0, (activeNurseObj.y_percent || 45) + deltaYPercent), 92);
+
+        const existsInStore = nurses.some(n => n.nurse_id === activeNurseId);
+        if (!existsInStore && activeNurseId.includes('me')) {
+          const myPin: NursePin = {
+            nurse_id: activeNurseId,
+            name: myPinName,
+            role: '担当看護師(自分)',
+            color: '#7c3aed',
+            x_percent: newXPercent,
+            y_percent: newYPercent,
+          };
+          setNurses([myPin, ...nurses]);
+        } else {
+          updateNursePosition(activeNurseId, newXPercent, newYPercent);
+        }
+      }
+    }
+  };
+
   // 💡 マップ上の患者が右クリックされた時のイベント
   const handlePatientRightClick = (taskId: string, patientName: string) => {
-    // 💡 すでに狙ったタスクIDが引数で直接渡ってくるので、そのままストアのアクションを呼ぶだけ！
     toggleTaskSos(
       taskId,
       `緊急応援：${patientName}さんのケア中に介助が必要になりました`
@@ -97,38 +186,45 @@ export default function MapContainer(): React.JSX.Element {
   const sosTasks = allTasks.filter(task => task.is_sos === true);
 
   return (
-    <div style={{ 
-        display: 'flex', 
-        width: '100vw',               /* 💡 画面の横幅いっぱいに広げる */
-        height: 'calc(100vh - 120px)', /* 💡 画面の高さからヘッダー（約120px分）を引いた高さに固定 */
-        backgroundColor: '#fff', 
-        boxSizing: 'border-box',
-        overflow: 'hidden'            /* 💡 外枠に余計なスクロールバーが出ないようにする */
-      }}>
-      {/* 💡 抽出したSOSタスクを流し込む */}
-      <LeftPanel sosTasks={sosTasks} />
-      
+    <DndContext sensors={sensors} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
       <div style={{ 
-          flexGrow: 1,                /* 💡 左右パネルの残りの隙間をすべてマップエリアに割り当てる */
-          height: '100%',             /* 💡 高さは親（100vh - 120px）に完全に合わせる */
           display: 'flex', 
-          justifyContent: 'center', 
-          alignItems: 'center',       /* 💡 縦横とも中央に配置 */
+          width: '100vw',               /* 💡 画面の横幅いっぱいに広げる */
+          height: 'calc(100vh - 120px)', /* 💡 画面の高さからヘッダー（約120px分）を引いた高さに固定 */
+          backgroundColor: '#fff', 
           boxSizing: 'border-box',
-          overflow: 'hidden'          /* 💡 マップがコンテナからはみ出すのを防ぐ */
+          overflow: 'hidden'            /* 💡 外枠に余計なスクロールバーが出ないようにする */
         }}>
-        <div style={{ width: '100%', height: '100%', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
-          <WardMap 
-            rooms={rooms} 
-            facilities={facilities} 
-            patients={patients} 
-            allTasks={allTasks} // 💡 これを追加！
-            onPatientRightClick={handlePatientRightClick} 
-          />
+        {/* 💡 抽出したSOSタスクを流し込む */}
+        <LeftPanel sosTasks={sosTasks} />
+        
+        <div style={{ 
+            flexGrow: 1,                /* 💡 左右パネルの残りの隙間をすべてマップエリアに割り当てる */
+            height: '100%',             /* 💡 高さは親（100vh - 120px）に完全に合わせる */
+            display: 'flex', 
+            justifyContent: 'center', 
+            alignItems: 'center',       /* 💡 縦横とも中央に配置 */
+            boxSizing: 'border-box',
+            overflow: 'hidden'          /* 💡 マップがコンテナからはみ出すのを防ぐ */
+          }}>
+          <div ref={mapContainerRef} style={{ width: '100%', height: '100%', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
+            <WardMap 
+              rooms={rooms} 
+              facilities={facilities} 
+              patients={patients} 
+              allTasks={allTasks} 
+              displayNurses={displayNurses}
+              onPatientRightClick={handlePatientRightClick} 
+            />
+          </div>
         </div>
+        
+        <RightPanel />
       </div>
-      
-      <RightPanel />
-    </div>
+
+      <DragOverlay dropAnimation={null}>
+        {activeNurse ? <DraggableNursePin nurse={activeNurse} isOverlay /> : null}
+      </DragOverlay>
+    </DndContext>
   );
 }

@@ -22,10 +22,23 @@ export function useTimelineDnd({ selectedPatients }: UseTimelineDndProps) {
   const [activeId, setActiveId] = useState<string | null>(null);
   const draggedTaskRef = useRef<ExtendedTask | null>(null);
 
+  // 全階層（children含む）からタスクを検索するヘルパー関数
+  const findTaskRecursive = useCallback((tasks: ExtendedTask[], targetId: string): ExtendedTask | null => {
+    for (const t of tasks) {
+      if (String(t.task_id) === targetId) return t;
+      if (t.children && t.children.length > 0) {
+        const found = findTaskRecursive(t.children, targetId);
+        if (found) return found;
+      }
+    }
+    return null;
+  }, []);
+
   const handleDragStart = (event: DragStartEvent) => {
-    const task = allTasks.find(t => String(t.task_id) === String(event.active.id));
+    const activeTargetId = String(event.active.id);
+    const task = findTaskRecursive(allTasks, activeTargetId);
     if (task) draggedTaskRef.current = task;
-    setActiveId(String(event.active.id));
+    setActiveId(activeTargetId);
   };
 
   const handleDragEnd = async (event: DragEndEvent) => {
@@ -53,7 +66,7 @@ export function useTimelineDnd({ selectedPatients }: UseTimelineDndProps) {
     }
 
     // --- C. グループ化バリデーション & 実行 ---
-    const targetTask = allTasks.find(t => String(t.task_id) === overId);
+    const targetTask = findTaskRecursive(allTasks, overId);
     const originalTask = draggedTaskRef.current;
 
     if (originalTask && targetTask && groupingMode !== null) {

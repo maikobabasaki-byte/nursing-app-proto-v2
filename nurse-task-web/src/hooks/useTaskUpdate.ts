@@ -86,14 +86,18 @@ export const updateTask = async (
     await updateDoc(taskRef, updatePayload);
     console.log(`Firestoreのタスク ${taskId} を更新しました:`, updatePayload);
 
-    // 💡 ステータスが completed または unexecuted の場合、GASへ非同期で書き戻す
+    // 💡 スプレッドシートへの書き戻し条件：実施完了（completed / record_complete）または 未実施（unexecuted）
     const newStatus = data.status || existingData.status;
-    if (newStatus === 'completed' || newStatus === 'unexecuted') {
+    const isCompletedStatus = newStatus === 'completed' || newStatus === 'record_complete';
+    const isUnexecutedStatus = newStatus === 'unexecuted';
+
+    if (isCompletedStatus || isUnexecutedStatus) {
       const emrOrderId = data.emr_order_id || existingData.emr_order_id || taskId;
       const nurseName = data.nurse_name || existingData.nurse_name || '';
       const unexecutedReason = data.unexecuted_reason !== undefined ? data.unexecuted_reason : (existingData.unexecuted_reason || '');
-      const finalCompletedAt = completedAtToSave || existingData.completed_at || (newStatus === 'completed' ? getJSTISOString() : '');
+      const finalCompletedAt = completedAtToSave || existingData.completed_at || (isCompletedStatus ? getJSTISOString() : '');
 
+      console.log(`📡 GASへの書き戻しを実行します: ID[${emrOrderId}], Status[${newStatus}]`);
       syncTaskToGAS({
         emr_order_id: emrOrderId,
         status: newStatus,

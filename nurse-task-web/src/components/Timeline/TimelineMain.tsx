@@ -16,16 +16,18 @@ import { normalizeToHHMM } from '../../utils/taskLogic';
 
 
 export default function TimelineMain({ 
-  timedTasks, 
-  groupingMode,     
-  setGroupingMode,
-  memos, // ★ この4つだけでスッキリ受け取る
+  selectedPatients
 }: TimelineMainProps) {
-
   const userName = useUserName();
   const handleUpdateStatus = useTimelineStore((state) => state.handleUpdateStatus);
+  const storeAllTasks = useTimelineStore((state) => state.allTasks);
   
-  const extendedTasks = timedTasks as ExtendedTask[];
+  // 🎯 【Single Source of Truth】ストアの全タスクから選択中の患者かつ時刻付きタスクを直取得
+  const extendedTasks = storeAllTasks.filter((task) => (
+    task && 
+    selectedPatients.includes(task.patient_id) && 
+    task.display_period?.includes(':')
+  ));
 
   // 🎯 表示に使うメモは、100%ストア（Zustand）側が管理しているものだけに一本化！
   // （これで親との間でピンポン感染のようなデータ再レンダリングループが発生しなくなります）
@@ -35,9 +37,21 @@ export default function TimelineMain({
   const activePopupTaskId = useTimelineStore((state) => state.activePopupTaskId);
   const setActivePopupTaskId = useTimelineStore((state) => state.setActivePopupTaskId);
 
-  // 現在詳細を開いているタスクオブジェクトを特定
-  const activePopupTask = extendedTasks.find(t => t.task_id === activePopupTaskId) || 
-    extendedTasks.flatMap(t => t.children || []).find(c => c.task_id === activePopupTaskId);
+  // 🎯 ストアの全タスクから親・子問わず安全に現在詳細を開いているタスクを深掘り特定
+  const activePopupTask = (() => {
+    if (!activePopupTaskId) return null;
+    const findTask = (list: ExtendedTask[]): ExtendedTask | null => {
+      for (const t of list) {
+        if (t.task_id === activePopupTaskId) return t;
+        if (t.children && t.children.length > 0) {
+          const found = findTask(t.children);
+          if (found) return found;
+        }
+      }
+      return null;
+    };
+    return findTask(storeAllTasks);
+  })();
 
   const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({});
   const toggleGroup = (groupId: string) => {
@@ -74,7 +88,7 @@ export default function TimelineMain({
       if (task.status === 'pending') {
         list.push(task);
       }
-      if (task.isGroup && task.children) {
+      if (task.isGroup && task.children && Array.isArray(task.children)) {
         task.children.forEach(child => {
           if (child.status === 'pending') {
             list.push({
@@ -113,9 +127,6 @@ export default function TimelineMain({
       <TimelineControls 
         timelineMode={timelineMode} 
         setTimelineMode={setTimelineMode}
-        // 現在のタスク選択中かどうかだけを渡す（モードそのものは親で管理）
-        groupingMode={groupingMode}        
-        setGroupingMode={setGroupingMode}  
       />
 
       <div 

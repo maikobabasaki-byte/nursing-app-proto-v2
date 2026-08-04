@@ -65,24 +65,18 @@ export default function Timeline({ selectedPatients }: TimelineProps) {
       >
         <div className="w-72 flex-shrink-0 bg-white border-r border-gray-200 h-full overflow-hidden">
           <TimelineSidebar 
-            tasks={poolTasks || []} 
-            groupingMode={groupingMode}
-            onStartGrouping={handleStartGrouping}
+            selectedPatients={selectedPatients}
           />
         </div>
 
         <div className="flex-1 min-w-0 overflow-auto bg-white">
-          {/* 💡 渡すデータをフックの生データから「Zustandストアのデータ」へ完全差し替え！ */}
           <TimelineMain 
-            timedTasks={timedTasks}
-            groupingMode={groupingMode}
-            setGroupingMode={setGroupingMode}
-            memos={storeMemos}
+            selectedPatients={selectedPatients}
           />
         </div>
       </main>
 
-      <DragOverlay>
+      <DragOverlay dropAnimation={null}>
         {activeId ? (() => {
           if (String(activeId).startsWith('memo-')) {
             const pureActiveId = String(activeId).replace('memo-', '');
@@ -104,7 +98,6 @@ export default function Timeline({ selectedPatients }: TimelineProps) {
             <TaskCard 
               task={activeTask} 
               onStartGrouping={handleStartGrouping}
-              groupingMode={groupingMode}
               cardColorClass={cardColorClass} 
               borderStyle={borderStyle}      
               className="shadow-2xl cursor-grabbing scale-105" 
