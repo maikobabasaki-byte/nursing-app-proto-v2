@@ -1,4 +1,6 @@
 import { useState, useEffect } from 'react';
+import { useUserName } from '../hooks/useUserName';
+import { ensureTodayTasksSynced } from '../services/taskSyncService';
 
 /**
  * 患者データの基本構造を定義する設計図（インターフェース）
@@ -26,8 +28,10 @@ interface PatientSelectProps {
  * 担当患者を選択する画面コンポーネント
  */
 export default function PatientSelect({ onSelectComplete }: PatientSelectProps) {
+  const userName = useUserName();
   const [role, setRole] = useState('member');
   const [patients, setPatients] = useState<Patient[]>([]);
+  const [isSyncing, setIsSyncing] = useState<boolean>(false);
 
   // 選択された患者のIDを記録するステート
   const [selectedPatientIds, setSelectedPatientIds] = useState<string[]>([]);
@@ -37,25 +41,16 @@ export default function PatientSelect({ onSelectComplete }: PatientSelectProps) 
    * 1. 患者データ（JSON）の非同期取得
    * 2. 取得した患者データを「病室順 ➔ ベッド番号順」に自動並び替え（ソート）
    */
-  // useEffectとは、「関数の実行タイミングをReactのレンダリング後まで遅らせるhook」のこと。副作用（サイドエフェクト）を扱うための仕組み。
   useEffect(() => {
-    // --- 患者データの取得と並び替え ---
     fetch('/data/patients.json')
       .then((res) => res.json())
       .then((data: Patient[]) => {
-        // 看護現場で使いやすいよう、病室（room_id）順、同室ならベッド番号順にソート
-                            // [...data]スプレッド構文。届いたオリジナルデータを、新しい配列に丸ごとコピー（複製）。
-                            // .sort() は、元のデータを直接書き換えてしまう性質（破壊的メソッド）があるため、コピーしてからソートすることで、元データを壊さないようにしている。
         const sortedData = [...data].sort((a, b) => {
-          // まず病室IDで比較（文字列比較）               // localeCompare：文字列（例: "room_401" と "room_402"）を「あいうえお順・アルファベット順」に比べるための命令
           if (a.room_id !== b.room_id) return a.room_id.localeCompare(b.room_id);
-          // 病室が同じなら、ベッド番号（数値）の昇順で比較
           return a.bed_number - b.bed_number;
         });
-        // ソート済みのデータをStateに保存
         setPatients(sortedData);
       })
-      // .catch(...)：もしファイルが存在しなかったり、通信エラーが起きたときに、アプリがフリーズしないようコンソールにエラー原因を書き残す保険の処理
       .catch((err) => console.error('データ読み込みエラー:', err));
   }, []); // 依存配列が空のため、コンポーネントが最初に表示された1回だけ実行される
 
@@ -297,10 +292,23 @@ export default function PatientSelect({ onSelectComplete }: PatientSelectProps) 
           {/* タスク取得ボタン */}
           <button 
             id="get-task-btn" 
-            className="text-[1.25em] !bg-[#1A365D] !text-white rounded-[10px] !p-[0.5em] !mt-[1em] !rounded w-fit text-center !font-bold hover:bg-[#112540] transition-colors mt-4"
-            onClick={() => onSelectComplete(selectedPatientIds)} 
+            disabled={isSyncing}
+            className={`text-[1.25em] !bg-[#1A365D] !text-white rounded-[10px] !p-[0.5em] !mt-[1em] !rounded w-fit text-center !font-bold hover:bg-[#112540] transition-colors mt-4 ${
+              isSyncing ? 'opacity-50 cursor-not-allowed' : ''
+            }`}
+            onClick={async () => {
+              setIsSyncing(true);
+              try {
+                await ensureTodayTasksSynced(userName);
+              } catch (e) {
+                console.error("タスク同期処理エラー:", e);
+              } finally {
+                setIsSyncing(false);
+                onSelectComplete(selectedPatientIds);
+              }
+            }} 
           >
-            タスク取得（患者マスター表示）
+            {isSyncing ? 'タスク同期・取得中...' : 'タスク取得（患者マスター表示）'}
           </button>
         </div>
       </div>

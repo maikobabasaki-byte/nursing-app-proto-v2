@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <title>看護タスク管理 APIテスト</title>
+    <style>
+        body { font-family: sans-serif; margin: 20px; color: #333; }
+        .controls { margin-bottom: 15px; }
+        button { padding: 8px 16px; cursor: pointer; border: none; border-radius: 4px; font-size: 14px; color: white; }
+        .btn-load { background-color: #007bff; }
+        .btn-load:hover { background-color: #0056b3; }
+        table { border-collapse: collapse; width: 100%; margin-top: 20px; font-size: 14px; }
+        th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+        th { background-color: #f8f9fa; }
+    </style>
+</head>
+<body>
+
+    <h1>看護タスク管理 APIテスト画面</h1>
+    <p>スプレッドシート側のメニューからリセットを行い、ブラウザ側でタスク一覧の取得と完了処理をテストできます。</p>
+    
+    <div class="controls">
+        <button class="btn-load" onclick="loadTasks()">タスク一覧を取得</button>
+    </div>
+
+    <div id="result"></div>
+
+    <script>
+        // 💡 ここにご自身の「ウェブアプリのURL」を貼り付けてください
+        const GAS_WEB_APP_URL = "https://script.google.com/macros/s/AKfycbziNUesm2NBesO3b_WsQ1KlKSTSkZb8C5XNKpGHWIaOWJDvv5m8icb_cOgIDH1k-FjDOQ/exec";
+
+        async function loadTasks() {
+            const resultDiv = document.getElementById("result");
+            resultDiv.innerHTML = "<p>読み込み中...</p>";
+            
+            try {
+                const response = await fetch(GAS_WEB_APP_URL);
+                const result = await response.json();
+                
+                if (result.status === "success") {
+                    const data = result.data;
+                    let html = `<table>
+                        <tr>
+                            <th>注文ID</th>
+                            <th>患者ID</th>
+                            <th>氏名</th>
+                            <th>部屋</th>
+                            <th>区分</th>
+                            <th>タイトル</th>
+                            <th>予定時間</th>
+                            <th>ステータス</th>
+                            <th>操作</th>
+                        </tr>`;
+                    
+                    data.forEach(task => {
+                        let actionButton = '';
+                        if (task.status === "completed") {
+                            actionButton = `<button disabled style="background-color: #6c757d; color: #fff; padding: 4px 8px; cursor: not-allowed; opacity: 0.7;">完了済み</button>`;
+                        } else {
+                            actionButton = `<button onclick="completeTask('${task.emr_order_id}')" style="background-color: #28a745; color: #fff; padding: 4px 8px;">完了にする</button>`;
+                        }
+
+                        html += `<tr>
+                            <td>${task.emr_order_id}</td>
+                            <td>${task.patient_id}</td>
+                            <td>${task.patient_name}</td>
+                            <td>${task.room}</td>
+                            <td>${task.origin}</td>
+                            <td>${task.title}</td>
+                            <td>${task.scheduled_time}</td>
+                            <td>${task.status}</td>
+                            <td>${actionButton}</td>
+                        </tr>`;
+                    });
+                    html += `</table>`;
+                    resultDiv.innerHTML = html;
+                } else {
+                    resultDiv.innerHTML = `<p style="color: red;">エラー: ${result.message}</p>`;
+                }
+            } catch (error) {
+                resultDiv.innerHTML = `<p style="color: red;">通信エラー: ${error}</p>`;
+            }
+        }
+
+        async function completeTask(orderId) {
+            try {
+                const response = await fetch(GAS_WEB_APP_URL, {
+                    method: "POST",
+                    headers: { "Content-Type": "text/plain;charset=utf-8" },
+                    body: JSON.stringify({
+                        emr_order_id: orderId,
+                        status: "completed",
+                        completed_at: new Date().toLocaleTimeString()
+                    })
+                });
+                
+                const result = await response.json();
+                if (result.status === "success") {
+                    loadTasks(); // 成功したら一覧を再読み込み
+                } else {
+                    alert("更新失敗: " + result.message);
+                }
+            } catch (error) {
+                alert("通信エラー: " + error);
+            }
+        }
+    </script>
+</body>
+</html>

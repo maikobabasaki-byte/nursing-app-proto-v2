@@ -16,6 +16,8 @@ import MapContainer from "./Map";
 import MainLayout from "../components/MainLayout";
 // import { seedDatabase } from "../scripts/seedDatabase";
 
+import { ensureTodayTasksSynced } from '../services/taskSyncService';
+
 type ScreenType = 'login' | 'patientSelect' | 'timeline' | 'patientMaster' | 'map';
 
 export default function App() {
@@ -58,18 +60,25 @@ export default function App() {
         const id = currentUser.email.split('@')[0];
         setUserName(id);
         
-        // ログイン済みの場合、login画面のままであればpatientSelectへ
-        if (currentScreen === 'login') {
-          setCurrentScreen('patientSelect');
-        }
+        // 💡 スプレッドシート (GAS) から絶対正本データを直取得して同期
+        ensureTodayTasksSynced(id);
+
+        // 💡 クロージャの古い変数に頼らず関数型更新で常に最新の表示画面を判定
+        setCurrentScreen((prevScreen) => {
+          if (prevScreen === 'login') {
+            return 'patientSelect';
+          }
+          return prevScreen;
+        });
       } else {
         setUser(null);
         setUserName('');
         setCurrentScreen('login');
-        // ログアウト時はストレージもクリア
+        // ログアウト時はストレージおよびストアのデータもクリア
         localStorage.removeItem('currentScreen');
         localStorage.removeItem('selectedPatients');
         setSelectedPatients([]);
+        useTimelineStore.getState().setTasks([]);
       }
       setLoading(false);
     });

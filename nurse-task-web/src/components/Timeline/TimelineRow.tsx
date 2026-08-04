@@ -54,11 +54,43 @@ export function TimelineRow({
 
       {/* 中央：タスクカード配置エリア */}
       <div className="p-2 min-h-[60px] relative flex flex-wrap flex-1 gap-2">
-        {placeholders.map(task => (
-           <div key={`placeholder-${task.task_id}`} className="w-64 border-2 border-dashed border-gray-300 bg-gray-50 text-gray-400 p-2 m-2 rounded shadow-sm flex flex-col justify-center items-center font-bold text-xs h-[84px]">
-             【中断・保留中】{task.room_id}号室 {task.patient_name}様
-           </div>
-        ))}
+        {placeholders.map(task => {
+          const isProgressing = task.status === 'progressing';
+          const isRecordStart = task.status === 'record_start';
+          const isRecordPending = task.status === 'record_pending';
+
+          let borderBgStyle = "border-gray-300 bg-gray-50 text-gray-500";
+          let statusBadge = "【中断・保留中】";
+
+          if (isProgressing) {
+            borderBgStyle = "border-sky-400 bg-sky-50/80 text-sky-900";
+            statusBadge = "🔵 【実施中】";
+          } else if (isRecordStart) {
+            borderBgStyle = "border-blue-400 bg-blue-50/80 text-blue-900";
+            statusBadge = "🟢 【記録中】";
+          } else if (isRecordPending) {
+            borderBgStyle = "border-orange-400 bg-orange-50/80 text-orange-900";
+            statusBadge = "🟠 【記録一時中断】";
+          }
+
+          return (
+            <div 
+              key={`placeholder-${task.task_id}`} 
+              onClick={() => setActivePopupTaskId(task.task_id)}
+              className={`w-64 border-2 border-dashed ${borderBgStyle} p-2.5 rounded shadow-sm flex flex-col justify-between font-bold text-xs min-h-[80px] cursor-pointer hover:shadow-md transition-all select-none`}
+            >
+              <div className="flex justify-between items-center w-full text-[10px]">
+                <span className="font-extrabold flex items-center gap-1">
+                  {isProgressing && <span className="animate-pulse text-sky-600">●</span>}
+                  {statusBadge}
+                </span>
+                <span className="opacity-75">{task.room_id ? `${task.room_id}号室` : ''}</span>
+              </div>
+              <div className="text-xs truncate text-left font-black">{task.patient_name}様</div>
+              <div className="text-[11px] truncate text-left opacity-90">{task.title}</div>
+            </div>
+          );
+        })}
         
         {rowTasks.map(task => {
           const { cardColorClass, borderStyle } = getTaskStyles(task, isPastTime);

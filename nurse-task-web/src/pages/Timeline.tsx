@@ -63,7 +63,7 @@ export default function Timeline({ selectedPatients }: TimelineProps) {
         }`}
         style={{ display: 'flex', flexDirection: 'row' }}
       >
-        <div className="w-fit flex-shrink-0 bg-white border-r border-gray-200 overflow-y-auto">
+        <div className="w-72 flex-shrink-0 bg-white border-r border-gray-200 h-full overflow-hidden">
           <TimelineSidebar 
             tasks={poolTasks || []} 
             groupingMode={groupingMode}

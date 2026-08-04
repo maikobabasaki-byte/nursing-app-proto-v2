@@ -13,6 +13,7 @@ export type TaskStatus =
 
 export interface Task {
   task_id: string;
+  emr_order_id?: string;
   title: string;
   details: string;
   status: TaskStatus; // stringではなく定義した型を使う
@@ -20,9 +21,12 @@ export interface Task {
   display_period: string;
   initial_period?: string;
   scheduled_at: string;
+  completed_at?: string;
   patient_id: string;
   room_id: string;
   patient_name: string;
+  nurse_name?: string;
+  is_additional?: boolean | string;
 
   is_sos?: boolean; 
   sos_reason?: string;
@@ -41,6 +45,7 @@ export type ExtendedTaskStatus = TaskStatus | 'record_pending';
 // これを Firebase (Firestore) の保存単位として使います
 export interface TaskDocument {
   task_id: string;
+  emr_order_id?: string;
   title: string;
   details: string;
   status: ExtendedTaskStatus;
@@ -48,9 +53,12 @@ export interface TaskDocument {
   initial_period: string;
   priority: 'high' | 'medium' | 'low';
   scheduled_at: string;
+  completed_at?: string;
   patient_id: string;
   room_id: string;
   patient_name: string;
+  nurse_name?: string;
+  is_additional?: boolean | string;
   parent_id?: string | null;
   is_sos?: boolean; 
   sos_reason?: string;

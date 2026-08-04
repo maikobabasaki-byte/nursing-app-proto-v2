@@ -1,5 +1,19 @@
 import type { ExtendedTask } from '../types/types';
 
+/**
+ * 様々な時刻文字列 ("10:00:00", "9:00", "10:00") から "HH:mm" 形式を抽出・正規化する
+ */
+export const normalizeToHHMM = (timeStr?: string): string => {
+  if (!timeStr) return "";
+  const match = String(timeStr).match(/(\d{1,2}):(\d{2})/);
+  if (match) {
+    const hh = match[1].padStart(2, '0');
+    const mm = match[2];
+    return `${hh}:${mm}`;
+  }
+  return timeStr.trim();
+};
+
 export const handleCardClick = (task: ExtendedTask) => {
   if (task.priority === 'high') {
     alert("このタスクは重要度が高いため、グループ化できません");
@@ -165,5 +179,41 @@ export const reconstructGroups = (flatTasks: ExtendedTask[]): ExtendedTask[] => 
     result.push(groupNode);
   });
 
+  return result;
+};
+
+/**
+ * ログインユーザーの実施中・記録中タスクを全階層（children含む）から抽出するヘルパー
+ */
+export const extractUserProgressingTasks = (
+  tasks: ExtendedTask[],
+  userName: string
+): ExtendedTask[] => {
+  if (!tasks || tasks.length === 0) return [];
+
+  const result: ExtendedTask[] = [];
+
+  const traverse = (list: ExtendedTask[]) => {
+    for (const task of list) {
+      // 実施中 (progressing) または 記録中 (record_start, record_pending)
+      const isProgressingStatus = 
+        task.status === 'progressing' || 
+        task.status === 'record_start' || 
+        task.status === 'record_pending';
+
+      // 担当者名が一致するか
+      const isNurseMatch = !userName || !task.nurse_name || task.nurse_name === userName;
+
+      if (isProgressingStatus && isNurseMatch) {
+        result.push(task);
+      }
+
+      if (task.children && task.children.length > 0) {
+        traverse(task.children);
+      }
+    }
+  };
+
+  traverse(tasks);
   return result;
 };

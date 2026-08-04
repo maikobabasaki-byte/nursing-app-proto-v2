@@ -1,6 +1,8 @@
-import { doc, updateDoc, serverTimestamp } from 'firebase/firestore';
+import { doc, getDoc, updateDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from '../lib/firebase';
-import type { TaskStatus } from '../types/types';
+import type { ExtendedTaskStatus } from '../types/types';
+import { syncTaskToGAS } from '../services/gasService';
+import { getJSTISOString } from '../utils/dateUtils';
 
 /**
  * Firestore上のタスク情報を更新する関数
@@ -10,19 +12,24 @@ import type { TaskStatus } from '../types/types';
 export const updateTask = async (
   taskId: string, 
   data: { 
-    status?: TaskStatus; 
+    status?: ExtendedTaskStatus; 
     display_period?: string; 
     time?: string; 
     parent_id?: string | null;
     is_sos?: boolean;
     sos_reason?: string;
     unexecuted_reason?: string;
-    initial_period?: string; // 型追加済み
+    initial_period?: string;
+    nurse_name?: string;
+    completed_at?: string;
+    emr_order_id?: string;
   }
 ) => {
   try {
     const taskRef = doc(db, 'tasks', taskId);
-    
+    const docSnap = await getDoc(taskRef);
+    const existingData = docSnap.exists() ? docSnap.data() : {};
+
     // Firestore のドキュメント構造にマッピングして保存
     const updatePayload: any = {
       updatedAt: serverTimestamp(),
@@ -54,13 +61,47 @@ export const updateTask = async (
       updatePayload.unexecuted_reason = data.unexecuted_reason;
     }
 
-    // 💡 initial_period も Firestore の更新対象に追加！
     if (data.initial_period !== undefined) {
       updatePayload.initial_period = data.initial_period;
     }
 
+    if (data.nurse_name !== undefined) {
+      updatePayload.nurse_name = data.nurse_name;
+    }
+
+    // ステータスが completed の場合、completed_at が渡されていなければ日本時間の現在時刻をセット
+    let completedAtToSave = data.completed_at;
+    if (data.status === 'completed' && !completedAtToSave) {
+      completedAtToSave = getJSTISOString();
+    }
+
+    if (completedAtToSave !== undefined) {
+      updatePayload.completed_at = completedAtToSave;
+    }
+
+    if (data.emr_order_id !== undefined) {
+      updatePayload.emr_order_id = data.emr_order_id;
+    }
+
     await updateDoc(taskRef, updatePayload);
     console.log(`Firestoreのタスク ${taskId} を更新しました:`, updatePayload);
+
+    // 💡 ステータスが completed または unexecuted の場合、GASへ非同期で書き戻す
+    const newStatus = data.status || existingData.status;
+    if (newStatus === 'completed' || newStatus === 'unexecuted') {
+      const emrOrderId = data.emr_order_id || existingData.emr_order_id || taskId;
+      const nurseName = data.nurse_name || existingData.nurse_name || '';
+      const unexecutedReason = data.unexecuted_reason !== undefined ? data.unexecuted_reason : (existingData.unexecuted_reason || '');
+      const finalCompletedAt = completedAtToSave || existingData.completed_at || (newStatus === 'completed' ? getJSTISOString() : '');
+
+      syncTaskToGAS({
+        emr_order_id: emrOrderId,
+        status: newStatus,
+        completed_at: finalCompletedAt,
+        nurse_name: nurseName,
+        unexecuted_reason: unexecutedReason,
+      });
+    }
   } catch (error) {
     console.error("Firestoreタスクの更新エラー:", error);
   }

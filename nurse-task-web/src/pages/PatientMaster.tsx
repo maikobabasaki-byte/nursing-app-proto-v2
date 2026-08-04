@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useTimelineStore } from '../stores/useTimelineStore';
+import { normalizeToHHMM } from '../utils/taskLogic';
 
 // --- 型定義 ---
 interface Patient {
@@ -36,18 +37,13 @@ export default function PatientMasterPage({ selectedIds }: DashboardProps) {
 
   // 1. マウント時に患者マスタの静的データだけを取得
   useEffect(() => {
-    console.log("🚀 データ取得開始: /data/patients.json");
     fetch('/data/patients.json')
-      .then((res) => {
-        if (!res.ok) throw new Error("patients.json が見つかりません");
-        return res.json();
-      })
+      .then((res) => res.json())
       .then((data) => {
         setRawPatients(data);
       })
       .catch((err) => {
         console.error('❌ 患者データ取得失敗:', err);
-        alert("エラー: " + err.message + "\npublic/data/ フォルダにJSONがあるか確認してください！");
       });
   }, []);
 
@@ -155,7 +151,7 @@ export default function PatientMasterPage({ selectedIds }: DashboardProps) {
                   <div className="p-4 flex-1 flex flex-col gap-2 justify-center text-sm font-medium">
                     {patient.tasks?.map((task, idx) => (
                       <div key={task.task_id || idx} className="flex items-center gap-2 text-slate-700">
-                        <span className="w-12 text-xs text-slate-400 shrink-0">{task.display_period}</span>
+                        <span className="w-12 text-xs text-slate-400 shrink-0">{normalizeToHHMM(task.display_period)}</span>
                         <span className={task.title.toLowerCase().includes(searchWord.toLowerCase()) ? "bg-yellow-100 px-1 rounded font-bold text-cyan-900" : ""}>
                           {task.title}
                         </span>
@@ -204,7 +200,7 @@ export default function PatientMasterPage({ selectedIds }: DashboardProps) {
                         <div key={task.task_id || idx} className={`flex items-center gap-2 ${textColor}`}>
                           {isUnrecorded ? <span className="text-sky-500 text-xs shrink-0">●</span> : <span className="w-2 shrink-0"></span>}
                           <span className={`w-12 text-xs shrink-0 ${isUnrecorded ? 'text-sky-500' : isRecorded ? 'text-sky-200' : 'text-slate-400'}`}>
-                            {task.display_period}
+                            {normalizeToHHMM(task.display_period)}
                           </span>
                           <span>{task.title}</span>
                         </div>

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import WardMap from '../components/Map/WardMap';
 import type { Patient, Room, Facility } from '../components/Map/WardMap';
-import { useTimelineStore } from '../stores/useTimelineStore'; // 💡 作成したZustandストアをインポート
+import { useTimelineStore } from '../stores/useTimelineStore';
 
 // 💡 左側のSOSパネル（LeftPanel）：ストアから切り取ってきたSOSタスクを流し込みます
 const LeftPanel: React.FC<{ sosTasks: any[] }> = ({ sosTasks }) => (
@@ -68,7 +68,6 @@ export default function MapContainer(): React.JSX.Element {
         setPatients(patientsData);
         setRooms(roomsData.rooms || []);
         setFacilities(roomsData.facilities || []);
-        
         setLoading(false);
       })
       .catch((err) => {

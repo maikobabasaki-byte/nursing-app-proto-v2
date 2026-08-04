@@ -11,6 +11,8 @@ import { UnexecutedReasonModal } from './UnexecutedReasonModal';
 import { PendingTray } from './PendingTray';
 import { useTimelineStore } from '../../stores/useTimelineStore'; // ★追加
 import { updateTask } from '../../hooks/useTaskUpdate';
+import { useUserName } from '../../hooks/useUserName';
+import { normalizeToHHMM } from '../../utils/taskLogic';
 
 
 export default function TimelineMain({ 
@@ -20,6 +22,7 @@ export default function TimelineMain({
   memos, // ★ この4つだけでスッキリ受け取る
 }: TimelineMainProps) {
 
+  const userName = useUserName();
   const handleUpdateStatus = useTimelineStore((state) => state.handleUpdateStatus);
   
   const extendedTasks = timedTasks as ExtendedTask[];
@@ -98,7 +101,7 @@ export default function TimelineMain({
     });
 
     handleUpdateStatus(task.task_id, 'unexecuted', reason);
-    updateTask(task.task_id, { status: 'unexecuted', unexecuted_reason: reason });
+    updateTask(task.task_id, { status: 'unexecuted', unexecuted_reason: reason, nurse_name: userName });
 
     setTimeout(() => {
       setToast((prev) => ({ ...prev, visible: false }));
@@ -122,16 +125,27 @@ export default function TimelineMain({
         <LiveCurrentTimeLine timelineMode={timelineMode} containerRef={containerRef} rowRefs={rowRefs} />
 
         {timeSlots.map((time) => {
-          const currentRows = extendedTasks.filter(t => t.display_period === time);
+          const currentRows = extendedTasks.filter(t => {
+            // 💡 display_period にコロン (:) が含まれないタスク ("午前", "午後", "随時" 等) は
+            // scheduled_at の値に関わらずタイムラインの時刻行へは配置しない
+            if (!t.display_period || !t.display_period.includes(':')) {
+              return false;
+            }
+            const periodTime = normalizeToHHMM(t.display_period);
+            return periodTime === time;
+          });
+
+          const isPlaceholderStatus = (status: string) => 
+            status === 'pending' || status === 'progressing' || status === 'record_start' || status === 'record_pending';
 
           const filteredRowTasks = currentRows.filter(t => {
-            if (!t.isGroup && t.status === 'pending') return false;
-            if (t.isGroup && t.status === 'pending') return false;   
+            if (!t.isGroup && isPlaceholderStatus(t.status)) return false;
+            if (t.isGroup && isPlaceholderStatus(t.status)) return false;   
             if (t.isChild && !t.isGroup) return false;              
             return true;
           });
 
-          const filteredPlaceholders = currentRows.filter(t => !t.isGroup && t.status === 'pending');
+          const filteredPlaceholders = currentRows.filter(t => !t.isGroup && isPlaceholderStatus(t.status));
 
           return (
             <TimelineRow 
@@ -192,7 +206,10 @@ export default function TimelineMain({
                 
                 handleUpdateStatus(t.task_id, s);
                 // Firestoreにステータス変更を保存（未実施から別ステータスへ変わる場合は理由もクリア）
-                const firestoreUpdate: { status: typeof s; unexecuted_reason?: string } = { status: s };
+                const firestoreUpdate: { status: typeof s; unexecuted_reason?: string; nurse_name?: string } = { 
+                  status: s,
+                  nurse_name: userName 
+                };
                 if (t.status === 'unexecuted') {
                   firestoreUpdate.unexecuted_reason = '';
                 }

@@ -118,6 +118,8 @@ export default function WardMap({
                 const textX = bedX + BED_W / 2;
                 const textY = bedTopY + BED_H / 2;
 
+                const hasSos = allTasks.some(t => t.patient_id === patient.patient_id && t.is_sos === true);
+
                 return (
                   <g 
                     key={patient.patient_id}
@@ -138,7 +140,50 @@ export default function WardMap({
                       });
                     }}
                   >
-                    <text x={textX} y={textY} textAnchor="middle" dominantBaseline="central" fontSize="20" fill="#333" fontWeight="500">
+                    {/* 🚨 SOS緊急アラート時の赤枠＆ハイライト表示 */}
+                    {hasSos && (
+                      <g>
+                        <rect 
+                          x={bedX + 2} 
+                          y={bedTopY + 2} 
+                          width={BED_W - 4} 
+                          height={BED_H - 4} 
+                          fill="#ffebee" 
+                          stroke="#d32f2f" 
+                          strokeWidth={3} 
+                          rx={6} 
+                        />
+                        <rect 
+                          x={bedX + BED_W - 34} 
+                          y={bedTopY + 4} 
+                          width={30} 
+                          height={16} 
+                          rx={3} 
+                          fill="#d32f2f" 
+                        />
+                        <text 
+                          x={bedX + BED_W - 19} 
+                          y={bedTopY + 12} 
+                          textAnchor="middle" 
+                          dominantBaseline="central" 
+                          fontSize="10" 
+                          fill="#ffffff" 
+                          fontWeight="bold"
+                        >
+                          SOS
+                        </text>
+                      </g>
+                    )}
+
+                    <text 
+                      x={textX} 
+                      y={textY} 
+                      textAnchor="middle" 
+                      dominantBaseline="central" 
+                      fontSize="20" 
+                      fill={hasSos ? "#c62828" : "#333"} 
+                      fontWeight={hasSos ? "bold" : "500"}
+                    >
                       {patient.name}
                     </text>
                   </g>
