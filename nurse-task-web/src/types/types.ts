@@ -30,6 +30,7 @@ export interface Task {
 
   is_sos?: boolean; 
   sos_reason?: string;
+  responder_name?: string;
   unexecuted_reason?: string;
 
   isGroup?: boolean;
@@ -152,4 +153,28 @@ export interface Memo {
   text: string;
   time: string;
   scheduledAt?: string;
+}
+
+export type LeaderTodoCategory = '患者対応' | '家族対応' | '医師への連絡' | '検査・処置' | 'その他';
+export type LeaderTodoPriority = 'highest' | 'high' | 'medium' | 'low';
+
+export interface LeaderTodo {
+  todo_id: string;
+  nurse_id?: string;
+  user_id?: string;
+  patient_id: string;
+  patient_name: string;
+  room_id: string;
+  category: LeaderTodoCategory;
+  title: string;
+  scheduled_at: string;
+  priority: LeaderTodoPriority;
+  requires_double_check: boolean;
+  status: 'untouched' | 'in_progress' | 'completed' | 'pending' | 'deleted';
+  is_deleted?: boolean;
+  deleted_at?: any;
+  result_outcome?: string;
+  doctor_instructions?: string;
+  updated_by?: string;
+  updated_at?: any;
 }

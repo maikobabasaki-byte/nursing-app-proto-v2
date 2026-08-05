@@ -6,20 +6,37 @@ import { DndContext, DragOverlay, useSensor, useSensors, PointerSensor, type Dra
 import { DraggableNursePin } from '../components/Map/DraggableNursePin';
 import { useUserName } from '../hooks/useUserName';
 
-// 💡 左側のSOSパネル（LeftPanel）：ストアから切り取ってきたSOSタスクを流し込みます
-const LeftPanel: React.FC<{ sosTasks: any[] }> = ({ sosTasks }) => (
-  <div style={{ width: '220px', flexShrink: 0, backgroundColor: '#ffebee', padding: '15px', borderRight: '1px solid #e0e0e0', boxSizing: 'border-box' }}>
+// 💡 左側のSOSパネル（LeftPanel）：タスクSOSおよび看護師SOSをリアルタイム統合表示
+const LeftPanel: React.FC<{ sosTasks: any[]; sosNurses: NursePin[] }> = ({ sosTasks, sosNurses }) => (
+  <div style={{ width: '220px', flexShrink: 0, backgroundColor: '#ffebee', padding: '15px', borderRight: '1px solid #e0e0e0', boxSizing: 'border-box', overflowY: 'auto' }}>
     <h3 style={{ fontWeight: 'bold', marginBottom: '15px', color: '#c62828', display: 'flex', alignItems: 'center', gap: '5px' }}>
       🚨 緊急アラート
     </h3>
     
-    {sosTasks.length === 0 ? (
+    {sosTasks.length === 0 && sosNurses.length === 0 ? (
       <p style={{ color: '#666', fontSize: '13px', textAlign: 'center', marginTop: '20px', lineHeight: '1.5' }}>
         現在、SOSはありません。<br/>
-        <span style={{ fontSize: '11px', color: '#999' }}>（患者名を右クリックしてSOSを発生させられます）</span>
+        <span style={{ fontSize: '11px', color: '#999' }}>（自分のピン右クリックでSOS可能）</span>
       </p>
     ) : (
       <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+        {/* 1. 看護師からの緊急要請 (Nurse SOS) */}
+        {sosNurses.map((nurse) => (
+          <div key={`nurse-sos-${nurse.nurse_id}`} style={{ backgroundColor: '#fff', borderLeft: '5px solid #d32f2f', padding: '10px', borderRadius: '4px', boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }}>
+            <div style={{ fontWeight: 'bold', color: '#c62828', fontSize: '13px', marginBottom: '4px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <span>🩺 看護師要請</span>
+              <span style={{ fontSize: '10px', backgroundColor: '#ffebee', color: '#c62828', padding: '2px 5px', borderRadius: '3px', fontWeight: 'bold' }}>緊急</span>
+            </div>
+            <div style={{ fontSize: '12px', fontWeight: 'bold', color: '#333', marginBottom: '4px' }}>
+              対象: {nurse.name} さん
+            </div>
+            <div style={{ fontSize: '11px', color: '#666', backgroundColor: '#fff5f5', padding: '6px', borderRadius: '2px', lineHeight: '1.4' }}>
+              ⚠️ {nurse.sos_reason || `${nurse.name}さんが緊急応援を要請しています`}
+            </div>
+          </div>
+        ))}
+
+        {/* 2. 患者タスクからの緊急要請 (Task SOS) */}
         {sosTasks.map((task) => (
           <div key={task.task_id} style={{ backgroundColor: '#fff', borderLeft: '5px solid #d32f2f', padding: '10px', borderRadius: '4px', boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }}>
             <div style={{ fontWeight: 'bold', color: '#c62828', fontSize: '14px', marginBottom: '4px' }}>
@@ -38,14 +55,34 @@ const LeftPanel: React.FC<{ sosTasks: any[] }> = ({ sosTasks }) => (
   </div>
 );
 
-const RightPanel: React.FC = () => (
-  <div style={{ width: '200px', flexShrink: 0, backgroundColor: '#ffebee', padding: '20px', borderLeft: '1px solid #e0e0e0', boxSizing: 'border-box' }}>
-    <h3 style={{ fontWeight: 'bold', marginBottom: '10px' }}>チーム負荷</h3>
-    <p style={{ color: '#666', fontSize: '13px' }}>（リアルタイム連動）</p>
-  </div>
-);
 
-export default function MapContainer(): React.JSX.Element {
+import TeamProgressWidget from '../components/TeamProgressWidget';
+
+const RightPanel: React.FC<{ nurses: NursePin[]; selectedPatients?: string[] }> = ({ nurses, selectedPatients }) => {
+  return <TeamProgressWidget nurses={nurses} selectedPatients={selectedPatients} />;
+};
+
+interface MapContainerProps {
+  selectedPatients?: string[];
+}
+
+export default function MapContainer({ selectedPatients }: MapContainerProps): React.JSX.Element {
+  // 💡 受け持ち患者IDリスト（props または sessionStorage から安全に復元）
+  const activeSelectedPatients = useMemo(() => {
+    if (selectedPatients && selectedPatients.length > 0) {
+      return selectedPatients;
+    }
+    try {
+      const saved = sessionStorage.getItem('selectedPatients');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) return parsed;
+      }
+    } catch (e) {
+      console.error('selectedPatients parse error:', e);
+    }
+    return [];
+  }, [selectedPatients]);
   const [patients, setPatients] = useState<Patient[]>([]);
   const [rooms, setRooms] = useState<Room[]>([]);
   const [facilities, setFacilities] = useState<Facility[]>([]);
@@ -65,36 +102,21 @@ export default function MapContainer(): React.JSX.Element {
   const updateNursePosition = useTimelineStore((state) => state.updateNursePosition);
 
   // 🧠 【100%確実表示＆重複ゼロ保証】ログイン中ユーザーのピンを自他判定しつつ完全1つに統一
+  // 🧠 【完全な重複排除】出勤中（is_logged_in !== false）の看護師のみ一意にフィルタリング
   const displayNurses = useMemo(() => {
-    const normalizedMyName = myPinName.replace(/[\s{1}]+/g, '');
-    const exists = nurses.some(
-      (n) => n.name.replace(/[\s　]+/g, '') === normalizedMyName || n.nurse_id === myPinId || n.nurse_id.includes('nurse-me')
-    );
-
-    let rawList = nurses;
-    if (!exists) {
-      const myNursePin: NursePin = {
-        nurse_id: myPinId,
-        name: myPinName,
-        role: '担当看護師(自分)',
-        color: '#7c3aed',
-        x_percent: 48.0,
-        y_percent: 45.0,
-      };
-      rawList = [myNursePin, ...nurses];
-    }
-
-    // 💡 名前（スペース無視）での重複排除フィルター
-    const seenNames = new Set<string>();
-    return rawList.filter((nurse) => {
-      const key = nurse.name.replace(/[\s　]+/g, '');
-      if (seenNames.has(key)) {
+    const seenKeys = new Set<string>();
+    return nurses.filter((nurse) => {
+      if (nurse.is_logged_in === false) {
         return false;
       }
-      seenNames.add(key);
+      const key = nurse.nurse_id || nurse.name.replace(/[\s　]+/g, '');
+      if (seenKeys.has(key)) {
+        return false;
+      }
+      seenKeys.add(key);
       return true;
     });
-  }, [currentUserName, myPinName, myPinId, nurses]);
+  }, [nurses]);
 
   useEffect(() => {
     Promise.all([
@@ -182,8 +204,11 @@ export default function MapContainer(): React.JSX.Element {
     );
   }
 
-  // 💡 ストアのタスク全体から SOS が true になっているものだけをフィルター
+  // 💡 ストアのタスク全体から SOS が true になっているものをフィルター
   const sosTasks = allTasks.filter(task => task.is_sos === true);
+
+  // 💡 ストアの看護師から SOS が true になっているものをフィルター
+  const sosNurses = displayNurses.filter(nurse => nurse.is_sos === true);
 
   return (
     <DndContext sensors={sensors} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
@@ -195,8 +220,8 @@ export default function MapContainer(): React.JSX.Element {
           boxSizing: 'border-box',
           overflow: 'hidden'            /* 💡 外枠に余計なスクロールバーが出ないようにする */
         }}>
-        {/* 💡 抽出したSOSタスクを流し込む */}
-        <LeftPanel sosTasks={sosTasks} />
+        {/* 💡 抽出したSOSタスクおよびSOS看護師を流し込む */}
+        <LeftPanel sosTasks={sosTasks} sosNurses={sosNurses} />
         
         <div style={{ 
             flexGrow: 1,                /* 💡 左右パネルの残りの隙間をすべてマップエリアに割り当てる */
@@ -219,7 +244,7 @@ export default function MapContainer(): React.JSX.Element {
           </div>
         </div>
         
-        <RightPanel />
+        <RightPanel nurses={displayNurses} selectedPatients={activeSelectedPatients} />
       </div>
 
       <DragOverlay dropAnimation={null}>

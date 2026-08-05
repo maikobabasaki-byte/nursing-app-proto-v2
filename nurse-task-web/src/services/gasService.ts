@@ -44,18 +44,30 @@ export interface GASPatientResponse {
   [key: string]: any;
 }
 
+export interface GASNurseMasterResponse {
+  nurse_id: string;
+  name: string;
+  gender?: string;
+  team?: string;
+  email?: string;
+  is_leader?: boolean;
+}
+
 export interface GASFetchResult {
   tasks: GASTaskResponse[];
   patients: GASPatientResponse[];
+  rooms?: any[];
+  facilities?: any[];
+  nurses: GASNurseMasterResponse[];
 }
 
 /**
- * GASのGETエンドポイントからタスク一覧と患者マスター一覧をまとめて取得
+ * GASのGETエンドポイントから全マスターデータ (Tasks, Patients, Rooms, Facilities, Nurses) を取得
  */
 export const fetchGASData = async (): Promise<GASFetchResult> => {
   if (!GAS_API_URL) {
     console.warn("VITE_GAS_API_URL が設定されていません");
-    return { tasks: [], patients: [] };
+    return { tasks: [], patients: [], rooms: [], facilities: [], nurses: [] };
   }
 
   try {
@@ -75,6 +87,9 @@ export const fetchGASData = async (): Promise<GASFetchResult> => {
 
     let tasks: GASTaskResponse[] = [];
     let patients: GASPatientResponse[] = [];
+    let rooms: any[] = [];
+    let facilities: any[] = [];
+    let nurses: GASNurseMasterResponse[] = [];
 
     if (Array.isArray(data)) {
       tasks = data;
@@ -83,12 +98,15 @@ export const fetchGASData = async (): Promise<GASFetchResult> => {
       else if (Array.isArray(data.data)) tasks = data.data;
 
       if (Array.isArray(data.patients)) patients = data.patients;
+      if (Array.isArray(data.rooms)) rooms = data.rooms;
+      if (Array.isArray(data.facilities)) facilities = data.facilities;
+      if (Array.isArray(data.nurses)) nurses = data.nurses;
     }
 
-    return { tasks, patients };
+    return { tasks, patients, rooms, facilities, nurses };
   } catch (error) {
     console.error("GASデータ取得エラー:", error);
-    return { tasks: [], patients: [] };
+    return { tasks: [], patients: [], rooms: [], facilities: [], nurses: [] };
   }
 };
 

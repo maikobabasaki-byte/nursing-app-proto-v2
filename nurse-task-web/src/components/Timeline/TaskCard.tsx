@@ -96,8 +96,13 @@ if (transform) {
       >
         <div className="flex items-center justify-between mb-1 gap-1 min-w-0">
           <div className="flex items-center gap-1.5 min-w-0">
-            <span className="text-sm font-bold whitespace-nowrap flex-shrink-0">{task.display_period}</span>
-            {originalTime && originalTime !== task.display_period && (
+            <span className="text-sm font-bold whitespace-nowrap flex-shrink-0">
+              {task.display_period || task.scheduled_at || ''}
+            </span>
+            {originalTime &&
+             originalTime !== task.display_period &&
+             originalTime !== task.scheduled_at &&
+             originalTime.includes(':') && (
               <span className="bg-gray-700 text-white text-xs px-1.5 py-0.5 rounded font-normal whitespace-nowrap opacity-90 flex-shrink-0">
                 指示: {originalTime}
               </span>
@@ -113,7 +118,11 @@ if (transform) {
         
         <div className="text-sm text-left">{task.title}</div>
         
-        {task.details && (
+        {task.details &&
+         task.details.trim() !== '' &&
+         task.details.trim() !== '無題タスク' &&
+         task.details.trim() !== '詳細なし' &&
+         task.details.trim() !== 'なし' && (
           <div className="text-[11px] font-normal mt-0.5 border-t border-dashed border-current/20 pt-0.5 opacity-80 text-left">
             {task.details}
           </div>

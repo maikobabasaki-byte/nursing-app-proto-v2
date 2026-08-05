@@ -3,30 +3,34 @@ import { useUserName } from '../hooks/useUserName';
 import { useLogout } from '../hooks/useLogout';
 
 interface GlobalHeaderProps {
-  currentPage: 'login' | 'patientSelect' | 'patientMaster' | 'timeline' | 'map';
+  currentPage: 'login' | 'patientSelect' | 'patientMaster' | 'timeline' | 'map' | 'leaderTodo';
   // 💡 画面遷移を実行するための関数Propを追加
-  onNavigate: (screen: 'patientSelect' | 'patientMaster' | 'timeline' | 'map') => void;
+  onNavigate: (screen: 'patientSelect' | 'patientMaster' | 'timeline' | 'map' | 'leaderTodo') => void;
   onLogout?: () => void; // ログアウト用（必要に応じて）
 }
+
+import { useTimelineStore } from '../stores/useTimelineStore';
 
 export default function GlobalHeader({ currentPage, onNavigate}: GlobalHeaderProps) {
    const { time } = useTimer();
    const userName = useUserName();
    const logout = useLogout();
+   const currentUser = useTimelineStore((state) => state.currentUser);
+   const isLeader = currentUser?.is_leader === true;
+
   // 💡 「患者マスター」タブを青くアクティブにする条件（マスター画面 or 患者選択画面のとき）
   const isMasterActive = currentPage === 'patientMaster' || currentPage === 'patientSelect';
 
   return (
     <header className="flex justify-between items-center p-2 bg-sky-200 border-b w-full">
-      <h1>
+      <h1 className="cursor-pointer" onClick={() => onNavigate('patientSelect')}>
         <img src="/icon_b/local_hospital_48dp.png" alt="NurseFlow Dashboard" className="w-8 h-8 inline mr-2" />
         <span className="header-title-text font-bold text-lg">NurseFlowApp</span>
       </h1>
       
-      <nav className="w-72">
-        <ul className="flex justify-between text-center">
+      <nav className={isLeader ? "w-96" : "w-72"}>
+        <ul className="flex justify-between items-center text-center text-xs">
           {/* 👥 患者マスター */}
-          {/* 💡 クリックしたら 'patientMaster' 画面へ遷移。表示条件は isMasterActive を使う */}
           <li className="cursor-pointer" onClick={() => onNavigate('patientMaster')}>
             <img 
               src={isMasterActive 
@@ -34,7 +38,7 @@ export default function GlobalHeader({ currentPage, onNavigate}: GlobalHeaderPro
                 : "/icon_b/account_circle_48dp.png"
               } 
               alt="患者マスター" 
-              className="mx-auto w-10 h-10" 
+              className="mx-auto w-8 h-8" 
             />
             <span className={isMasterActive ? "text-blue-600 font-bold" : "text-gray-600"}>
               患者マスター
@@ -42,7 +46,6 @@ export default function GlobalHeader({ currentPage, onNavigate}: GlobalHeaderPro
           </li>
           
           {/* 🗓️ タイムライン */}
-          {/* 💡 onClick で timeline を指定 */}
           <li className="cursor-pointer" onClick={() => onNavigate('timeline')}>
             <img 
               src={currentPage === 'timeline' 
@@ -50,13 +53,12 @@ export default function GlobalHeader({ currentPage, onNavigate}: GlobalHeaderPro
                 : "/icon_b/event_note_48dp.png"
               } 
               alt="タイムライン" 
-              className="mx-auto w-10 h-10" 
+              className="mx-auto w-8 h-8" 
             />
             <span className={currentPage === 'timeline' ? "text-blue-600 font-bold" : "text-gray-600"}>タイムライン</span>
           </li>
 
           {/* 📍 マップ */}
-          {/* 💡 onClick で map を指定 */}
           <li className="cursor-pointer" onClick={() => onNavigate('map')}>
             <img 
               src={currentPage === 'map' 
@@ -64,10 +66,25 @@ export default function GlobalHeader({ currentPage, onNavigate}: GlobalHeaderPro
                 : "/icon_b/pin_drop_48dp.png"
               } 
               alt="マップ" 
-              className="mx-auto w-10 h-10" 
+              className="mx-auto w-8 h-8" 
             />
             <span className={currentPage === 'map' ? "text-blue-600 font-bold" : "text-gray-600"}>マップ</span>
           </li>
+
+          {/* 📋 リーダーTODO（💡 リーダー権限保持者のみ表示） */}
+          {isLeader && (
+            <li className="cursor-pointer" onClick={() => onNavigate('leaderTodo')}>
+              <img 
+              src={currentPage === 'leaderTodo' 
+                ? "/icon_active/add_task_48dp_155DFC_FILL1_wght400_GRAD0_opsz48.png" 
+                : "/icon_b/add_task_48dp_1A365D.png"
+              } 
+              alt="リーダーTODO" 
+              className="mx-auto w-8 h-8" 
+            />
+              <span className={currentPage === 'leaderTodo' ? "text-blue-600 font-bold" : "text-gray-600"}>リーダーTODO</span>
+            </li>
+          )}
         </ul>
       </nav>
 

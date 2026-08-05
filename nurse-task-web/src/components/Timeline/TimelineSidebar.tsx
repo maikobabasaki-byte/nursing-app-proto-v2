@@ -18,10 +18,21 @@ export default function TimelineSidebar({
   const handleStartGrouping = useTimelineStore((state) => state.handleStartGrouping);
   const setActivePopupTaskId = useTimelineStore((state) => state.setActivePopupTaskId);
 
-  // 🎯 【Single Source of Truth】ストアの全タスクからプール用タスクを直算出
-  const poolTasks = allTasks.filter(task => 
-    selectedPatients.includes(task.patient_id) && !task.display_period?.includes(':')
-  );
+  const currentUser = useTimelineStore((state) => state.currentUser);
+  const showLowPriority = useTimelineStore((state) => state.showLowPriority);
+  const isLeader = currentUser?.is_leader === true;
+
+  // 🎯 【Single Source of Truth】ストアの全タスクからプール用タスクを直算出（リーダー時かつshowLowPriorityがfalseの場合低優先度を除外）
+  const poolTasks = allTasks.filter(task => {
+    if (!selectedPatients.includes(task.patient_id) || task.display_period?.includes(':')) {
+      return false;
+    }
+    // 💡 リーダー画面で showLowPriority が false の場合のみ、優先度「低 (low)」をタスクプールから除外
+    if (isLeader && !showLowPriority && task.priority === 'low') {
+      return false;
+    }
+    return true;
+  });
 
   // Zustandの全タスクからログイン中のユーザーの「実施中・記録中タスク」を動的抽出
   const myProgressingTasks = extractUserProgressingTasks(allTasks, userName);

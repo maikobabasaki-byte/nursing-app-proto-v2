@@ -21,6 +21,8 @@ export const updateTask = async (
     unexecuted_reason?: string;
     initial_period?: string;
     nurse_name?: string;
+    assigned_nurse_id?: string;
+    staff_id?: string;
     completed_at?: string;
     emr_order_id?: string;
   }
@@ -67,6 +69,14 @@ export const updateTask = async (
 
     if (data.nurse_name !== undefined) {
       updatePayload.nurse_name = data.nurse_name;
+    }
+
+    if (data.assigned_nurse_id !== undefined) {
+      updatePayload.assigned_nurse_id = data.assigned_nurse_id;
+    }
+
+    if (data.staff_id !== undefined) {
+      updatePayload.staff_id = data.staff_id;
     }
 
     // ステータスが completed の場合、completed_at が渡されていなければ日本時間の現在時刻をセット

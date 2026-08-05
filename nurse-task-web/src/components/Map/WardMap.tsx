@@ -1,6 +1,7 @@
 import React from 'react';
 import { useTimelineStore } from '../../stores/useTimelineStore';
 import { DraggableNursePin } from './DraggableNursePin';
+import { useUserName } from '../../hooks/useUserName';
 
 export interface Room { room_id: string; name: string; x: number; y: number; cols: number; rows: number; }
 export interface Facility { room_id: string; name: string; x: number; y: number; w: number; h: number; }
@@ -37,7 +38,9 @@ export default function WardMap({
   onPatientRightClick
 }: WardMapProps): React.JSX.Element {
   const storeNurses = useTimelineStore((state) => state.nurses);
+  const toggleNurseSos = useTimelineStore((state) => state.toggleNurseSos);
   const nurses = displayNurses || storeNurses;
+  const currentUserName = useUserName();
 
   const [menu, setMenu] = React.useState<ContextMenuState>({
     visible: false,
@@ -48,12 +51,32 @@ export default function WardMap({
     patientTasks: []
   });
 
+  const [nurseMenu, setNurseMenu] = React.useState<{
+    visible: boolean;
+    x: number;
+    y: number;
+    nurseId: string;
+    nurseName: string;
+    isSos: boolean;
+  }>({
+    visible: false,
+    x: 0,
+    y: 0,
+    nurseId: '',
+    nurseName: '',
+    isSos: false,
+  });
+
   const menuRef = React.useRef<HTMLDivElement>(null);
+  const nurseMenuRef = React.useRef<HTMLDivElement>(null);
 
   React.useEffect(() => {
     const handleOutsideClick = (e: MouseEvent) => {
       if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
         setMenu(prev => ({ ...prev, visible: false }));
+      }
+      if (nurseMenuRef.current && !nurseMenuRef.current.contains(e.target as Node)) {
+        setNurseMenu(prev => ({ ...prev, visible: false }));
       }
     };
     document.addEventListener('mousedown', handleOutsideClick);
@@ -133,6 +156,25 @@ export default function WardMap({
 
                 const hasSos = allTasks.some(t => t.patient_id === patient.patient_id && t.is_sos === true);
 
+                // 💡 性別・SOSに応じたカード背景・枠線スタイルの定義
+                let cardFill = '#ffffff';
+                let cardStroke = '#cbd5e1';
+                let cardStrokeWidth = 1;
+
+                if (hasSos) {
+                  cardFill = '#ffebee';
+                  cardStroke = '#d32f2f';
+                  cardStrokeWidth = 3;
+                } else if (patient.gender === '男') {
+                  cardFill = '#ebf8ff';
+                  cardStroke = '#90cdf4';
+                  cardStrokeWidth = 1.5;
+                } else if (patient.gender === '女') {
+                  cardFill = '#fff5f5';
+                  cardStroke = '#feb2b2';
+                  cardStrokeWidth = 1.5;
+                }
+
                 return (
                   <g 
                     key={patient.patient_id}
@@ -153,19 +195,21 @@ export default function WardMap({
                       });
                     }}
                   >
-                    {/* 🚨 SOS緊急アラート時の赤枠＆ハイライト表示 */}
+                    {/* 💡 ベッドカード背景（性別・SOS別色分け） */}
+                    <rect 
+                      x={bedX + 2} 
+                      y={bedTopY + 2} 
+                      width={BED_W - 4} 
+                      height={BED_H - 4} 
+                      fill={cardFill} 
+                      stroke={cardStroke} 
+                      strokeWidth={cardStrokeWidth} 
+                      rx={6} 
+                    />
+
+                    {/* 🚨 SOS緊急アラート時のバッジ表示 */}
                     {hasSos && (
                       <g>
-                        <rect 
-                          x={bedX + 2} 
-                          y={bedTopY + 2} 
-                          width={BED_W - 4} 
-                          height={BED_H - 4} 
-                          fill="#ffebee" 
-                          stroke="#d32f2f" 
-                          strokeWidth={3} 
-                          rx={6} 
-                        />
                         <rect 
                           x={bedX + BED_W - 34} 
                           y={bedTopY + 4} 
@@ -215,7 +259,7 @@ export default function WardMap({
                       </g>
                     )}
 
-                    {/* 💡 性別 (男)/(女) と患者名テキスト */}
+                    {/* 💡 患者名テキスト（性別表記は背景色で表現するため名前のみ） */}
                     <text 
                       x={textX} 
                       y={textY + 2} 
@@ -225,7 +269,7 @@ export default function WardMap({
                       fill={hasSos ? "#c62828" : "#333"} 
                       fontWeight={hasSos ? "bold" : "500"}
                     >
-                      {patient.gender ? `(${patient.gender}) ` : ''}{patient.name}
+                      {patient.name}
                     </text>
                   </g>
                 );
@@ -247,16 +291,45 @@ export default function WardMap({
           zIndex: 50 
         }}
       >
-        {nurses.map((nurse) => (
-          <div key={nurse.nurse_id} style={{ pointerEvents: 'auto' }}>
-            <DraggableNursePin nurse={nurse} />
-          </div>
-        ))}
+        {nurses.map((nurse) => {
+          const currentUser = useTimelineStore.getState().currentUser;
+          const normalizedCurrent = currentUserName ? currentUserName.replace(/[\s　]+/g, '') : '';
+          const normalizedNurseName = nurse.name ? nurse.name.replace(/[\s　]+/g, '') : '';
+          const isMe = currentUser
+            ? (nurse.nurse_id === currentUser.nurse_id ||
+               nurse.email === currentUser.email ||
+               (normalizedCurrent !== '' && normalizedCurrent === normalizedNurseName))
+            : (nurse.nurse_id.includes('nurse-me') ||
+               nurse.nurse_id.includes('me') ||
+               nurse.role === '担当看護師(自分)' ||
+               (normalizedCurrent !== '' && normalizedCurrent === normalizedNurseName));
+
+          return (
+            <div key={nurse.nurse_id} style={{ pointerEvents: 'auto' }}>
+              <DraggableNursePin 
+                nurse={nurse} 
+                isMe={isMe}
+                onNurseContextMenu={(e, n) => {
+                  // 💡 自分（ログイン中ユーザー）のピンの場合のみSOS操作メニューを開く
+                  if (!isMe) return;
+                  setNurseMenu({
+                    visible: true,
+                    x: e.clientX,
+                    y: e.clientY,
+                    nurseId: n.nurse_id,
+                    nurseName: n.name,
+                    isSos: !!n.is_sos,
+                  });
+                }}
+              />
+            </div>
+          );
+        })}
       </div>
 
       </div>
 
-      {/* 右クリックメニュー本体 */}
+      {/* 患者右クリックメニュー本体 */}
       {menu.visible && (
         <div
           ref={menuRef}
@@ -320,6 +393,57 @@ export default function WardMap({
               </button>
             ))
           )}
+        </div>
+      )}
+
+      {/* 看護師右クリックメニュー本体（SOS発令・解除） */}
+      {nurseMenu.visible && (
+        <div
+          ref={nurseMenuRef}
+          style={{
+            position: 'fixed',
+            left: `${nurseMenu.x}px`,
+            top: `${nurseMenu.y}px`,
+            zIndex: 1000,
+            backgroundColor: '#ffffff',
+            border: '1px solid #ccc',
+            borderRadius: '6px',
+            boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+            padding: '6px 0',
+            minWidth: '220px'
+          }}
+        >
+          <div style={{ padding: '6px 12px', fontSize: '12px', color: '#666', borderBottom: '1px solid #eee', fontWeight: 'bold' }}>
+            👤 {nurseMenu.nurseName} さんの状態設定
+          </div>
+
+          <button
+            onClick={() => {
+              toggleNurseSos(
+                nurseMenu.nurseId,
+                `緊急応援：${nurseMenu.nurseName}さんからの緊急アシスト要請`
+              );
+              setNurseMenu(prev => ({ ...prev, visible: false }));
+            }}
+            style={{
+              width: '100%',
+              textAlign: 'left',
+              border: 'none',
+              background: 'none',
+              padding: '10px 12px',
+              fontSize: '13px',
+              color: nurseMenu.isSos ? '#333' : '#d32f2f',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              fontWeight: 'bold'
+            }}
+            onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#ffebee'}
+            onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+          >
+            <span>{nurseMenu.isSos ? '✅ SOSを解除する' : '🚨 SOS（緊急応援）を出す'}</span>
+          </button>
         </div>
       )}
     </div>

@@ -2,9 +2,10 @@ import { useState, useEffect } from 'react';
 import { onAuthStateChanged } from 'firebase/auth';
 import type { User } from 'firebase/auth';
 import { auth, db } from '../lib/firebase';
-import { collection, onSnapshot } from 'firebase/firestore';
+import { collection, getDocs, onSnapshot, query, where } from 'firebase/firestore';
 import { reconstructGroups } from '../utils/taskLogic';
 import { useTimelineStore } from '../stores/useTimelineStore';
+import type { NurseMaster, NursePin } from '../stores/useTimelineStore';
 import type { ExtendedTask } from '../types/types';
 import Header from '../components/Header';
 import Footer from '../components/Footer';
@@ -13,12 +14,17 @@ import PatientSelect from "./PatientSelect";
 import PatientMasterPage from "./PatientMaster";
 import Timeline from "./Timeline";
 import MapContainer from "./Map";
+import { LeaderTodoPage } from "./LeaderTodoPage";
 import MainLayout from "../components/MainLayout";
 // import { seedDatabase } from "../scripts/seedDatabase";
 
 import { ensureTodayTasksSynced } from '../services/taskSyncService';
 
-type ScreenType = 'login' | 'patientSelect' | 'timeline' | 'patientMaster' | 'map';
+type ScreenType = 'login' | 'patientSelect' | 'timeline' | 'patientMaster' | 'map' | 'leaderTodo';
+
+import { GlobalSosToast } from '../components/GlobalSosToast';
+
+import { fetchGASData } from '../services/gasService';
 
 export default function App() {
   const [user, setUser] = useState<User | null>(null);
@@ -26,35 +32,31 @@ export default function App() {
   const [loading, setLoading] = useState<boolean>(true);
   const setTasks = useTimelineStore((state) => state.setTasks);
 
-  // 1. localStorageから現在の画面状態を復元（なければ 'login'）
+  // 1. sessionStorageから現在の画面状態を復元（タブごとの独立セッション対応）
   const [currentScreen, setCurrentScreen] = useState<ScreenType>(() => {
-    const savedScreen = localStorage.getItem('currentScreen');
+    const savedScreen = sessionStorage.getItem('currentScreen');
     return (savedScreen as ScreenType) || 'login';
   });
 
-  // 2. localStorageから選択患者リストを復元（なければ空配列）
+  // 2. sessionStorageから選択患者リストを復元
   const [selectedPatients, setSelectedPatients] = useState<string[]>(() => {
-    const savedPatients = localStorage.getItem('selectedPatients');
+    const savedPatients = sessionStorage.getItem('selectedPatients');
     return savedPatients ? JSON.parse(savedPatients) : [];
   });
 
-  // useEffect(() => {
-  //   // アプリ起動時にFirestoreが空なら自動でシードを流し込む
-  //   seedDatabase();
-  // }, []);
-
-  // 画面が変わるたびにlocalStorageを更新
+  // 画面が変わるたびにsessionStorageを更新
   useEffect(() => {
-    localStorage.setItem('currentScreen', currentScreen);
+    sessionStorage.setItem('currentScreen', currentScreen);
   }, [currentScreen]);
 
-  // 患者リストが変わるたびにlocalStorageを更新
+  // 患者リストが変わるたびにsessionStorageおよびZustandストアを同期更新
   useEffect(() => {
-    localStorage.setItem('selectedPatients', JSON.stringify(selectedPatients));
+    sessionStorage.setItem('selectedPatients', JSON.stringify(selectedPatients));
+    useTimelineStore.getState().setSelectedPatients(selectedPatients);
   }, [selectedPatients]);
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+    const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
       if (currentUser && currentUser.email) {
         setUser(currentUser);
         const id = currentUser.email.split('@')[0];
@@ -62,6 +64,41 @@ export default function App() {
         
         // 💡 スプレッドシート (GAS) から絶対正本データを直取得して同期
         ensureTodayTasksSynced(id);
+
+        // 💡 Firestoreの nurse_master コレクションから email でクエリ名寄せ検索
+        try {
+          const q = query(collection(db, 'nurse_master'), where('email', '==', currentUser.email));
+          const querySnapshot = await getDocs(q);
+          if (!querySnapshot.empty) {
+            const matchedDoc = querySnapshot.docs[0];
+            const data = matchedDoc.data();
+            const profile = {
+              nurse_id: matchedDoc.id,
+              name: data.name || id,
+              email: currentUser.email,
+              team: data.team || '',
+              is_leader: Boolean(data.is_leader),
+            };
+            setUserName(profile.name);
+            useTimelineStore.getState().setCurrentUser(profile);
+          } else {
+            const fallbackProfile = {
+              nurse_id: id,
+              name: id,
+              email: currentUser.email,
+            };
+            useTimelineStore.getState().setCurrentUser(fallbackProfile);
+          }
+        } catch (e) {
+          console.error("Auth nurse_master クエリ設定エラー:", e);
+        }
+
+        // 💡 看護師マスターデータをGASから取得してZustandにセット (フォールバック)
+        fetchGASData().then((res) => {
+          if (res.nurses && res.nurses.length > 0) {
+            useTimelineStore.getState().setNurseMaster(res.nurses);
+          }
+        });
 
         // 💡 クロージャの古い変数に頼らず関数型更新で常に最新の表示画面を判定
         setCurrentScreen((prevScreen) => {
@@ -75,10 +112,11 @@ export default function App() {
         setUserName('');
         setCurrentScreen('login');
         // ログアウト時はストレージおよびストアのデータもクリア
-        localStorage.removeItem('currentScreen');
-        localStorage.removeItem('selectedPatients');
+        sessionStorage.removeItem('currentScreen');
+        sessionStorage.removeItem('selectedPatients');
         setSelectedPatients([]);
         useTimelineStore.getState().setTasks([]);
+        useTimelineStore.getState().setCurrentUser(null);
       }
       setLoading(false);
     });
@@ -107,6 +145,12 @@ export default function App() {
       }
 
       const currentLocalTasks = useTimelineStore.getState().allTasks;
+
+      // 💡 防御ロジック: Firestoreの取得件数が0件でローカルに既存タスクが存在する場合、誤消去を防ぐため更新を破棄
+      if (firestoreTasks.length === 0 && currentLocalTasks.length > 0) {
+        return;
+      }
+
       const mergedTasks = firestoreTasks.map((ft) => {
         const localMatch = currentLocalTasks.find(lt => lt.task_id === ft.task_id) ||
                            currentLocalTasks.flatMap(lt => lt.children || []).find(c => c.task_id === ft.task_id);
@@ -124,6 +168,56 @@ export default function App() {
     return () => unsubscribe();
   }, [user, setTasks]);
 
+  // 💡 Firestoreの看護師マスターデータ (nurse_masterコレクション) リアルタイム監視
+  useEffect(() => {
+    if (!user) return;
+
+    const unsubscribeNurseMaster = onSnapshot(collection(db, "nurse_master"), (snapshot) => {
+      const masters = snapshot.docs.map((doc) => {
+        const data = doc.data();
+        return {
+          nurse_id: doc.id,
+          name: data.name || '',
+          gender: data.gender || '',
+          team: data.team || '',
+          email: data.email || '',
+          is_leader: Boolean(data.is_leader),
+        } as NurseMaster;
+      });
+
+      if (masters.length > 0) {
+        useTimelineStore.getState().setNurseMaster(masters);
+      }
+    });
+
+    return () => unsubscribeNurseMaster();
+  }, [user]);
+
+  // 💡 Firestoreの看護師SOS状態 (nursesコレクション) リアルタイム監視と全端末同期
+  useEffect(() => {
+    if (!user) return;
+
+    const unsubscribeNurses = onSnapshot(collection(db, "nurses"), (snapshot) => {
+      if (snapshot.metadata.hasPendingWrites) {
+        return;
+      }
+
+      const firestoreNurses = snapshot.docs.map((doc) => {
+        const data = doc.data();
+        return {
+          nurse_id: doc.id,
+          ...data,
+        } as NursePin;
+      });
+
+      if (firestoreNurses.length > 0) {
+        useTimelineStore.getState().setNurses(firestoreNurses);
+      }
+    });
+
+    return () => unsubscribeNurses();
+  }, [user]);
+
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
@@ -133,8 +227,10 @@ export default function App() {
   }
 
   return (
-    <div className="min-h-screen flex flex-col bg-gray-50">
-      
+    <div className="min-h-screen flex flex-col bg-gray-50 relative">
+      {/* 💡 全画面共通の看護師SOSグローバル通知トースト */}
+      <GlobalSosToast />
+
       {/* ─── 【A：ログイン前の世界】 ─── */}
       {currentScreen === 'login' && (
         <>
@@ -160,7 +256,7 @@ export default function App() {
       )}
 
       {/* ─── 【B：ログイン後の世界（MainLayoutを使うグループ）】 ─── */}
-      {(currentScreen === 'patientMaster' || currentScreen === 'timeline' || currentScreen === 'map') && (
+      {(currentScreen === 'patientMaster' || currentScreen === 'timeline' || currentScreen === 'map' || currentScreen === 'leaderTodo') && (
         <MainLayout currentScreen={currentScreen} onNavigate={(screen) => setCurrentScreen(screen)}>
           
           {currentScreen === 'patientMaster' && (
@@ -172,7 +268,11 @@ export default function App() {
           )}
 
           {currentScreen === 'map' && (
-            <MapContainer />
+            <MapContainer selectedPatients={selectedPatients} />
+          )}
+
+          {currentScreen === 'leaderTodo' && (
+            <LeaderTodoPage />
           )}
           
         </MainLayout>

@@ -1,8 +1,17 @@
 import { create } from 'zustand';
-import type { ExtendedTask, Memo, ExtendedTaskStatus } from '../types/types';
+import type { ExtendedTask, Memo, ExtendedTaskStatus, LeaderTodo } from '../types/types';
 import { updateTask } from '../hooks/useTaskUpdate';
 import { collection, doc, setDoc, getDocs, deleteDoc } from "firebase/firestore";
-import { db } from "../lib/firebase";
+import { db, updateNurseSos, saveLeaderTodoInFirestore, updateLeaderTodoInFirestore, deleteLeaderTodoInFirestore } from "../lib/firebase";
+
+export interface NurseMaster {
+  nurse_id: string;
+  name: string;
+  gender?: string;
+  team?: string;
+  email?: string;
+  is_leader?: boolean;
+}
 
 export interface NursePin {
   nurse_id: string;
@@ -11,12 +20,33 @@ export interface NursePin {
   color: string;
   x_percent: number; // 横方向の相対座標 (%)
   y_percent: number; // 縦方向の相対座標 (%)
+  is_logged_in?: boolean; // 出勤・ログイン状態フラグ
+  is_sos?: boolean; // 看護師SOSフラグ
+  sos_reason?: string; // SOSメッセージ
+  responder_name?: string; // SOS対応者名
+  gender?: string;
+  team?: string;
+  email?: string;
+  is_leader?: boolean;
+}
+
+export interface CurrentUser {
+  nurse_id: string;
+  name: string;
+  email: string;
+  team?: string;
+  is_leader?: boolean;
 }
 
 interface TimelineStore {
   allTasks: ExtendedTask[];
   memos: Memo[];
+  nurseMaster: NurseMaster[];
   nurses: NursePin[];
+  leaderTodos: LeaderTodo[];
+  currentUser: CurrentUser | null;
+  selectedPatients: string[];
+  showLowPriority: boolean;
   loading: boolean;
   groupingMode: string | null;
   activeId: string | null;
@@ -28,7 +58,16 @@ interface TimelineStore {
 
   setTasks: (tasks: ExtendedTask[]) => void;
   setMemos: (memos: Memo[]) => void;
+  setNurseMaster: (masters: NurseMaster[]) => void;
   setNurses: (nurses: NursePin[]) => void;
+  setSelectedPatients: (patients: string[]) => void;
+  setLeaderTodos: (todos: LeaderTodo[]) => void;
+  addLeaderTodo: (todo: Omit<LeaderTodo, 'todo_id'>) => Promise<void>;
+  updateLeaderTodo: (todoId: string, data: Partial<LeaderTodo>) => Promise<void>;
+  deleteLeaderTodo: (todoId: string) => Promise<void>;
+  setCurrentUser: (user: CurrentUser | null) => void;
+  setShowLowPriority: (show: boolean) => void;
+  toggleShowLowPriority: () => void;
   updateNursePosition: (nurseId: string, x_percent: number, y_percent: number) => void;
   setLoading: (loading: boolean) => void;
   setActiveId: (id: string | null) => void;
@@ -45,6 +84,9 @@ interface TimelineStore {
   handleUngroupTask: (childId: string) => Promise<void>;
   
   toggleTaskSos: (taskId: string, reason?: string) => void;
+  respondToTaskSos: (taskId: string, responderName: string) => void;
+  toggleNurseSos: (nurseId: string, reason?: string) => void;
+  respondToNurseSos: (nurseId: string, responderName: string) => void;
   
   closeMemoPopup: () => void;
   handleSaveMemo: (memo: Memo) => void;
@@ -86,16 +128,97 @@ const getTaskCategory = (task: ExtendedTask) => {
   return originalPeriod;
 };
 
-const initialNurses: NursePin[] = [
-  { nurse_id: '001', name: 'テスト 太郎', role: 'リーダー', color: '#4f46e5', x_percent: 46.0, y_percent: 43.0 },
-  { nurse_id: '002', name: 'テスト 花子', role: 'メンバー', color: '#059669', x_percent: 52.0, y_percent: 43.0 },
-  { nurse_id: '003', name: 'テスト 次郎', role: 'メンバー', color: '#d97706', x_percent: 49.0, y_percent: 47.0 },
-];
+// 💡 マスターデータとリアルタイムランタイム状態を重複ゼロでアトミック結合するヘルパー
+export function mergeNurseData(
+  masters: NurseMaster[],
+  runtimes: NursePin[]
+): NursePin[] {
+  const nurseMap = new Map<string, NursePin>();
+
+  // 1. まずマスターデータをベースとして登録
+  masters.forEach((master) => {
+    const key = master.nurse_id || master.name.replace(/[\s　]+/g, '');
+    nurseMap.set(key, {
+      nurse_id: master.nurse_id,
+      name: master.name,
+      gender: master.gender,
+      team: master.team,
+      email: master.email,
+      is_leader: master.is_leader,
+      role: master.is_leader ? 'リーダー' : 'メンバー',
+      color: master.is_leader ? '#4f46e5' : '#059669',
+      x_percent: 48.0,
+      y_percent: 45.0,
+      is_logged_in: true,
+      is_sos: false,
+    });
+  });
+
+  // 2. リアルタイム状態（位置・SOS情報等）を既存マスターと結合（なければ新規追加）
+  runtimes.forEach((runtime) => {
+    const normalizedRuntimeName = runtime.name ? runtime.name.replace(/[\s　]+/g, '') : '';
+    
+    // nurse_id または正規化された名前でマスターとマッチング
+    let targetKey = Array.from(nurseMap.keys()).find((k) => {
+      const existing = nurseMap.get(k);
+      if (!existing) return false;
+      const normalizedExistingName = existing.name.replace(/[\s　]+/g, '');
+      return (
+        existing.nurse_id === runtime.nurse_id ||
+        (normalizedRuntimeName !== '' && normalizedExistingName === normalizedRuntimeName)
+      );
+    });
+
+    if (targetKey && nurseMap.has(targetKey)) {
+      const existing = nurseMap.get(targetKey)!;
+      nurseMap.set(targetKey, {
+        ...existing,
+        ...runtime,
+        // IDと名前はマスターを優先
+        nurse_id: existing.nurse_id,
+        name: existing.name,
+        x_percent: runtime.x_percent ?? existing.x_percent,
+        y_percent: runtime.y_percent ?? existing.y_percent,
+        is_sos: runtime.is_sos ?? existing.is_sos,
+        sos_reason: runtime.sos_reason ?? existing.sos_reason,
+        responder_name: runtime.responder_name ?? existing.responder_name,
+        is_logged_in: runtime.is_logged_in ?? existing.is_logged_in,
+      });
+    } else if (runtime.nurse_id && runtime.name) {
+      // マスター未登録の単体リアルタイムピン
+      nurseMap.set(runtime.nurse_id, {
+        ...runtime,
+        role: runtime.role || 'メンバー',
+        color: runtime.color || '#059669',
+        x_percent: runtime.x_percent ?? 48.0,
+        y_percent: runtime.y_percent ?? 45.0,
+        is_logged_in: runtime.is_logged_in ?? true,
+        is_sos: runtime.is_sos ?? false,
+      });
+    }
+  });
+
+  return Array.from(nurseMap.values());
+}
 
 export const useTimelineStore = create<TimelineStore>((set, get) => ({
   allTasks: [],
   memos: [],
-  nurses: initialNurses,
+  nurseMaster: [],
+  nurses: [],
+  leaderTodos: [],
+  currentUser: null,
+  selectedPatients: (() => {
+    try {
+      const saved = sessionStorage.getItem('selectedPatients');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) return parsed;
+      }
+    } catch (e) {}
+    return [];
+  })(),
+  showLowPriority: false,
   loading: false,
   groupingMode: null,
   activeId: null,
@@ -107,7 +230,47 @@ export const useTimelineStore = create<TimelineStore>((set, get) => ({
 
   setTasks: (tasks) => set({ allTasks: tasks }),
   setMemos: (memos) => set({ memos }),
-  setNurses: (nurses) => set({ nurses }),
+  setCurrentUser: (user) => set({ currentUser: user }),
+  setSelectedPatients: (list) => {
+    try {
+      sessionStorage.setItem('selectedPatients', JSON.stringify(list));
+    } catch (e) {}
+    set({ selectedPatients: list });
+  },
+  setShowLowPriority: (show) => set({ showLowPriority: show }),
+  toggleShowLowPriority: () => set((state) => ({ showLowPriority: !state.showLowPriority })),
+  setLeaderTodos: (todos) => set({ leaderTodos: todos }),
+  addLeaderTodo: async (todoData) => {
+    const newId = await saveLeaderTodoInFirestore(todoData);
+    const newTodo: LeaderTodo = {
+      ...todoData,
+      todo_id: newId,
+    };
+    set((state) => ({
+      leaderTodos: [newTodo, ...state.leaderTodos],
+    }));
+  },
+  updateLeaderTodo: async (todoId, data) => {
+    await updateLeaderTodoInFirestore(todoId, data);
+    set((state) => ({
+      leaderTodos: state.leaderTodos.map((t) =>
+        t.todo_id === todoId ? { ...t, ...data } : t
+      ),
+    }));
+  },
+  deleteLeaderTodo: async (todoId) => {
+    await deleteLeaderTodoInFirestore(todoId);
+    set((state) => ({
+      leaderTodos: state.leaderTodos.filter((t) => t.todo_id !== todoId && !t.is_deleted && t.status !== 'deleted'),
+    }));
+  },
+  setNurseMaster: (masters) => set((state) => ({
+    nurseMaster: masters,
+    nurses: mergeNurseData(masters, state.nurses),
+  })),
+  setNurses: (incomingRuntimes) => set((state) => ({
+    nurses: mergeNurseData(state.nurseMaster, incomingRuntimes),
+  })),
   updateNursePosition: (nurseId, x_percent, y_percent) => set((state) => ({
     nurses: state.nurses.map((n) =>
       n.nurse_id === nurseId ? { ...n, x_percent, y_percent } : n
@@ -127,10 +290,24 @@ export const useTimelineStore = create<TimelineStore>((set, get) => ({
   })),
 
   handleUpdateStatus: (taskId, status, unexecutedReason) => {
-    updateTask(taskId, {
+    const { currentUser } = get();
+    const currentNurseName = currentUser?.name || '';
+    const currentNurseId = currentUser?.nurse_id || currentUser?.email || '';
+
+    const updatePayload: any = {
       status,
       unexecuted_reason: status === 'unexecuted' ? unexecutedReason : ''
-    });
+    };
+
+    if (currentNurseName) {
+      updatePayload.nurse_name = currentNurseName;
+    }
+    if (currentNurseId) {
+      updatePayload.assigned_nurse_id = currentNurseId;
+      updatePayload.staff_id = currentNurseId;
+    }
+
+    updateTask(taskId, updatePayload);
 
     set((state) => {
       let targetPreviousProgressingId: string | null = null;
@@ -168,7 +345,9 @@ export const useTimelineStore = create<TimelineStore>((set, get) => ({
               return { 
                 ...child, 
                 status,
-                unexecuted_reason: status === 'unexecuted' ? (unexecutedReason || child.unexecuted_reason || '') : ''
+                unexecuted_reason: status === 'unexecuted' ? (unexecutedReason || child.unexecuted_reason || '') : '',
+                ...(currentNurseName ? { nurse_name: currentNurseName } : {}),
+                ...(currentNurseId ? { assigned_nurse_id: currentNurseId, staff_id: currentNurseId } : {})
               };
             }
             if (status === 'progressing' && child.status === 'progressing') {
@@ -182,6 +361,10 @@ export const useTimelineStore = create<TimelineStore>((set, get) => ({
           ...task,
           status: newParentStatus,
           unexecuted_reason: task.task_id === taskId ? (status === 'unexecuted' ? (unexecutedReason || task.unexecuted_reason || '') : '') : task.unexecuted_reason,
+          ...(task.task_id === taskId ? {
+            ...(currentNurseName ? { nurse_name: currentNurseName } : {}),
+            ...(currentNurseId ? { assigned_nurse_id: currentNurseId, staff_id: currentNurseId } : {})
+          } : {}),
           children: updatedChildren,
         };
       });
@@ -441,6 +624,93 @@ export const useTimelineStore = create<TimelineStore>((set, get) => ({
       return { allTasks: updatedTasks };
     }
     return {};
+  }),
+
+  respondToTaskSos: (taskId, responderName) => set((state) => {
+    updateTask(taskId, { is_sos: false, sos_reason: '', responder_name: responderName });
+
+    const updatedTasks = state.allTasks.map((t) => {
+      if (t.task_id === taskId) {
+        return {
+          ...t,
+          is_sos: false,
+          sos_reason: '',
+          responder_name: responderName,
+        };
+      }
+      if (t.isGroup && t.children && Array.isArray(t.children)) {
+        const hasChild = t.children.some(c => c.task_id === taskId);
+        if (hasChild) {
+          const newChildren = t.children.map(c => {
+            if (c.task_id === taskId) {
+              return {
+                ...c,
+                is_sos: false,
+                sos_reason: '',
+                responder_name: responderName,
+              };
+            }
+            return c;
+          });
+          return {
+            ...t,
+            children: newChildren,
+          };
+        }
+      }
+      return t;
+    });
+
+    return { allTasks: updatedTasks };
+  }),
+
+  toggleNurseSos: (nurseId, reason) => set((state) => {
+    const nurse = state.nurses.find(n => n.nurse_id === nurseId);
+    const nextIsSos = nurse ? !nurse.is_sos : true;
+    const nextReason = nextIsSos ? (reason || '緊急応援要請が発生しました') : '';
+
+    updateNurseSos(nurseId, {
+      name: nurse?.name,
+      is_sos: nextIsSos,
+      sos_reason: nextReason,
+    });
+
+    return {
+      nurses: state.nurses.map((n) =>
+        n.nurse_id === nurseId
+          ? {
+              ...n,
+              is_sos: nextIsSos,
+              sos_reason: nextIsSos ? nextReason : undefined,
+              responder_name: undefined,
+            }
+          : n
+      ),
+    };
+  }),
+
+  respondToNurseSos: (nurseId, responderName) => set((state) => {
+    const nurse = state.nurses.find(n => n.nurse_id === nurseId);
+
+    updateNurseSos(nurseId, {
+      name: nurse?.name,
+      is_sos: false,
+      sos_reason: '',
+      responder_name: responderName,
+    });
+
+    return {
+      nurses: state.nurses.map((n) =>
+        n.nurse_id === nurseId
+          ? {
+              ...n,
+              is_sos: false,
+              sos_reason: undefined,
+              responder_name: responderName,
+            }
+          : n
+      ),
+    };
   }),
 
   closeMemoPopup: () => set({

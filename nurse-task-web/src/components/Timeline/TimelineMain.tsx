@@ -21,13 +21,36 @@ export default function TimelineMain({
   const userName = useUserName();
   const handleUpdateStatus = useTimelineStore((state) => state.handleUpdateStatus);
   const storeAllTasks = useTimelineStore((state) => state.allTasks);
+  const nurseMaster = useTimelineStore((state) => state.nurseMaster);
+  const currentUser = useTimelineStore((state) => state.currentUser);
+  const showLowPriority = useTimelineStore((state) => state.showLowPriority);
+  const toggleShowLowPriority = useTimelineStore((state) => state.toggleShowLowPriority);
+
+  const isLeader = currentUser?.is_leader === true;
+  const leaderTeam = currentUser?.team || 'Aチーム';
   
-  // 🎯 【Single Source of Truth】ストアの全タスクから選択中の患者かつ時刻付きタスクを直取得
-  const extendedTasks = storeAllTasks.filter((task) => (
-    task && 
-    selectedPatients.includes(task.patient_id) && 
-    task.display_period?.includes(':')
-  ));
+  // 🎯 【Single Source of Truth】ストアの全タスクから選択中の患者かつ時刻付きタスクを直取得（リーダー参照モード時は自チーム固定＆低優先度動的フィルタリング）
+  const extendedTasks = storeAllTasks.filter((task) => {
+    if (!task || !selectedPatients.includes(task.patient_id) || !task.display_period?.includes(':')) {
+      return false;
+    }
+
+    if (isLeader) {
+      // 💡 リーダー参照モード時：showLowPriority が false の場合のみ優先度「低 (low)」のタスクを除外
+      if (!showLowPriority && task.priority === 'low') {
+        return false;
+      }
+
+      // 💡 リーダー参照モード時：自チーム（leaderTeam）に所属する看護師のタスクに完全固定
+      if (task.nurse_name) {
+        const assignedNurse = nurseMaster.find(n => n.name === task.nurse_name);
+        if (assignedNurse && assignedNurse.team && assignedNurse.team !== leaderTeam) {
+          return false;
+        }
+      }
+    }
+    return true;
+  });
 
   // 🎯 表示に使うメモは、100%ストア（Zustand）側が管理しているものだけに一本化！
   // （これで親との間でピンポン感染のようなデータ再レンダリングループが発生しなくなります）
@@ -124,6 +147,43 @@ export default function TimelineMain({
 
   return (
     <div className="flex flex-col h-full p-4 select-none">
+      {/* 👑 リーダー参照モードコントロールヘッダー */}
+      {isLeader && (
+        <div className="bg-gradient-to-r from-indigo-900 to-indigo-950 text-white p-3 rounded-xl mb-3 flex items-center justify-between shadow-md border border-indigo-700/60 animate-fade-in">
+          <div className="flex items-center gap-2.5">
+            <span className="text-xl">👑</span>
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="font-black text-xs bg-indigo-700 text-indigo-100 px-2.5 py-0.5 rounded-full border border-indigo-500">
+                  リーダー参照モード（自チーム進捗監督）
+                </span>
+                <span className="text-xs font-extrabold text-indigo-200">
+                  所属: {leaderTeam}
+                </span>
+              </div>
+              <p className="text-[11px] text-indigo-300 mt-0.5">
+                自チームメンバーナースのタスク実施・記録・SOS状況をリアルタイム俯瞰中
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-3">
+            {/* 💡 低優先度タスク表示トグルボタン */}
+            <button
+              type="button"
+              onClick={toggleShowLowPriority}
+              className={`px-3.5 py-1.5 rounded-lg text-xs font-extrabold flex items-center gap-1.5 transition-all cursor-pointer border ${
+                showLowPriority
+                  ? 'bg-amber-400 text-amber-950 border-amber-500 shadow-md scale-105'
+                  : 'bg-indigo-950/80 text-indigo-200 hover:text-white border-indigo-700'
+              }`}
+            >
+              <span>{showLowPriority ? '👁️ 低優先度タスク: 表示中' : '🙈 低優先度タスク: 非表示'}</span>
+            </button>
+          </div>
+        </div>
+      )}
+
       <TimelineControls 
         timelineMode={timelineMode} 
         setTimelineMode={setTimelineMode}

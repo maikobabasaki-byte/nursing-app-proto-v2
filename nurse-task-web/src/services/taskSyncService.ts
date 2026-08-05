@@ -15,23 +15,23 @@ export const mapGASTaskToExtendedTask = (
   userName?: string,
   patients?: GASPatientResponse[]
 ): ExtendedTask => {
-  const taskId = item.emr_order_id || `GAS_TASK_${index + 1}`;
-  let period = String(item.display_period || item.scheduled_time || "").trim();
-
-  let scheduledAtJST = "";
-  if (period.includes(':')) {
-    const timeMatch = period.match(/(\d{1,2}):(\d{2})/);
-    if (timeMatch) {
-      const hh = timeMatch[1].padStart(2, '0');
-      const mm = timeMatch[2];
-      period = `${hh}:${mm}`; // 💡 09:00 のような2桁HH:mm表記に統一
-      scheduledAtJST = `${todayJST}T${hh}:${mm}:00`;
-    }
+  const taskId = String(item.emr_order_id || (item as any).task_id || `GAS_TASK_${index + 1}`).trim();
+  
+  // 💡 Sat Dec 30 1899... などの不用なDate文字列を除去し、HH:mm 表記へ正規化
+  const rawPeriod = String(item.display_period || item.scheduled_time || item.scheduled_at || "").trim();
+  let period = "";
+  
+  const timeMatch = rawPeriod.match(/(?:T|\s|^)(\d{1,2}):(\d{2})/);
+  if (timeMatch) {
+    const hh = timeMatch[1].padStart(2, '0');
+    const mm = timeMatch[2];
+    period = `${hh}:${mm}`;
+  } else if (!rawPeriod.includes('1899') && !rawPeriod.includes('GMT') && !rawPeriod.includes('1900')) {
+    period = rawPeriod;
   }
 
-  // GAS側で結合済みの患者氏名、または Patients 配列からの補完
   const rawItem = item as Record<string, any>;
-  const targetPatientId = (item.patient_id || "").trim();
+  const targetPatientId = String(item.patient_id || rawItem.patientId || "").trim();
   const matchedPatient = patients?.find(p => String(p.patient_id || p.patientId || p.id || "").trim() === targetPatientId);
 
   const resolvedPatientName = 
@@ -49,27 +49,54 @@ export const mapGASTaskToExtendedTask = (
     rawItem['病室'] || 
     "";
 
+  const resolvedTitle = 
+    item.title || 
+    rawItem.task_name || 
+    "無題タスク";
+
+  const resolvedStaffId = String(item.staff_id || rawItem.staffId || rawItem.assigned_nurse_id || rawItem.nurse_id || '').trim();
+  const resolvedNurseName = String(item.nurse_name || rawItem.nurseName || userName || '').trim();
+  const resolvedTeam = String(item.team || rawItem.team || matchedPatient?.team || '').trim();
+
   return {
     task_id: taskId,
-    emr_order_id: item.emr_order_id || taskId,
-    title: item.title || "無題タスク",
+    emr_order_id: taskId,
+    title: String(resolvedTitle).trim(),
     details: item.details || "",
     status: (item.status as any) || 'untouched',
     display_period: period,
     initial_period: period,
     priority: item.priority || 'medium',
-    scheduled_at: scheduledAtJST,
+    scheduled_at: period.includes(':') ? `${todayJST}T${period}:00` : '',
     completed_at: item.completed_at || "",
     patient_id: targetPatientId,
-    room_id: resolvedRoomId,
-    patient_name: resolvedPatientName,
-    nurse_name: item.nurse_name || userName || "",
+    room_id: String(resolvedRoomId).trim(),
+    patient_name: String(resolvedPatientName).trim(),
+    nurse_name: resolvedNurseName,
+    staff_id: resolvedStaffId || "",
+    assigned_nurse_id: resolvedStaffId || "",
+    team: resolvedTeam,
     unexecuted_reason: item.unexecuted_reason || "",
     is_additional: item.is_additional || "",
     parent_id: null,
     is_sos: false,
     sos_reason: "",
   };
+};
+
+/**
+ * 💡 Firestore書き込み直前にオブジェクト内のすべての undefined プロパティを全自動でクリーンアップする関数
+ */
+export const cleanUndefinedFields = (obj: any): any => {
+  if (obj === null || typeof obj !== 'object') return obj;
+  const cleaned: any = {};
+  Object.keys(obj).forEach((key) => {
+    const val = obj[key];
+    if (val !== undefined) {
+      cleaned[key] = val;
+    }
+  });
+  return cleaned;
 };
 
 /**
@@ -112,12 +139,20 @@ export const ensureTodayTasksSynced = async (userName?: string): Promise<Extende
         unexecuted_reason: existingTask?.unexecuted_reason !== undefined ? existingTask.unexecuted_reason : gasMappedTask.unexecuted_reason,
         is_sos: existingTask?.is_sos !== undefined ? existingTask.is_sos : gasMappedTask.is_sos,
         sos_reason: existingTask?.sos_reason !== undefined ? existingTask.sos_reason : gasMappedTask.sos_reason,
+        // 💡 既存Firestoreの担当看護師情報を確実に死守（undefinedを回避し空文字をデフォルト化）
+        staff_id: existingTask?.staff_id || existingTask?.assigned_nurse_id || gasMappedTask.staff_id || "",
+        assigned_nurse_id: existingTask?.assigned_nurse_id || existingTask?.staff_id || gasMappedTask.assigned_nurse_id || "",
+        nurse_name: existingTask?.nurse_name || gasMappedTask.nurse_name || "",
+        team: existingTask?.team || gasMappedTask.team || "",
       };
 
-      mappedTasks.push(mergedTaskDoc);
+      // 💡 Firestore書き込み前に undefined プロパティを全自動で削除・クリーンアップ
+      const cleanedDoc = cleanUndefinedFields(mergedTaskDoc);
 
-      const docRef = doc(db, 'tasks', mergedTaskDoc.task_id);
-      batch.set(docRef, mergedTaskDoc, { merge: true });
+      mappedTasks.push(cleanedDoc);
+
+      const docRef = doc(db, 'tasks', cleanedDoc.task_id);
+      batch.set(docRef, cleanedDoc, { merge: true });
     });
 
     await batch.commit();

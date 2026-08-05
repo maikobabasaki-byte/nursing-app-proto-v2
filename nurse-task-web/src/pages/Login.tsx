@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { signInWithEmailAndPassword } from 'firebase/auth';
+import { signInWithEmailAndPassword, setPersistence, browserSessionPersistence } from 'firebase/auth';
 import { auth } from '../lib/firebase';
 
 export default function Login() {
@@ -7,8 +7,11 @@ export default function Login() {
   const [password, setPassword] = useState('');
 
   const handleLogin = async (e: React.MouseEvent<HTMLButtonElement>) => {
-  e.preventDefault();
+    e.preventDefault();
     try {
+      // 💡 Firebase Authのセッション保持範囲をタブ単位(sessionStorage)に変更し、同一ブラウザでの複数タブ同時ログインを可能にする
+      await setPersistence(auth, browserSessionPersistence);
+
       // 既存のID/パスワード入力をFirebase認証用に変換
       const email = `${userId}@nurseflow.local`;
       await signInWithEmailAndPassword(auth, email, password);

@@ -4,8 +4,8 @@ import GlobalFooter from "./GlobalFooter";
 
 interface MainLayoutProps {
   children: React.ReactNode; 
-  currentScreen: 'login' | 'patientSelect' | 'patientMaster' | 'timeline' | 'map'; // 💡 stringから具体的な型に変更して安全性を高めます
-  onNavigate: (screen: 'patientSelect' | 'patientMaster' | 'timeline' | 'map') => void; // 💡 画面遷移関数を追加！
+  currentScreen: 'login' | 'patientSelect' | 'patientMaster' | 'timeline' | 'map' | 'leaderTodo';
+  onNavigate: (screen: 'patientSelect' | 'patientMaster' | 'timeline' | 'map' | 'leaderTodo') => void;
 }
 
 export default function MainLayout({ children, currentScreen, onNavigate }: MainLayoutProps) {
