@@ -1,8 +1,13 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useTimelineStore } from '../stores/useTimelineStore';
 import { useUserName } from '../hooks/useUserName';
 import { respondToNurseSosWithTransaction, respondToTaskSosWithTransaction } from '../lib/firebase';
 import type { ExtendedTask } from '../types/types';
+
+// 📡 近接端末・別タブ間での0秒リアルタイムブロードキャスト通信チャンネル
+const sosBroadcastChannel = typeof window !== 'undefined' && 'BroadcastChannel' in window
+  ? new BroadcastChannel('nurse_app_sos_sync')
+  : null;
 
 export const GlobalSosToast: React.FC = () => {
   const nurses = useTimelineStore((state) => state.nurses);
@@ -15,27 +20,10 @@ export const GlobalSosToast: React.FC = () => {
   const [conflictNotice, setConflictNotice] = useState<string | null>(null);
 
   const responderName = currentUserName || '自分';
-  const normalizedCurrent = currentUserName ? currentUserName.replace(/[\s　]+/g, '') : '';
 
-  // 1. 自分以外の「他スタッフからの看護師SOS」を抽出
-  const activeSosNurses = nurses.filter((nurse) => {
-    if (nurse.is_sos !== true) return false;
-    if (dismissedIds.includes(nurse.nurse_id)) return false;
+  const myId = String(currentUser?.nurse_id || currentUser?.staff_id || sessionStorage.getItem('nurse_id') || '').trim();
+  const myName = String(currentUser?.name || currentUserName || sessionStorage.getItem('nurse_name') || '').trim().replace(/[\s　]+/g, '');
 
-    const normalizedNurseName = nurse.name ? nurse.name.replace(/[\s　]+/g, '') : '';
-    const isMe = currentUser
-      ? (nurse.nurse_id === currentUser.nurse_id ||
-         nurse.email === currentUser.email ||
-         (normalizedCurrent !== '' && normalizedCurrent === normalizedNurseName))
-      : (nurse.nurse_id.includes('nurse-me') ||
-         nurse.nurse_id.includes('me') ||
-         nurse.role === '担当看護師(自分)' ||
-         (normalizedCurrent !== '' && normalizedCurrent === normalizedNurseName));
-
-    return !isMe;
-  });
-
-  // 2. フラット化した全タスクからアクティブな「タスクSOS」を抽出
   const flattenTasks = (tasks: ExtendedTask[]): ExtendedTask[] => {
     let result: ExtendedTask[] = [];
     tasks.forEach((t) => {
@@ -47,39 +35,120 @@ export const GlobalSosToast: React.FC = () => {
     return result;
   };
 
-  const activeSosTasks = flattenTasks(allTasks).filter((task) => {
-    if (dismissedIds.includes(task.task_id)) return false;
+  // 💡 他のタブ・端末で「要請に応じた」シグナルを0秒でリアルタイム同期受信
+  useEffect(() => {
+    if (!sosBroadcastChannel) return;
 
-    // 担当看護師が自分であるタスクのSOSはポップアップ通知から除外
-    const isMyTask = task.nurse_name && (
-      (currentUser && task.nurse_name.includes(currentUser.name)) ||
-      (normalizedCurrent !== '' && task.nurse_name.replace(/[\s　]+/g, '').includes(normalizedCurrent))
-    );
+    const handleMessage = (event: MessageEvent) => {
+      const data = event.data;
+      if (!data) return;
 
-    return !isMyTask;
+      if (data.type === 'NURSE_SOS_RESPONDED' && data.nurseId) {
+        respondToNurseSos(data.nurseId, data.responderName || '他スタッフ');
+        setDismissedIds((prev) => [...prev, String(data.nurseId)]);
+      } else if (data.type === 'TASK_SOS_RESPONDED' && data.taskId) {
+        respondToTaskSos(data.taskId, data.responderName || '他スタッフ');
+        setDismissedIds((prev) => [...prev, String(data.taskId)]);
+      }
+    };
+
+    sosBroadcastChannel.addEventListener('message', handleMessage);
+    return () => {
+      sosBroadcastChannel.removeEventListener('message', handleMessage);
+    };
+  }, [respondToNurseSos, respondToTaskSos]);
+
+  // 💡 FirestoreのSOS状態クリア（is_sos === false）を検知して dismissedIds を自動クリーンアップ
+  useEffect(() => {
+    const activeNurseSosIds = new Set(nurses.filter((n) => n.is_sos).map((n) => String(n.nurse_id)));
+    const activeTaskSosIds = new Set(flattenTasks(allTasks).filter((t) => t.is_sos).map((t) => String(t.task_id)));
+
+    setDismissedIds((prev) => prev.filter((id) => activeNurseSosIds.has(id) || activeTaskSosIds.has(id)));
+  }, [nurses, allTasks]);
+
+  // 1. 自分以外の「他スタッフからの看護師SOS」を抽出
+  const activeSosNurses = nurses.filter((nurse) => {
+    if (nurse.is_sos !== true) return false;
+    if (dismissedIds.includes(String(nurse.nurse_id))) return false;
+
+    const targetId = String(nurse.nurse_id || '').trim();
+    const targetName = String(nurse.name || '').trim().replace(/[\s　]+/g, '');
+
+    if (myId !== '' && targetId === myId) return false;
+    if (myName !== '' && targetName === myName) return false;
+
+    return true;
   });
 
+  // 2. フラット化した全タスクからアクティブな「タスクSOS」を抽出（自分発信を除外）
+  const activeSosTasks = flattenTasks(allTasks).filter((task) => {
+    if (dismissedIds.includes(String(task.task_id))) return false;
+
+    const reqId = String(task.requested_by_id || '').trim();
+    const reqName = String(task.requested_by_name || '').trim().replace(/[\s　]+/g, '');
+    const taskId = String(task.nurse_id || task.staff_id || '').trim();
+    const taskName = String(task.nurse_name || '').trim().replace(/[\s　]+/g, '');
+
+    if (reqId !== '' && reqId === myId) return false;
+    if (reqName !== '' && reqName === myName) return false;
+    if (taskId !== '' && taskId === myId) return false;
+    if (taskName !== '' && taskName === myName) return false;
+
+    return true;
+  });
+
+  // 💡 修正：ボタンを押した瞬間に0秒でUIを更新（楽観的更新）し、全端末へブロードキャスト送信
   const handleRespondNurse = async (nurseId: string) => {
-    const result = await respondToNurseSosWithTransaction(nurseId, responderName);
-    if (result.alreadyResponded) {
-      const responder = result.responderName || '別のスタッフ';
-      setConflictNotice(`🚨 【対応重複】すでに ${responder} さんが対応に向かっています！`);
-      setTimeout(() => setConflictNotice(null), 4000);
-      setDismissedIds((prev) => [...prev, nurseId]);
-    } else {
-      respondToNurseSos(nurseId, responderName);
+    // 1. 即座にローカルストアと画面表示をクリア（0秒で反応）
+    respondToNurseSos(nurseId, responderName);
+    setDismissedIds((prev) => [...prev, nurseId]);
+
+    // 2. 近接端末・他タブへ0秒即時ブロードキャスト送信
+    if (sosBroadcastChannel) {
+      sosBroadcastChannel.postMessage({
+        type: 'NURSE_SOS_RESPONDED',
+        nurseId,
+        responderName,
+      });
+    }
+
+    // 3. バックグラウンドで Firestore トランザクション通信
+    try {
+      const result = await respondToNurseSosWithTransaction(nurseId, responderName);
+      if (result && result.alreadyResponded) {
+        const responder = result.responderName || '別のスタッフ';
+        setConflictNotice(`🚨 【対応重複】すでに ${responder} さんが対応に向かっています！`);
+        setTimeout(() => setConflictNotice(null), 4000);
+      }
+    } catch (error) {
+      console.error("看護師SOS対応エラー:", error);
     }
   };
 
   const handleRespondTask = async (taskId: string) => {
-    const result = await respondToTaskSosWithTransaction(taskId, responderName);
-    if (result.alreadyResponded) {
-      const responder = result.responderName || '別のスタッフ';
-      setConflictNotice(`🚨 【対応重複】すでに ${responder} さんがこのタスクのサポートに入っています！`);
-      setTimeout(() => setConflictNotice(null), 4000);
-      setDismissedIds((prev) => [...prev, taskId]);
-    } else {
-      respondToTaskSos(taskId, responderName);
+    // 1. 即座にローカルストアと画面表示をクリア（0秒で反応）
+    respondToTaskSos(taskId, responderName);
+    setDismissedIds((prev) => [...prev, taskId]);
+
+    // 2. 近接端末・他タブへ0秒即時ブロードキャスト送信
+    if (sosBroadcastChannel) {
+      sosBroadcastChannel.postMessage({
+        type: 'TASK_SOS_RESPONDED',
+        taskId,
+        responderName,
+      });
+    }
+
+    // 3. バックグラウンドで Firestore トランザクション通信
+    try {
+      const result = await respondToTaskSosWithTransaction(taskId, responderName);
+      if (result && result.alreadyResponded) {
+        const responder = result.responderName || '別のスタッフ';
+        setConflictNotice(`🚨 【対応重複】すでに ${responder} さんがこのタスクのサポートに入っています！`);
+        setTimeout(() => setConflictNotice(null), 4000);
+      }
+    } catch (error) {
+      console.error("タスクSOS対応エラー:", error);
     }
   };
 
@@ -187,7 +256,7 @@ export const GlobalSosToast: React.FC = () => {
           <div className="pt-1 flex items-center justify-end">
             <button
               onClick={() => handleRespondTask(task.task_id)}
-              className="bg-red-600 hover:bg-red-700 text-white font-bold text-xs px-4 py-2 rounded-lg shadow-md hover:shadow-lg transition-all transform active:scale-95 flex items-center gap-1.5 cursor-pointer"
+              className="!bg-red-600 hover:!bg-red-700 !text-white !font-bold !text-xs !px-4 !py-2 !rounded-lg !shadow-md hover:!shadow-lg !transition-all !transform active:!scale-95 !flex !items-center !gap-1.5 !cursor-pointer"
             >
               <span>🤝 要請に応じる</span>
             </button>

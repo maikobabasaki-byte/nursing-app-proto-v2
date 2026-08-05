@@ -9,7 +9,8 @@ export type TaskStatus =
   | 'record_start'
   | 'record_pending'
   | 'record_complete'
-  | 'unexecuted';
+  | 'unexecuted'
+  | 'deleted';
 
 export interface Task {
   task_id: string;
@@ -21,15 +22,23 @@ export interface Task {
   display_period: string;
   initial_period?: string;
   scheduled_at: string;
+  scheduled_time?: string;
   completed_at?: string;
   patient_id: string;
   room_id: string;
   patient_name: string;
   nurse_name?: string;
+  nurseName?: string;
+  nurse_id?: string;
+  staff_id?: string;
+  assigned_nurse_id?: string;
+  team?: string;
   is_additional?: boolean | string;
 
   is_sos?: boolean; 
   sos_reason?: string;
+  requested_by_id?: string;
+  requested_by_name?: string;
   responder_name?: string;
   unexecuted_reason?: string;
 
@@ -54,15 +63,23 @@ export interface TaskDocument {
   initial_period: string;
   priority: 'high' | 'medium' | 'low';
   scheduled_at: string;
+  scheduled_time?: string;
   completed_at?: string;
   patient_id: string;
   room_id: string;
   patient_name: string;
   nurse_name?: string;
+  nurseName?: string;
+  nurse_id?: string;
+  staff_id?: string;
+  assigned_nurse_id?: string;
+  team?: string;
   is_additional?: boolean | string;
   parent_id?: string | null;
   is_sos?: boolean; 
   sos_reason?: string;
+  requested_by_id?: string;
+  requested_by_name?: string;
   unexecuted_reason?: string;
   updated_by?: string;
 }

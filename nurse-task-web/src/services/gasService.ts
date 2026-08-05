@@ -1,5 +1,5 @@
 /**
- * Google Apps Script (GAS) Web API とのハイブリッド同期サービス
+ * Google Apps Script (GAS) Web API とのハイブリッド同期サービス（429エラー対策キャッシュ付き）
  */
 
 const GAS_API_URL = import.meta.env.VITE_GAS_API_URL;
@@ -27,6 +27,9 @@ export interface GASTaskResponse {
   completed_at?: string;
   is_additional?: boolean | string;
   nurse_name?: string;
+  nurse_id?: string;
+  staff_id?: string;
+  team?: string;
   unexecuted_reason?: string;
   display_period?: string;
   details?: string;
@@ -61,8 +64,15 @@ export interface GASFetchResult {
   nurses: GASNurseMasterResponse[];
 }
 
+// 💡 429エラー（リクエスト過多）を防ぐためのキャッシュ管理変数
+let cacheData: GASFetchResult | null = null;
+let lastFetchTime = 0;
+let ongoingFetchPromise: Promise<GASFetchResult> | null = null;
+const CACHE_TTL_MS = 10000; // 10秒間は同じデータをキャッシュから返す（GASへの連続アクセスを完全ブロック）
+
 /**
  * GASのGETエンドポイントから全マスターデータ (Tasks, Patients, Rooms, Facilities, Nurses) を取得
+ * ※ 10秒以内の重複リクエストはキャッシュを返し、同時並行リクエストは一本化します
  */
 export const fetchGASData = async (): Promise<GASFetchResult> => {
   if (!GAS_API_URL) {
@@ -70,44 +80,76 @@ export const fetchGASData = async (): Promise<GASFetchResult> => {
     return { tasks: [], patients: [], rooms: [], facilities: [], nurses: [] };
   }
 
-  try {
-    const response = await fetch(GAS_API_URL, {
-      method: 'GET',
-      headers: {
-        'Accept': 'application/json',
-      },
-    });
+  const now = Date.now();
 
-    if (!response.ok) {
-      throw new Error(`GAS APIからの取得に失敗しました: ${response.statusText}`);
-    }
-
-    const data = await response.json();
-    console.log("GASから取得したデータ:", data);
-
-    let tasks: GASTaskResponse[] = [];
-    let patients: GASPatientResponse[] = [];
-    let rooms: any[] = [];
-    let facilities: any[] = [];
-    let nurses: GASNurseMasterResponse[] = [];
-
-    if (Array.isArray(data)) {
-      tasks = data;
-    } else if (data && typeof data === 'object') {
-      if (Array.isArray(data.tasks)) tasks = data.tasks;
-      else if (Array.isArray(data.data)) tasks = data.data;
-
-      if (Array.isArray(data.patients)) patients = data.patients;
-      if (Array.isArray(data.rooms)) rooms = data.rooms;
-      if (Array.isArray(data.facilities)) facilities = data.facilities;
-      if (Array.isArray(data.nurses)) nurses = data.nurses;
-    }
-
-    return { tasks, patients, rooms, facilities, nurses };
-  } catch (error) {
-    console.error("GASデータ取得エラー:", error);
-    return { tasks: [], patients: [], rooms: [], facilities: [], nurses: [] };
+  // 1. キャッシュが有効な期間内であれば、APIを叩かずにキャッシュを即時返却
+  if (cacheData && (now - lastFetchTime < CACHE_TTL_MS)) {
+    console.log("⚡ GASデータをキャッシュから返却します（429対策）");
+    return cacheData;
   }
+
+  // 2. すでに同じリクエストが走っている場合は、新しいリクエストを作らずにその結果を共有（重複排除）
+  if (ongoingFetchPromise) {
+    console.log("⏳ すでに実行中のGAS取得リクエストを共有します");
+    return ongoingFetchPromise;
+  }
+
+  ongoingFetchPromise = (async (): Promise<GASFetchResult> => {
+    try {
+      const response = await fetch(GAS_API_URL, {
+        method: 'GET',
+        headers: {
+          'Accept': 'application/json',
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error(`GAS APIからの取得に失敗しました: ${response.statusText}`);
+      }
+
+      const data = await response.json();
+      console.log("GASから取得したデータ:", data);
+
+      let tasks: GASTaskResponse[] = [];
+      let patients: GASPatientResponse[] = [];
+      let rooms: any[] = [];
+      let facilities: any[] = [];
+      let nurses: GASNurseMasterResponse[] = [];
+
+      if (Array.isArray(data)) {
+        tasks = data;
+      } else if (data && typeof data === 'object') {
+        if (Array.isArray(data.tasks)) tasks = data.tasks;
+        else if (Array.isArray(data.data)) tasks = data.data;
+
+        if (Array.isArray(data.patients)) patients = data.patients;
+        if (Array.isArray(data.rooms)) rooms = data.rooms;
+        if (Array.isArray(data.facilities)) facilities = data.facilities;
+        if (Array.isArray(data.nurses)) nurses = data.nurses;
+      }
+
+      const result: GASFetchResult = { tasks, patients, rooms, facilities, nurses };
+      
+      // キャッシュを更新
+      cacheData = result;
+      lastFetchTime = Date.now();
+
+      return result;
+    } catch (error) {
+      console.error("GASデータ取得エラー:", error);
+      // エラー時も直前のキャッシュがあればそれをフォールバックとして返す
+      if (cacheData) {
+        console.warn("⚠️ 通信エラーが発生したため、古いキャッシュデータを返します");
+        return cacheData;
+      }
+      return { tasks: [], patients: [], rooms: [], facilities: [], nurses: [] };
+    } finally {
+      // 処理が終わったら進行中フラグをクリア
+      ongoingFetchPromise = null;
+    }
+  })();
+
+  return ongoingFetchPromise;
 };
 
 /**

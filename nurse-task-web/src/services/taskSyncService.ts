@@ -54,7 +54,8 @@ export const mapGASTaskToExtendedTask = (
     rawItem.task_name || 
     "無題タスク";
 
-  const resolvedStaffId = String(item.staff_id || rawItem.staffId || rawItem.assigned_nurse_id || rawItem.nurse_id || '').trim();
+  const resolvedNurseId = String(item.nurse_id || rawItem.nurse_id || item.staff_id || rawItem.staffId || rawItem.assigned_nurse_id || '').trim();
+  const resolvedStaffId = String(item.staff_id || rawItem.staffId || rawItem.assigned_nurse_id || item.nurse_id || rawItem.nurse_id || '').trim();
   const resolvedNurseName = String(item.nurse_name || rawItem.nurseName || userName || '').trim();
   const resolvedTeam = String(item.team || rawItem.team || matchedPatient?.team || '').trim();
 
@@ -73,8 +74,9 @@ export const mapGASTaskToExtendedTask = (
     room_id: String(resolvedRoomId).trim(),
     patient_name: String(resolvedPatientName).trim(),
     nurse_name: resolvedNurseName,
-    staff_id: resolvedStaffId || "",
-    assigned_nurse_id: resolvedStaffId || "",
+    nurse_id: resolvedNurseId || resolvedStaffId || "",
+    staff_id: resolvedStaffId || resolvedNurseId || "",
+    assigned_nurse_id: resolvedStaffId || resolvedNurseId || "",
     team: resolvedTeam,
     unexecuted_reason: item.unexecuted_reason || "",
     is_additional: item.is_additional || "",
@@ -99,67 +101,84 @@ export const cleanUndefinedFields = (obj: any): any => {
   return cleaned;
 };
 
+// 💡 同期処理自体の重複実行を完全に防ぐためのロック用変数
+let ongoingSyncPromise: Promise<ExtendedTask[]> | null = null;
+
 /**
  * スプレッドシート (GAS) から全タスク・全患者データを取得し、
  * Firestore に保存・展開する。
  * 🧠 Smart Merge: ユーザーがアプリ上で行ったグループ化 (parent_id) やステータス変更を保護・引き継ぐ。
+ * ※ 同時並行で呼び出された場合、リクエストを一本化して429エラーを防ぎます。
  */
 export const ensureTodayTasksSynced = async (userName?: string): Promise<ExtendedTask[]> => {
-  try {
-    const todayJST = getJSTDateString();
-    console.log(`スプレッドシート (GAS) から全タスク・患者データを取得中...`);
-    const { tasks: gasTasks, patients: gasPatients } = await fetchGASData();
-
-    if (!gasTasks || gasTasks.length === 0) {
-      console.warn("GASから取得できたタスクが0件です。");
-      return [];
-    }
-
-    // 💡 既存の Firestore ドキュメントを全件読み込み、ユーザーの変更（parent_id, status 等）を二重保護
-    const existingSnapshot = await getDocs(collection(db, 'tasks'));
-    const existingTasksMap = new Map<string, any>();
-    existingSnapshot.docs.forEach(doc => {
-      existingTasksMap.set(doc.id, doc.data());
-    });
-
-    const batch = writeBatch(db);
-    const mappedTasks: ExtendedTask[] = [];
-
-    gasTasks.forEach((item, index) => {
-      const gasMappedTask = mapGASTaskToExtendedTask(item, index, todayJST, userName, gasPatients);
-      const existingTask = existingTasksMap.get(gasMappedTask.task_id);
-
-      // 🧠 【スマートマージ】既存の Firestore にユーザー変更（グループ化・ステータス更新）が存在すれば保護・保持
-      const mergedTaskDoc: ExtendedTask = {
-        ...gasMappedTask,
-        parent_id: existingTask?.parent_id !== undefined ? existingTask.parent_id : gasMappedTask.parent_id,
-        status: existingTask?.status !== undefined ? existingTask.status : gasMappedTask.status,
-        display_period: existingTask?.display_period !== undefined ? existingTask.display_period : gasMappedTask.display_period,
-        completed_at: existingTask?.completed_at !== undefined ? existingTask.completed_at : gasMappedTask.completed_at,
-        unexecuted_reason: existingTask?.unexecuted_reason !== undefined ? existingTask.unexecuted_reason : gasMappedTask.unexecuted_reason,
-        is_sos: existingTask?.is_sos !== undefined ? existingTask.is_sos : gasMappedTask.is_sos,
-        sos_reason: existingTask?.sos_reason !== undefined ? existingTask.sos_reason : gasMappedTask.sos_reason,
-        // 💡 既存Firestoreの担当看護師情報を確実に死守（undefinedを回避し空文字をデフォルト化）
-        staff_id: existingTask?.staff_id || existingTask?.assigned_nurse_id || gasMappedTask.staff_id || "",
-        assigned_nurse_id: existingTask?.assigned_nurse_id || existingTask?.staff_id || gasMappedTask.assigned_nurse_id || "",
-        nurse_name: existingTask?.nurse_name || gasMappedTask.nurse_name || "",
-        team: existingTask?.team || gasMappedTask.team || "",
-      };
-
-      // 💡 Firestore書き込み前に undefined プロパティを全自動で削除・クリーンアップ
-      const cleanedDoc = cleanUndefinedFields(mergedTaskDoc);
-
-      mappedTasks.push(cleanedDoc);
-
-      const docRef = doc(db, 'tasks', cleanedDoc.task_id);
-      batch.set(docRef, cleanedDoc, { merge: true });
-    });
-
-    await batch.commit();
-    console.log(`スプレッドシートから取得した ${gasTasks.length} 件のタスクをスマートマージ（ユーザー操作保持）で Firestore に同期完了しました。`);
-    return mappedTasks;
-  } catch (error) {
-    console.error("スプレッドシートタスクの同期処理エラー:", error);
-    return [];
+  if (ongoingSyncPromise) {
+    console.log("⏳ すでに同期処理が実行中のため、既存の同期プロセス結果を共有します（429防止）");
+    return ongoingSyncPromise;
   }
+
+  ongoingSyncPromise = (async (): Promise<ExtendedTask[]> => {
+    try {
+      const todayJST = getJSTDateString();
+      console.log(`スプレッドシート (GAS) から全タスク・患者データを取得中...`);
+      const { tasks: gasTasks, patients: gasPatients } = await fetchGASData();
+
+      if (!gasTasks || gasTasks.length === 0) {
+        console.warn("GASから取得できたタスクが0件です。");
+        return [];
+      }
+
+      // 💡 既存の Firestore ドキュメントを全件読み込み、ユーザーの変更（parent_id, status 等）を二重保護
+      const existingSnapshot = await getDocs(collection(db, 'tasks'));
+      const existingTasksMap = new Map<string, any>();
+      existingSnapshot.docs.forEach(doc => {
+        existingTasksMap.set(doc.id, doc.data());
+      });
+
+      const batch = writeBatch(db);
+      const mappedTasks: ExtendedTask[] = [];
+
+      gasTasks.forEach((item, index) => {
+        const gasMappedTask = mapGASTaskToExtendedTask(item, index, todayJST, userName, gasPatients);
+        const existingTask = existingTasksMap.get(gasMappedTask.task_id);
+
+        // 🧠 【スマートマージ】既存の Firestore にユーザー変更（グループ化・ステータス更新）が存在すれば保護・保持
+        const mergedTaskDoc: ExtendedTask = {
+          ...gasMappedTask,
+          parent_id: existingTask?.parent_id !== undefined ? existingTask.parent_id : gasMappedTask.parent_id,
+          status: existingTask?.status !== undefined ? existingTask.status : gasMappedTask.status,
+          display_period: existingTask?.display_period !== undefined ? existingTask.display_period : gasMappedTask.display_period,
+          completed_at: existingTask?.completed_at !== undefined ? existingTask.completed_at : gasMappedTask.completed_at,
+          unexecuted_reason: existingTask?.unexecuted_reason !== undefined ? existingTask.unexecuted_reason : gasMappedTask.unexecuted_reason,
+          is_sos: existingTask?.is_sos !== undefined ? existingTask.is_sos : gasMappedTask.is_sos,
+          sos_reason: existingTask?.sos_reason !== undefined ? existingTask.sos_reason : gasMappedTask.sos_reason,
+          // 💡 既存Firestoreの担当看護師情報を確実に死守（undefinedを回避し空文字をデフォルト化）
+          nurse_id: existingTask?.nurse_id || existingTask?.staff_id || existingTask?.assigned_nurse_id || gasMappedTask.nurse_id || "",
+          staff_id: existingTask?.staff_id || existingTask?.assigned_nurse_id || existingTask?.nurse_id || gasMappedTask.staff_id || "",
+          assigned_nurse_id: existingTask?.assigned_nurse_id || existingTask?.staff_id || existingTask?.nurse_id || gasMappedTask.assigned_nurse_id || "",
+          nurse_name: existingTask?.nurse_name || gasMappedTask.nurse_name || "",
+          team: existingTask?.team || gasMappedTask.team || "",
+        };
+
+        // 💡 Firestore書き込み前に undefined プロパティを全自動で削除・クリーンアップ
+        const cleanedDoc = cleanUndefinedFields(mergedTaskDoc);
+
+        mappedTasks.push(cleanedDoc);
+
+        const docRef = doc(db, 'tasks', cleanedDoc.task_id);
+        batch.set(docRef, cleanedDoc, { merge: true });
+      });
+
+      await batch.commit();
+      console.log(`スプレッドシートから取得した ${gasTasks.length} 件のタスクをスマートマージ（ユーザー操作保持）で Firestore に同期完了しました。`);
+      return mappedTasks;
+    } catch (error) {
+      console.error("スプレッドシートタスクの同期処理エラー:", error);
+      return [];
+    } finally {
+      // 処理が終わったらロックを解除
+      ongoingSyncPromise = null;
+    }
+  })();
+
+  return ongoingSyncPromise;
 };

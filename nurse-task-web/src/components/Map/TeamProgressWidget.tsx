@@ -1,10 +1,11 @@
 import React, { useMemo } from 'react';
-import { useTimelineStore, type NursePin } from '../stores/useTimelineStore';
+import { useTimelineStore, type NursePin } from '../../stores/useTimelineStore';
 import {
   calculateNurseProgressList,
+  calculateSelectedPatientProgress,
   calculateExtendedTasksProgress,
   useCurrentTimeMinutes,
-} from '../utils/progressCalculator';
+} from '../../utils/progressCalculator';
 
 export interface TeamProgressWidgetProps {
   selectedPatients?: string[];
@@ -33,10 +34,11 @@ export const TeamProgressWidget: React.FC<TeamProgressWidgetProps> = ({
   // 1. 1分ごとに自動更新される基準時刻フック (時間軸判定のリアルタイム化)
   const currentMinutes = useCurrentTimeMinutes(60000);
 
-  // 2. Zustandストアからリアクティブに最新の全タスク・看護師・選択患者を取得 (onSnapshot同期)
+  // 2. Zustandストアからリアクティブに最新の全タスク・看護師・全看護師の受け持ち患者割り当てを取得
   const allTasks = useTimelineStore((state) => state.allTasks);
   const storeNurses = useTimelineStore((state) => state.nurses);
   const storeSelectedPatients = useTimelineStore((state) => state.selectedPatients);
+  const nurseAssignments = useTimelineStore((state) => state.nurseAssignments);
 
   // 3. props または Zustandストア / sessionStorage から selectedPatients を優先判定
   const rawSelectedPatients = useMemo(() => {
@@ -58,7 +60,7 @@ export const TeamProgressWidget: React.FC<TeamProgressWidgetProps> = ({
     return [];
   }, [propSelectedPatients, storeSelectedPatients]);
 
-  // 💡 患者ID（文字列）の配列へ完全正規化（オブジェクト形式 `{ patient_id: "..." }` も100%吸収）
+  // 💡 患者ID（文字列）の配列へ完全正規化
   const selectedPatientIds = useMemo(() => {
     if (!rawSelectedPatients || !Array.isArray(rawSelectedPatients)) return [];
     return rawSelectedPatients
@@ -79,10 +81,10 @@ export const TeamProgressWidget: React.FC<TeamProgressWidgetProps> = ({
     return activeNurses.filter((n) => !n.is_leader);
   }, [activeNurses]);
 
-  // 5. 【A: 上部】各看護師の個別プログレスバー：選択患者（selectedPatientIds）のタスクのみで集計
+  // 5. 【プランB】各看護師のリアルタイム選択患者（nurseAssignments）に基づき全員の進捗バーを同期計算
   const nurseProgressList = useMemo(() => {
-    return calculateNurseProgressList(memberNurses, allTasks, selectedPatientIds, currentMinutes);
-  }, [memberNurses, allTasks, selectedPatientIds, currentMinutes]);
+    return calculateNurseProgressList(memberNurses, allTasks, nurseAssignments, currentMinutes);
+  }, [memberNurses, allTasks, nurseAssignments, currentMinutes]);
 
   // 6. 【B: 下部】病棟全体の進捗バー：選択患者に関わらず病棟全体の全タスク（allTasks）で集計
   const overallProgress = useMemo(() => {
@@ -148,7 +150,7 @@ export const TeamProgressWidget: React.FC<TeamProgressWidgetProps> = ({
         </span>
       </div>
 
-      {/* 看護師ごとの個別プログレスバー一覧 (A: 選択患者タスク限定) */}
+      {/* 看護師ごとの個別プログレスバー一覧 (選択患者タスク限定) */}
       <div className="flex flex-col gap-2.5">
         {selectedPatientIds.length === 0 ? (
           <div className="text-center py-6 px-2 bg-slate-50 rounded-xl border border-dashed border-slate-200">

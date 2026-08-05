@@ -1,6 +1,7 @@
 import { useTimer } from "../hooks/useTimer";
 import { useUserName } from '../hooks/useUserName';
 import { useLogout } from '../hooks/useLogout';
+import { useTimelineStore } from '../stores/useTimelineStore';
 
 interface GlobalHeaderProps {
   currentPage: 'login' | 'patientSelect' | 'patientMaster' | 'timeline' | 'map' | 'leaderTodo';
@@ -8,8 +9,6 @@ interface GlobalHeaderProps {
   onNavigate: (screen: 'patientSelect' | 'patientMaster' | 'timeline' | 'map' | 'leaderTodo') => void;
   onLogout?: () => void; // ログアウト用（必要に応じて）
 }
-
-import { useTimelineStore } from '../stores/useTimelineStore';
 
 export default function GlobalHeader({ currentPage, onNavigate}: GlobalHeaderProps) {
    const { time } = useTimer();
@@ -21,9 +20,24 @@ export default function GlobalHeader({ currentPage, onNavigate}: GlobalHeaderPro
   // 💡 「患者マスター」タブを青くアクティブにする条件（マスター画面 or 患者選択画面のとき）
   const isMasterActive = currentPage === 'patientMaster' || currentPage === 'patientSelect';
 
+  // 💡 ロゴクリック時の確認ハンドラーを追加
+  const handleLogoClick = () => {
+    // すでに患者選択画面にいる場合は何もせずにリターン
+    if (currentPage === 'patientSelect') return;
+
+    // 確認ダイアログを表示
+    const isConfirmed = window.confirm("患者選択画面に戻りますか？\n（現在の画面は閉じられます）");
+    
+    // 「OK」が押された場合のみ遷移を実行
+    if (isConfirmed) {
+      onNavigate('patientSelect');
+    }
+  };
+
   return (
     <header className="flex justify-between items-center p-2 bg-sky-200 border-b w-full">
-      <h1 className="cursor-pointer" onClick={() => onNavigate('patientSelect')}>
+      {/* 💡 onClickを handleLogoClick に変更 */}
+      <h1 className="cursor-pointer" onClick={handleLogoClick}>
         <img src="/icon_b/local_hospital_48dp.png" alt="NurseFlow Dashboard" className="w-8 h-8 inline mr-2" />
         <span className="header-title-text font-bold text-lg">NurseFlowApp</span>
       </h1>

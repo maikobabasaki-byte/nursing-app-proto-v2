@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import type { ExtendedTask, Memo, ExtendedTaskStatus, LeaderTodo } from '../types/types';
 import { updateTask } from '../hooks/useTaskUpdate';
 import { collection, doc, setDoc, getDocs, deleteDoc } from "firebase/firestore";
-import { db, updateNurseSos, saveLeaderTodoInFirestore, updateLeaderTodoInFirestore, deleteLeaderTodoInFirestore } from "../lib/firebase";
+import { db, updateNurseSos, updateNurseAssignedPatients, toggleTaskSosInFirestore, saveLeaderTodoInFirestore, updateLeaderTodoInFirestore, deleteLeaderTodoInFirestore } from "../lib/firebase";
 
 export interface NurseMaster {
   nurse_id: string;
@@ -11,11 +11,12 @@ export interface NurseMaster {
   team?: string;
   email?: string;
   is_leader?: boolean;
+  assigned_patients?: string[];
+  created_at?: string;
+  updated_at?: string;
 }
 
-export interface NursePin {
-  nurse_id: string;
-  name: string;
+export interface NursePin extends NurseMaster {
   role?: string;
   color: string;
   x_percent: number; // 横方向の相対座標 (%)
@@ -24,10 +25,6 @@ export interface NursePin {
   is_sos?: boolean; // 看護師SOSフラグ
   sos_reason?: string; // SOSメッセージ
   responder_name?: string; // SOS対応者名
-  gender?: string;
-  team?: string;
-  email?: string;
-  is_leader?: boolean;
 }
 
 export interface CurrentUser {
@@ -36,6 +33,7 @@ export interface CurrentUser {
   email: string;
   team?: string;
   is_leader?: boolean;
+  assigned_patients?: string[];
 }
 
 interface TimelineStore {
@@ -43,6 +41,7 @@ interface TimelineStore {
   memos: Memo[];
   nurseMaster: NurseMaster[];
   nurses: NursePin[];
+  nurseAssignments: Record<string, string[]>;
   leaderTodos: LeaderTodo[];
   currentUser: CurrentUser | null;
   selectedPatients: string[];
@@ -218,6 +217,7 @@ export const useTimelineStore = create<TimelineStore>((set, get) => ({
     } catch (e) {}
     return [];
   })(),
+  nurseAssignments: {},
   showLowPriority: false,
   loading: false,
   groupingMode: null,
@@ -235,7 +235,20 @@ export const useTimelineStore = create<TimelineStore>((set, get) => ({
     try {
       sessionStorage.setItem('selectedPatients', JSON.stringify(list));
     } catch (e) {}
-    set({ selectedPatients: list });
+    const state = get();
+    const currentNurseId = state.currentUser?.nurse_id;
+    if (currentNurseId) {
+      updateNurseAssignedPatients(currentNurseId, list);
+      set({
+        selectedPatients: list,
+        nurseAssignments: {
+          ...state.nurseAssignments,
+          [currentNurseId]: list,
+        },
+      });
+    } else {
+      set({ selectedPatients: list });
+    }
   },
   setShowLowPriority: (show) => set({ showLowPriority: show }),
   toggleShowLowPriority: () => set((state) => ({ showLowPriority: !state.showLowPriority })),
@@ -264,13 +277,33 @@ export const useTimelineStore = create<TimelineStore>((set, get) => ({
       leaderTodos: state.leaderTodos.filter((t) => t.todo_id !== todoId && !t.is_deleted && t.status !== 'deleted'),
     }));
   },
-  setNurseMaster: (masters) => set((state) => ({
-    nurseMaster: masters,
-    nurses: mergeNurseData(masters, state.nurses),
-  })),
-  setNurses: (incomingRuntimes) => set((state) => ({
-    nurses: mergeNurseData(state.nurseMaster, incomingRuntimes),
-  })),
+  setNurseMaster: (masters) => set((state) => {
+    const mergedNurses = mergeNurseData(masters, state.nurses);
+    const assignments: Record<string, string[]> = { ...state.nurseAssignments };
+    mergedNurses.forEach((n) => {
+      if (n.nurse_id && Array.isArray(n.assigned_patients)) {
+        assignments[n.nurse_id] = n.assigned_patients;
+      }
+    });
+    return {
+      nurseMaster: masters,
+      nurses: mergedNurses,
+      nurseAssignments: assignments,
+    };
+  }),
+  setNurses: (incomingRuntimes) => set((state) => {
+    const mergedNurses = mergeNurseData(state.nurseMaster, incomingRuntimes);
+    const assignments: Record<string, string[]> = { ...state.nurseAssignments };
+    mergedNurses.forEach((n) => {
+      if (n.nurse_id && Array.isArray(n.assigned_patients)) {
+        assignments[n.nurse_id] = n.assigned_patients;
+      }
+    });
+    return {
+      nurses: mergedNurses,
+      nurseAssignments: assignments,
+    };
+  }),
   updateNursePosition: (nurseId, x_percent, y_percent) => set((state) => ({
     nurses: state.nurses.map((n) =>
       n.nurse_id === nurseId ? { ...n, x_percent, y_percent } : n
@@ -591,16 +624,27 @@ export const useTimelineStore = create<TimelineStore>((set, get) => ({
                  state.allTasks.flatMap(t => t.children || []).find(c => c.task_id === taskId);
     if (task) {
       const nextIsSos = !task.is_sos;
-      const nextSosReason = nextIsSos ? (reason || "緊急応援要請が発生しました") : "";
+      const nextSosReason = nextIsSos ? (reason || 'タスクの支援要請が発生しました') : '';
+      const currentUserId = state.currentUser?.nurse_id || sessionStorage.getItem('nurse_id') || '';
+      const currentUserName = state.currentUser?.name || sessionStorage.getItem('nurse_name') || '';
 
-      updateTask(taskId, { is_sos: nextIsSos, sos_reason: nextSosReason });
+      // 💡 単一関数 toggleTaskSosInFirestore を呼び出し二重通信と競合を廃止
+      toggleTaskSosInFirestore(
+        taskId,
+        nextIsSos,
+        nextSosReason,
+        currentUserId,
+        currentUserName
+      );
 
       const updatedTasks = state.allTasks.map((t) => {
         if (t.task_id === taskId) {
           return {
             ...t,
             is_sos: nextIsSos,
-            sos_reason: nextSosReason
+            sos_reason: nextSosReason,
+            requested_by_id: nextIsSos ? currentUserId : '',
+            requested_by_name: nextIsSos ? currentUserName : '',
           };
         }
         if (t.isGroup && t.children && Array.isArray(t.children)) {
@@ -611,7 +655,9 @@ export const useTimelineStore = create<TimelineStore>((set, get) => ({
                 return {
                   ...c,
                   is_sos: nextIsSos,
-                  sos_reason: nextSosReason
+                  sos_reason: nextSosReason,
+                  requested_by_id: nextIsSos ? currentUserId : '',
+                  requested_by_name: nextIsSos ? currentUserName : '',
                 };
               }
               return c;
@@ -627,7 +673,7 @@ export const useTimelineStore = create<TimelineStore>((set, get) => ({
   }),
 
   respondToTaskSos: (taskId, responderName) => set((state) => {
-    updateTask(taskId, { is_sos: false, sos_reason: '', responder_name: responderName });
+    toggleTaskSosInFirestore(taskId, false, '', '', '');
 
     const updatedTasks = state.allTasks.map((t) => {
       if (t.task_id === taskId) {
@@ -635,6 +681,8 @@ export const useTimelineStore = create<TimelineStore>((set, get) => ({
           ...t,
           is_sos: false,
           sos_reason: '',
+          requested_by_id: '',
+          requested_by_name: '',
           responder_name: responderName,
         };
       }
@@ -647,6 +695,8 @@ export const useTimelineStore = create<TimelineStore>((set, get) => ({
                 ...c,
                 is_sos: false,
                 sos_reason: '',
+                requested_by_id: '',
+                requested_by_name: '',
                 responder_name: responderName,
               };
             }

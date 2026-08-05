@@ -186,171 +186,60 @@ export interface NurseProgressResult {
   progressPercent: number;
 }
 
-import { useTimelineStore } from '../stores/useTimelineStore';
-
 /**
- * 💡 看護師ごとの計画加味型進捗率一覧算出ロジック（選択患者タスク限定）
+ * 🩺 看護師ごとのリアルタイム選択患者ベース進捗算出ロジック (プランB)
+ * タスク側の nurse_id に依存せず、各看護師が「受け持ち」として選択している患者のタスクのみで集計
  */
 export const calculateNurseProgressList = (
-  nurses: any[],
+  nurses: (NurseMaster | NursePin)[],
   tasks: ExtendedTask[],
-  selectedPatients: string[] = [],
-  targetMinutes: number = getCurrentTimeMinutes()
+  assignments: Record<string, string[]> = {},
+  _targetMinutes: number = getCurrentTimeMinutes()
 ): NurseProgressResult[] => {
-  // 患者未選択時は受け持ち0件で初期化して返却
-  if (!selectedPatients || selectedPatients.length === 0) {
-    return nurses.map((n) => ({
-      nurse_id: String(n.nurse_id || ''),
-      nurse_name: String(n.name || '看護師'),
-      color: n.color || '#6366f1',
-      team: n.team || 'Aチーム',
-      totalCount: 0,
-      completedOnTimeCount: 0,
-      overallCompletedCount: 0,
-      progressPercent: 0,
-    }));
-  }
+  const activeTasks = (tasks || []).filter((t) => t.status !== 'deleted');
 
-  // 🎯 1. 選択患者のタスクのみに厳格絞り込み（オブジェクト・文字列どちらも抽出対応）
-  const isPatientMatch = (t: ExtendedTask) => {
-    if (!t.patient_id && !t.room_id) return false;
-    const pIdStr = String(t.patient_id || '').trim().toLowerCase();
-    const rIdStr = String(t.room_id || '').trim().toLowerCase();
+  return nurses.map((nurse) => {
+    const nurseId = String(nurse.nurse_id || '');
+    // 各看護師が選択している患者IDリスト (assignments[nurse_id] または nurse.assigned_patients)
+    const rawMyPatientIds = assignments[nurseId] || nurse.assigned_patients || [];
+    
+    // 患者ID文字列の正規化
+    const myPatientIdSet = new Set(
+      rawMyPatientIds
+        .map((p) => String(p || '').trim().toLowerCase())
+        .filter((p) => p !== '')
+    );
 
-    return selectedPatients.some((sp: any) => {
-      let spStr = '';
-      if (typeof sp === 'object' && sp !== null) {
-        spStr = String(sp.patient_id || sp.id || sp.room_id || '').trim().toLowerCase();
-      } else {
-        spStr = String(sp || '').trim().toLowerCase();
+    // 看護師が選択している患者に紐づくタスクのみを抽出（タスク側のnurse_idは一切無視）
+    const myTasks = activeTasks.filter((t) => {
+      if (myPatientIdSet.size === 0) return false;
+      const pId = String(t.patient_id || '').trim().toLowerCase();
+      const rId = String(t.room_id || '').trim().toLowerCase();
+      if (!pId && !rId) return false;
+
+      // 1. 患者IDまたは病室IDでの完全一致
+      if (pId !== '' && myPatientIdSet.has(pId)) return true;
+      if (rId !== '' && myPatientIdSet.has(rId)) return true;
+
+      // 2. 部分一致・数字抽出一致チェック
+      for (const spStr of myPatientIdSet) {
+        if (pId !== '' && (spStr.includes(pId) || pId.includes(spStr))) return true;
+        if (rId !== '' && (spStr.includes(rId) || rId.includes(spStr))) return true;
+
+        const spNum = spStr.replace(/\D/g, '');
+        const pIdNum = pId.replace(/\D/g, '');
+        if (spNum !== '' && spNum === pIdNum) return true;
       }
-      if (!spStr) return false;
-
-      // 1. 完全一致
-      if (spStr === pIdStr || spStr === rIdStr) return true;
-
-      // 2. 部分一致
-      if (pIdStr !== '' && (spStr.includes(pIdStr) || pIdStr.includes(spStr))) return true;
-      if (rIdStr !== '' && (spStr.includes(rIdStr) || rIdStr.includes(spStr))) return true;
-
-      // 3. 数字部分の抽出一致（"P211" と "211" の吸収）
-      const spNum = spStr.replace(/\D/g, '');
-      const pIdNum = pIdStr.replace(/\D/g, '');
-      if (spNum !== '' && spNum === pIdNum) return true;
 
       return false;
     });
-  };
-
-  const selectedPatientTasks = tasks.filter((t) => t.status !== 'deleted' && isPatientMatch(t));
-
-  console.groupCollapsed("📊 [calculateNurseProgressList 内部照合ログ]");
-  console.log("入力データサマリー:", {
-    nursesCount: nurses?.length || 0,
-    totalTasksCount: tasks?.length || 0,
-    selectedPatientsInputCount: selectedPatients?.length || 0,
-    firstSelectedPatient: selectedPatients?.[0],
-    firstSelectedPatientTypeof: typeof selectedPatients?.[0],
-    selectedPatientTasksMatched: selectedPatientTasks.length,
-    targetMinutes,
-    isTargetMinutesNaN: Number.isNaN(targetMinutes),
-  });
-  if (tasks && tasks.length > 0) {
-    console.log("サンプルタスク情報:", {
-      taskId: tasks[0]?.task_id,
-      patientId: tasks[0]?.patient_id,
-      roomId: tasks[0]?.room_id,
-      staffId: tasks[0]?.staff_id,
-      nurseName: tasks[0]?.nurse_name,
-    });
-  }
-  console.groupEnd();
-
-  if (selectedPatientTasks.length === 0) {
-    return nurses.map((n) => ({
-      nurse_id: String(n.nurse_id || ''),
-      nurse_name: String(n.name || '看護師'),
-      color: n.color || '#6366f1',
-      team: n.team || 'Aチーム',
-      totalCount: 0,
-      completedOnTimeCount: 0,
-      overallCompletedCount: 0,
-      progressPercent: 0,
-    }));
-  }
-
-  // 🎯 2. 選択患者の各タスクをそれぞれの担当看護師へ割り当て
-  const nurseTaskMap = new Map<string, ExtendedTask[]>();
-  nurses.forEach((n) => {
-    const key = String(n.nurse_id || n.name);
-    nurseTaskMap.set(key, []);
-  });
-
-  selectedPatientTasks.forEach((task: any) => {
-    let assignedKey: string | null = null;
-
-    // A. ID / 名前によるダイレクト照合
-    for (const nurse of nurses) {
-      const nId = String(nurse.nurse_id || '').trim();
-      const nEmail = String(nurse.email || '').trim();
-      const nName = String(nurse.name || '').replace(/[\s　]+/g, '').replace(/看護師$/, '');
-
-      const tStaffId = String(task.staff_id || '').trim();
-      const tAssignedId = String(task.assigned_nurse_id || '').trim();
-      const tNurseId = String(task.nurse_id || '').trim();
-      const tNurseName = String(task.nurse_name || '').replace(/[\s　]+/g, '').replace(/看護師$/, '');
-
-      // 1. ID・メールアドレスで一致
-      if (
-        (nId !== '' && (tStaffId === nId || tAssignedId === nId || tNurseId === nId)) ||
-        (nEmail !== '' && (tStaffId === nEmail || tAssignedId === nEmail || tNurseId === nEmail))
-      ) {
-        assignedKey = String(nurse.nurse_id || nurse.name);
-        break;
-      }
-
-      // 2. 看護師名で相互に一致
-      if (
-        tNurseName !== '' &&
-        nName !== '' &&
-        (tNurseName === nName || tNurseName.includes(nName) || nName.includes(tNurseName))
-      ) {
-        assignedKey = String(nurse.nurse_id || nurse.name);
-        break;
-      }
-    }
-
-    // B. 明示的指定がないタスクは、タスクのチーム属性 (task.team) または看護師のチーム属性で反映
-    if (!assignedKey) {
-      const teamNurse = nurses.find((n) => n.team && task.team && String(n.team).trim().toLowerCase() === String(task.team).trim().toLowerCase());
-      if (teamNurse) {
-        assignedKey = String(teamNurse.nurse_id || teamNurse.name);
-      }
-    }
-
-    // C. 照合レイヤー4: GAS同期直後等で担当看護師が一時未特定の場合でも、選択患者タスクをメンバー看護師へ確実に反映（0件化を完全防止）
-    if (!assignedKey && nurses.length > 0) {
-      const fallbackNurse = nurses.find((n) => !n.is_leader) || nurses[0];
-      assignedKey = String(fallbackNurse.nurse_id || fallbackNurse.name);
-    }
-
-    if (assignedKey && nurseTaskMap.has(assignedKey)) {
-      nurseTaskMap.get(assignedKey)?.push(task);
-    }
-  });
-
-  // 🎯 3. 各看護師の独立したプログレス計算結果を生成
-  const nurseResults = nurses.map((nurse) => {
-    const key = String(nurse.nurse_id || nurse.name);
-    const myTasks = nurseTaskMap.get(key) || [];
 
     const totalCount = myTasks.length;
     let completedOnTimeCount = 0;
     let overallCompletedCount = 0;
 
-    myTasks.forEach((task: any) => {
-      const isCompleted = task.status === 'completed';
-      if (isCompleted) {
+    myTasks.forEach((task: ExtendedTask) => {
+      if (task.status === 'completed') {
         overallCompletedCount += 1;
         completedOnTimeCount += 1;
       }
@@ -359,9 +248,9 @@ export const calculateNurseProgressList = (
     const progressPercent = totalCount > 0 ? Math.round((completedOnTimeCount / totalCount) * 100) : 0;
 
     return {
-      nurse_id: String(nurse.nurse_id || ''),
+      nurse_id: nurseId,
       nurse_name: String(nurse.name || '看護師'),
-      color: nurse.color || '#6366f1',
+      color: (nurse as NursePin).color || '#6366f1',
       team: nurse.team || 'Aチーム',
       totalCount,
       completedOnTimeCount,
@@ -369,12 +258,14 @@ export const calculateNurseProgressList = (
       progressPercent,
     };
   });
-
-  console.log('📊 [SelectedPatientsNurseProgressList]', {
-    selectedPatientsCount: selectedPatients.length,
-    selectedPatientTasksTotal: selectedPatientTasks.length,
-    nurseTaskBreakdown: nurseResults.map((r) => `${r.nurse_name} (${r.team}): 受け持ち${r.totalCount}件 (${r.progressPercent}%)`),
-  });
-
-  return nurseResults;
 };
+
+/**
+ * 🩺 A. チーム共有用ロジック（プランB: 各看護師の選択患者状況ベースで全員の進捗を同期計算）
+ */
+export const calculateTeamSharedProgress = calculateNurseProgressList;
+
+/**
+ * 🩺 B. 個人・選択患者用ロジック (エイリアス)
+ */
+export const calculateSelectedPatientProgress = calculateNurseProgressList;

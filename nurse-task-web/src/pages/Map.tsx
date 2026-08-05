@@ -56,7 +56,7 @@ const LeftPanel: React.FC<{ sosTasks: any[]; sosNurses: NursePin[] }> = ({ sosTa
 );
 
 
-import TeamProgressWidget from '../components/TeamProgressWidget';
+import TeamProgressWidget from '../components/Map/TeamProgressWidget';
 
 const RightPanel: React.FC<{ nurses: NursePin[]; selectedPatients?: string[] }> = ({ nurses, selectedPatients }) => {
   return <TeamProgressWidget nurses={nurses} selectedPatients={selectedPatients} />;

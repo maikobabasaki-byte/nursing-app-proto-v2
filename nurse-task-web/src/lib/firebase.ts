@@ -78,6 +78,28 @@ export const updateNurseSos = async (
   }
 };
 
+// 💡 看護師ごとの選択患者リスト（受け持ち割り当て）をFirestoreに保存・更新する関数
+export const updateNurseAssignedPatients = async (
+  nurseId: string,
+  assignedPatients: string[]
+) => {
+  if (!nurseId) return;
+  try {
+    const nurseRef = doc(db, 'nurses', nurseId);
+    await setDoc(
+      nurseRef,
+      {
+        nurse_id: nurseId,
+        assigned_patients: assignedPatients,
+        updatedAt: serverTimestamp(),
+      },
+      { merge: true }
+    );
+  } catch (error) {
+    console.error("看護師の受け持ち患者更新に失敗しました:", error);
+  }
+};
+
 // 💡 トランザクションを用いた競合回避付きSOS対応処理
 export const respondToNurseSosWithTransaction = async (
   nurseId: string,
@@ -128,7 +150,9 @@ export const respondToNurseSosWithTransaction = async (
 export const toggleTaskSosInFirestore = async (
   taskId: string,
   isSos: boolean,
-  reason?: string
+  reason?: string,
+  requestedById?: string,
+  requestedByName?: string
 ) => {
   try {
     const taskRef = doc(db, 'tasks', taskId);
@@ -137,6 +161,8 @@ export const toggleTaskSosInFirestore = async (
       {
         is_sos: isSos,
         sos_reason: isSos ? (reason || 'タスクの支援要請が発生しました') : '',
+        requested_by_id: isSos ? (requestedById || '') : '',
+        requested_by_name: isSos ? (requestedByName || '') : '',
         responder_name: '',
         updatedAt: serverTimestamp(),
       },
@@ -174,6 +200,8 @@ export const respondToTaskSosWithTransaction = async (
         {
           is_sos: false,
           sos_reason: '',
+          requested_by_id: '',
+          requested_by_name: '',
           responder_name: responderName,
           updatedAt: serverTimestamp(),
         },

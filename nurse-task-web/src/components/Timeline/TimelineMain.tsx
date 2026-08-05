@@ -42,8 +42,17 @@ export default function TimelineMain({
       }
 
       // 💡 リーダー参照モード時：自チーム（leaderTeam）に所属する看護師のタスクに完全固定
-      if (task.nurse_name) {
-        const assignedNurse = nurseMaster.find(n => n.name === task.nurse_name);
+      const tNurseName = (task.nurse_name || '').replace(/[\s　]+/g, '');
+      const tNurseId = (task.nurse_id || task.staff_id || (task as any).assigned_nurse_id || '').trim();
+      if (tNurseName || tNurseId) {
+        const assignedNurse = nurseMaster.find(n => {
+          const nName = (n.name || '').replace(/[\s　]+/g, '');
+          const nId = (n.nurse_id || n.id || '').trim();
+          return (
+            (nId !== '' && (nId === tNurseId || nId === tNurseName)) ||
+            (nName !== '' && (nName === tNurseName || nName === tNurseId || tNurseName.includes(nName) || nName.includes(tNurseName)))
+          );
+        });
         if (assignedNurse && assignedNurse.team && assignedNurse.team !== leaderTeam) {
           return false;
         }
