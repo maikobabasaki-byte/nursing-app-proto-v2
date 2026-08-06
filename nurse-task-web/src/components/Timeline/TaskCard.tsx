@@ -86,16 +86,16 @@ if (transform) {
             </span>
             {task.is_additional && (
               <span className="bg-purple-600 text-white text-[10px] px-1.5 py-0.5 rounded font-bold whitespace-nowrap shadow-sm flex items-center gap-0.5">
-                ✨ 臨時追加
+                臨時追加
               </span>
             )}
             {task.instruction_type === '看護指示' ? (
               <span className="bg-emerald-600 text-white text-[10px] px-1.5 py-0.5 rounded font-bold whitespace-nowrap shadow-sm flex items-center gap-0.5">
-                🩺 看護指示
+                看護指示
               </span>
             ) : (
               <span className="bg-indigo-100 text-indigo-800 border border-indigo-200 text-[10px] px-1.5 py-0.5 rounded font-semibold whitespace-nowrap flex items-center gap-0.5 opacity-90">
-                👨‍⚕️ 医師指示
+                医師指示
               </span>
             )}
             {originalTime &&

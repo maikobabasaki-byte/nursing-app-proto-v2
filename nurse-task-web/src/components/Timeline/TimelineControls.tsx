@@ -9,11 +9,11 @@ const TIME_RANGE_OPTIONS = Array.from({ length: 48 }, (_, i) => {
 });
 
 const SHIFT_PRESETS = [
-  { label: '🌅 日勤', start: '08:00', end: '17:30' },
-  { label: '🌄 早出', start: '07:00', end: '16:00' },
-  { label: '🌆 遅出', start: '11:00', end: '20:00' },
-  { label: '🌙 夜勤', start: '17:00', end: '09:00' },
-  { label: '⏰ 全時間', start: '06:00', end: '23:30' },
+  { label: '日勤', start: '08:00', end: '17:30' },
+  { label: '早出', start: '07:00', end: '16:00' },
+  { label: '遅出', start: '11:00', end: '20:00' },
+  { label: '夜勤', start: '17:00', end: '09:00' },
+  { label: '全時間', start: '06:00', end: '23:30' },
 ];
 
 export const TimelineControls = ({ 
@@ -80,10 +80,10 @@ export const TimelineControls = ({
                 key={preset.label}
                 type="button"
                 onClick={() => setTimelineTimeRange(preset.start, preset.end)}
-                className={`!px-2.5 !py-1.5 !text-xs !font-extrabold !rounded-xl border transition-all cursor-pointer whitespace-nowrap ${
+                className={`!px-2.5 !py-1.5 !text-xs !font-extrabold !rounded-xl !border transition-all cursor-pointer whitespace-nowrap ${
                   isActive
-                    ? '!bg-emerald-600 !text-white border-emerald-700 shadow-xs ring-2 ring-emerald-200'
-                    : 'bg-white text-gray-700 border-gray-200 hover:bg-emerald-50 hover:border-emerald-300'
+                    ? '!bg-emerald-600 !text-white !border-emerald-700 !shadow-xs !ring-2 !ring-emerald-200'
+                    : '!bg-white !text-gray-700 !border-gray-200 hover:!bg-emerald-50 hover:!border-emerald-300'
                 }`}
               >
                 {preset.label}
@@ -94,7 +94,7 @@ export const TimelineControls = ({
 
         {/* C. 開始時間 ➔ 終了時間 ドロップダウン指定 */}
         <div className="flex items-center gap-1.5 bg-white px-2.5 py-1 rounded-xl shadow-2xs border border-gray-200 font-extrabold text-gray-700">
-          <span>⏰ 表示範囲:</span>
+          <span>表示範囲:</span>
           <select
             value={timelineStartTime}
             onChange={(e) => setTimelineTimeRange(e.target.value, timelineEndTime)}

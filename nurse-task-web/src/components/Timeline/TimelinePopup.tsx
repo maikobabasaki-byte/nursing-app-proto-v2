@@ -101,7 +101,7 @@ export const TimelinePopup: React.FC<TimelinePopupProps> = ({ task, onClose, ren
         <div className="absolute top-4 right-14 flex items-center gap-1.5">
           {task.is_additional && (
             <span className="bg-purple-600 text-white text-[10px] font-bold px-2 py-0.5 rounded-full shadow-sm">
-              ✨ 臨時追加
+              臨時追加
             </span>
           )}
           <span className={`text-xs font-black px-2.5 py-1 rounded-full shadow-sm ${statusBgClasses[currentStatus] || 'bg-gray-200 text-gray-700'}`}>
@@ -122,11 +122,11 @@ export const TimelinePopup: React.FC<TimelinePopupProps> = ({ task, onClose, ren
             <div className="text-sm font-bold opacity-80">指示時間: {task.display_period}</div>
             {task.instruction_type === '看護指示' ? (
               <span className="bg-emerald-600 text-white text-xs px-2.5 py-0.5 rounded-full font-bold shadow-sm">
-                🩺 看護指示
+                看護指示
               </span>
             ) : (
               <span className="bg-indigo-100 text-indigo-800 border border-indigo-200 text-xs px-2.5 py-0.5 rounded-full font-bold opacity-90">
-                👨‍⚕️ 医師指示
+                医師指示
               </span>
             )}
           </div>
@@ -151,16 +151,16 @@ export const TimelinePopup: React.FC<TimelinePopupProps> = ({ task, onClose, ren
               <span>⚙️ 看護判断・タスク管理</span>
             </div>
 
-            {/* ✨ 看護判断によるケア追加・再実施（タスク複製）ボタン */}
+            {/* 看護判断によるケア追加・再実施（タスク複製）ボタン */}
             <button
               type="button"
               onClick={() => setShowDuplicateModal(true)}
               className="w-full flex items-center justify-center gap-1.5 !py-2 !px-3 !bg-emerald-50 hover:!bg-emerald-100 !text-emerald-800 border border-emerald-400 !font-bold !text-xs !rounded-lg shadow-xs cursor-pointer transition-all active:scale-98"
             >
-              <span>✨ 看護判断で追加・再実施（複製生成）</span>
+              <span>看護判断で追加・再実施（複製生成）</span>
             </button>
 
-            {/* 🗑️ 臨時追加・手動追加タスク削除ボタン */}
+            {/* 臨時追加・手動追加タスク削除ボタン */}
             {(Boolean(task.is_additional) || String(task.task_id).startsWith('dup-task-') || String(task.task_id).startsWith('copied-')) && (
               <button
                 type="button"
@@ -168,7 +168,7 @@ export const TimelinePopup: React.FC<TimelinePopupProps> = ({ task, onClose, ren
                 disabled={isDeleting}
                 className="w-full flex items-center justify-center gap-1.5 !py-2 !px-3 !bg-rose-50 hover:!bg-rose-100 !text-rose-700 border border-rose-300 !font-bold !text-xs !rounded-lg shadow-xs cursor-pointer transition-all disabled:opacity-50 active:scale-98"
               >
-                <span>🗑️ この追加タスクを削除</span>
+                <span>この追加タスクを削除</span>
               </button>
             )}
           </div>
@@ -180,7 +180,7 @@ export const TimelinePopup: React.FC<TimelinePopupProps> = ({ task, onClose, ren
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[60] animate-fade-in">
           <div className="bg-white rounded-2xl shadow-2xl p-5 w-[360px] border-2 border-emerald-500 text-gray-800">
             <h3 className="font-extrabold text-base text-emerald-900 mb-1 flex items-center gap-1.5">
-              <span>🩺 看護判断による追加ケア生成</span>
+              <span>看護判断による追加ケア生成</span>
             </h3>
             <p className="text-xs text-gray-600 mb-3.5 text-left leading-relaxed">
               患者の状態変化（バイタル変動・呼吸苦など）に応じて、このケアを看護師の判断で臨時追加・再実施します。
@@ -196,7 +196,7 @@ export const TimelinePopup: React.FC<TimelinePopupProps> = ({ task, onClose, ren
 
               <div>
                 <label className="font-extrabold block mb-1 text-gray-800 text-xs">
-                  ⏰ 追加実施予定時間 <span className="text-red-500">*</span>
+                  追加実施予定時間 <span className="text-red-500">*</span>
                 </label>
                 <input
                   type="time"
