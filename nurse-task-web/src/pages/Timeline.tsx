@@ -16,39 +16,22 @@ export default function Timeline({ selectedPatients }: TimelineProps) {
   // 1. カスタムフックからドラッグ&ドロップの制御機能や基本状態だけを取得
   const {
     loading,
-    groupingMode,
-    setGroupingMode,
     activeId,
     sensors,
     customCollisionDetection,
     handleDragStart,
     handleDragEnd,
-    handleStartGrouping,
-    poolTasks,
-    hasPendingTasks
   } = useTimelineDnd({ selectedPatients });
 
   // 🎯 2. 画面のデータソースは100% Zustand ストアを基準にする
   const storeAllTasks = useTimelineStore((state) => state.allTasks);
   const storeMemos = useTimelineStore((state) => state.memos);
-
-  // 💡 【重要】無限ループの原因だった useEffect（setTasks / setMemos）は完全に削除しました！
-  // データのロードは useTimelineDnd の内部で直接ストアへ格納されるため、ここで同期する必要はありません。
+  const handleStartGrouping = useTimelineStore((state) => state.handleStartGrouping);
 
   // 読み込み中なら画面を出す
   if (loading) {
     return <div className="flex w-full h-full justify-center items-center">データを読み込み中...</div>;
   }
-
-  // 🎯 3. ストアの全タスクから、現在選択されている患者かつ時間軸付き(timed)のタスクだけをフィルタリング
-  const timedTasks = storeAllTasks.filter((task) => {
-  // task 自体と、display_period が存在することを確認してから .includes を実行
-  return (
-    task && 
-    selectedPatients.includes(task.patient_id) && 
-    task.display_period?.includes(':')
-  );
-});
 
   return (
     <DndContext 
@@ -58,9 +41,7 @@ export default function Timeline({ selectedPatients }: TimelineProps) {
       onDragEnd={handleDragEnd}
     >
       <main 
-        className={`flex flex-row w-full h-full bg-gray-50 overflow-hidden select-none ${
-          hasPendingTasks ? 'pb-28' : ''
-        }`}
+        className="flex flex-row w-full h-full bg-gray-50 overflow-hidden select-none"
         style={{ display: 'flex', flexDirection: 'row' }}
       >
         <div className="w-72 flex-shrink-0 bg-white border-r border-gray-200 h-full overflow-hidden">

@@ -22,6 +22,7 @@ export const TimelineToast: React.FC<TimelineToastProps> = ({ toast }) => {
     unexecuted: { overlayBg: 'bg-red-950/70', cardBg: 'bg-red-900', border: 'border-red-500' },
     initial: { overlayBg: 'bg-slate-950/70', cardBg: 'bg-slate-900', border: 'border-slate-500' },
     untouched: { overlayBg: 'bg-slate-950/70', cardBg: 'bg-slate-900', border: 'border-slate-500' },
+    deleted: { overlayBg: 'bg-slate-950/70', cardBg: 'bg-slate-900', border: 'border-slate-500' },
   };
 
   const theme = overlayColors[toast.status] || overlayColors.initial;

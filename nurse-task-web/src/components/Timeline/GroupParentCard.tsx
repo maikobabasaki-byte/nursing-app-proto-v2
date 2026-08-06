@@ -1,8 +1,6 @@
 import { useDraggable, useDroppable } from '@dnd-kit/core'; 
-import type { ExtendedTask } from '../../types/types';
 import type { GroupParentCardProps } from '../../types/types';
 import { GroupingButton } from './GroupingButton';
-import { useTimelineStore } from '../../stores/useTimelineStore';
 
 
 export const GroupParentCard = ({ 
@@ -10,7 +8,6 @@ export const GroupParentCard = ({
   isExpanded, 
   onClick,
 }: GroupParentCardProps) => {
-  const handleStartGrouping = useTimelineStore((state) => state.handleStartGrouping); // ストアから取得
   const childCount = task.children?.length || 0;
 
   // 全ての子タスクが完了、またはこの親グループ自体が完了状態か判定

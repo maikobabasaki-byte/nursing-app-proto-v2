@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import type { Task, ExtendedTask } from '../../types/types'; 
+import type { ExtendedTask } from '../../types/types'; 
 import { PoolTaskCard } from './PoolTaskCard';
 import { useTimelineStore } from '../../stores/useTimelineStore';
 import { useUserName } from '../../hooks/useUserName';
@@ -22,16 +22,19 @@ export default function TimelineSidebar({
   const showLowPriority = useTimelineStore((state) => state.showLowPriority);
   const isLeader = currentUser?.is_leader === true;
 
-  // 🎯 【Single Source of Truth】ストアの全タスクからプール用タスクを直算出（リーダー時かつshowLowPriorityがfalseの場合低優先度を除外）
+  // 🎯 【Single Source of Truth】ストアの全タスクからプール用タスクを直算出（リーダー時は全チーム重要タスクを網羅集約）
   const poolTasks = allTasks.filter(task => {
-    if (!selectedPatients.includes(task.patient_id) || task.display_period?.includes(':')) {
+    if (!task || task.status === 'deleted' || task.display_period?.includes(':')) {
       return false;
     }
-    // 💡 リーダー画面で showLowPriority が false の場合のみ、優先度「低 (low)」をタスクプールから除外
-    if (isLeader && !showLowPriority && task.priority === 'low') {
-      return false;
+    if (isLeader) {
+      const isHighPriority = task.priority === 'high';
+      if (!isHighPriority && !showLowPriority && task.priority === 'low') {
+        return false;
+      }
+      return true;
     }
-    return true;
+    return selectedPatients.includes(task.patient_id);
   });
 
   // Zustandの全タスクからログイン中のユーザーの「実施中・記録中タスク」を動的抽出

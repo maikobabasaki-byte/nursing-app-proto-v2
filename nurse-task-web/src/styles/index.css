@@ -1,9 +1,78 @@
 @import "tailwindcss";
 
+/* 🎨 視覚心理に基づいたテーマ（カラーパレット）定義 */
+:root,
+:root[data-theme="vital"] {
+  --color-main: #1A365D;
+  --color-main-light: #2A4365;
+  --color-accent: #00B4D8;
+  --color-accent-hover: #0096C7;
+  --color-bg-app: #F0F4F8;
+  --color-header-bg: #BAE6FD;
+  --color-header-text: #0F172A;
+  --color-card-bg: #FFFFFF;
+  --color-text: #0F172A;
+  --color-text-muted: #64748B;
+  --color-border: #E2E8F0;
+}
+
+:root[data-theme="serene"] {
+  --color-main: #4A7C59;
+  --color-main-light: #5E936E;
+  --color-accent: #D4A373;
+  --color-accent-hover: #BC8A5F;
+  --color-bg-app: #F4F1EA;
+  --color-header-bg: #4A7C59;
+  --color-header-text: #FFFFFF;
+  --color-card-bg: #FAF8F5;
+  --color-text: #2C3E2E;
+  --color-text-muted: #6B7C6E;
+  --color-border: #E2DDD5;
+}
+
+:root[data-theme="dark"] {
+  --color-main: #0F172A;
+  --color-main-light: #1E293B;
+  --color-accent: #2DD4BF;
+  --color-accent-hover: #14B8A6;
+  --color-bg-app: #090D16;
+  --color-header-bg: #0F172A;
+  --color-header-text: #F8FAFC;
+  --color-card-bg: #1E293B;
+  --color-text: #F8FAFC;
+  --color-text-muted: #94A3B8;
+  --color-border: #334155;
+}
+
 html,
 body,
 #root {
   height: 100%;
   margin: 0;
   padding: 0;
+  background-color: var(--color-bg-app);
+  color: var(--color-text);
+  transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+.theme-header {
+  background-color: var(--color-header-bg) !important;
+  color: var(--color-header-text) !important;
+  transition: background-color 0.3s ease;
+}
+
+.theme-card {
+  background-color: var(--color-card-bg) !important;
+  color: var(--color-text) !important;
+  border-color: var(--color-border) !important;
+}
+
+.theme-accent-btn {
+  background-color: var(--color-accent) !important;
+  color: #FFFFFF !important;
+  transition: background-color 0.2s ease;
+}
+
+.theme-accent-btn:hover {
+  background-color: var(--color-accent-hover) !important;
 }

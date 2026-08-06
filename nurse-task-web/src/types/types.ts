@@ -1,5 +1,3 @@
-import type { DragEvent } from 'react';
-
 export type TaskStatus = 
   | 'initial'
   | 'untouched'
@@ -12,6 +10,8 @@ export type TaskStatus =
   | 'unexecuted'
   | 'deleted';
 
+export type InstructionType = '医師指示' | '看護指示';
+
 export interface Task {
   task_id: string;
   emr_order_id?: string;
@@ -19,6 +19,8 @@ export interface Task {
   details: string;
   status: TaskStatus; // stringではなく定義した型を使う
   priority: 'high' | 'medium' | 'low';
+  instruction_type?: InstructionType | string;
+  placement_type?: string;
   display_period: string;
   initial_period?: string;
   scheduled_at: string;
@@ -59,8 +61,10 @@ export interface TaskDocument {
   title: string;
   details: string;
   status: ExtendedTaskStatus;
+  instruction_type?: InstructionType | string;
+  placement_type?: string;
   display_period: string;
-  initial_period: string;
+  initial_period?: string;
   priority: 'high' | 'medium' | 'low';
   scheduled_at: string;
   scheduled_time?: string;
@@ -82,6 +86,18 @@ export interface TaskDocument {
   requested_by_name?: string;
   unexecuted_reason?: string;
   updated_by?: string;
+}
+
+export interface Patient {
+  patient_id: string;
+  name: string;
+  gender?: string;
+  adl?: '全介助' | '一部介助' | '自立' | string;
+  risk_level?: '高' | '中' | '低' | string;
+  allergy?: string;
+  team?: string;
+  room_id: string;
+  bed_number?: number | string;
 }
 
 // --- 2. 画面表示用の型 ---
@@ -130,8 +146,10 @@ export interface TaskCardPropsInner {
   className?: string;
   groupingMode?: string | null;
   onClick?: () => void;
+  onStartGrouping?: (taskId: string) => void;
 }
-export  interface TimelineRowProps {
+
+export interface TimelineRowProps {
     id: string;
     time: string;
     isCurrentRow?: boolean;
@@ -141,7 +159,7 @@ export  interface TimelineRowProps {
     toggleGroup: (groupId: string) => void;
     onEdit: (task: ExtendedTask) => void;
     onChildClick: (taskId: string) => void;
-    onUngroup: any;
+    onUngroup: (childId: string) => Promise<void> | void;
     setRowRef: (time: string, el: HTMLDivElement | null) => void;
     // メモ関連のprops
     timeMemos: Memo[];
@@ -189,9 +207,9 @@ export interface LeaderTodo {
   requires_double_check: boolean;
   status: 'untouched' | 'in_progress' | 'completed' | 'pending' | 'deleted';
   is_deleted?: boolean;
-  deleted_at?: any;
+  deleted_at?: string | null;
   result_outcome?: string;
   doctor_instructions?: string;
   updated_by?: string;
-  updated_at?: any;
+  updated_at?: string | null;
 }

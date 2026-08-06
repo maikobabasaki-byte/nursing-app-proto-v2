@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import type { LeaderTodo, ExtendedTask } from '../types/types';
+import type { NurseMaster, NursePin } from '../stores/useTimelineStore';
 
 /**
  * 💡 基準時刻（分）を1分間隔で自動更新し、時間軸による進捗率をリアルタイム最新に再計算するフック

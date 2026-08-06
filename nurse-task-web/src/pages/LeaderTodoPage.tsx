@@ -17,7 +17,6 @@ interface PatientItem {
 export const LeaderTodoPage: React.FC = () => {
   const leaderTodos = useTimelineStore((state) => state.leaderTodos);
   const setLeaderTodos = useTimelineStore((state) => state.setLeaderTodos);
-  const updateLeaderTodo = useTimelineStore((state) => state.updateLeaderTodo);
   const currentUser = useTimelineStore((state) => state.currentUser);
 
   const [patients, setPatients] = useState<PatientItem[]>([]);
@@ -32,26 +31,30 @@ export const LeaderTodoPage: React.FC = () => {
   const [selectedTodoId, setSelectedTodoId] = useState<string | null>(null);
   const [filterPriority, setFilterPriority] = useState<string>('all'); // all | urgent | high | medium
 
-  // 右カラム編集フォーム状態
-  const [editOutcome, setEditOutcome] = useState<string>('');
-  const [editDoctorInstructions, setEditDoctorInstructions] = useState<string>('');
-  const [editStatus, setEditStatus] = useState<LeaderTodo['status']>('untouched');
-  const [isSavingResult, setIsSavingResult] = useState<boolean>(false);
-
   // Firestoreの leader_todos コレクションをリアルタイム監視（論理削除済みを除外）
   useEffect(() => {
-    const unsubscribe = onSnapshot(collection(db, 'leader_todos'), (snapshot) => {
-      const todos = snapshot.docs
-        .map((doc) => {
-          const data = doc.data();
-          return {
-            todo_id: doc.id,
-            ...data,
-          } as LeaderTodo;
-        })
-        .filter((t) => !t.is_deleted && t.status !== 'deleted');
-      setLeaderTodos(todos);
-    });
+    const unsubscribe = onSnapshot(
+      collection(db, 'leader_todos'), 
+      (snapshot) => {
+        const todos = snapshot.docs
+          .map((doc) => {
+            const data = doc.data();
+            return {
+              todo_id: doc.id,
+              ...data,
+            } as LeaderTodo;
+          })
+          .filter((t) => !t.is_deleted && t.status !== 'deleted');
+        setLeaderTodos(todos);
+      },
+      (error) => {
+        if (error.code === 'resource-exhausted') {
+          console.warn("⚠️ [LeaderTodo] Firestoreのクォータ上限に到達しました。");
+        } else {
+          console.error("LeaderTodo リアルタイム取得エラー:", error);
+        }
+      }
+    );
     return () => unsubscribe();
   }, [setLeaderTodos]);
 
@@ -131,19 +134,7 @@ export const LeaderTodoPage: React.FC = () => {
     return calculateLeaderTodoProgress(allMyTodos);
   }, [allMyTodos]);
 
-  // 選択中TODOオブジェクト
-  const selectedTodo = useMemo(() => {
-    return leaderTodos.find((t) => t.todo_id === selectedTodoId) || null;
-  }, [leaderTodos, selectedTodoId]);
 
-  // TODO選択時に右カラムフォームへ同期
-  useEffect(() => {
-    if (selectedTodo) {
-      setEditOutcome(selectedTodo.result_outcome || '');
-      setEditDoctorInstructions(selectedTodo.doctor_instructions || '');
-      setEditStatus(selectedTodo.status || 'untouched');
-    }
-  }, [selectedTodo]);
 
   // 💡 削除されたTODOが選択されていた場合、右カラム選択を自動クリア
   useEffect(() => {
@@ -151,8 +142,6 @@ export const LeaderTodoPage: React.FC = () => {
       const exists = leaderTodos.some(t => t.todo_id === selectedTodoId && !t.is_deleted && t.status !== 'deleted');
       if (!exists) {
         setSelectedTodoId(null);
-        setEditOutcome('');
-        setEditDoctorInstructions('');
       }
     }
   }, [leaderTodos, selectedTodoId]);

@@ -12,7 +12,7 @@ import { PendingTray } from './PendingTray';
 import { useTimelineStore } from '../../stores/useTimelineStore'; // ★追加
 import { updateTask } from '../../hooks/useTaskUpdate';
 import { useUserName } from '../../hooks/useUserName';
-import { normalizeToHHMM } from '../../utils/taskLogic';
+import { normalizeToHHMM, normalizeTeamName } from '../../utils/taskLogic';
 
 
 export default function TimelineMain({ 
@@ -29,36 +29,58 @@ export default function TimelineMain({
   const isLeader = currentUser?.is_leader === true;
   const leaderTeam = currentUser?.team || 'Aチーム';
   
-  // 🎯 【Single Source of Truth】ストアの全タスクから選択中の患者かつ時刻付きタスクを直取得（リーダー参照モード時は自チーム固定＆低優先度動的フィルタリング）
+  // 🎯 【Single Source of Truth】ストアの全タスクから評価（リーダー参照モード時は自チーム全患者・全重要タスクを網羅集約）
   const extendedTasks = storeAllTasks.filter((task) => {
-    if (!task || !selectedPatients.includes(task.patient_id) || !task.display_period?.includes(':')) {
+    if (!task || task.status === 'deleted' || !task.display_period?.includes(':')) {
       return false;
     }
 
+    // 💡 リーダー参照モード (isLeader === true) の場合
     if (isLeader) {
-      // 💡 リーダー参照モード時：showLowPriority が false の場合のみ優先度「低 (low)」のタスクを除外
-      if (!showLowPriority && task.priority === 'low') {
+      // 1. 優先度「high」のタスクは漏れなく最優先で表示（完全網羅を保証）
+      const isHighPriority = task.priority === 'high';
+
+      // 2. showLowPriority が false の場合のみ、優先度「low」のタスクを除外
+      if (!isHighPriority && !showLowPriority && task.priority === 'low') {
         return false;
       }
 
-      // 💡 リーダー参照モード時：自チーム（leaderTeam）に所属する看護師のタスクに完全固定
+      // 3. チーム判定：チーム名の表記揺れ（"A" と "Aチーム" 等）を統一正規化して比較
+      const normalizedLeaderTeam = normalizeTeamName(leaderTeam);
+      const normalizedTaskTeam = normalizeTeamName(task.team);
+
+      // タスク側にチーム指定があり、それがリーダーのチームと明確に異なる場合は除外（ただし high 優先度は除く）
+      if (normalizedTaskTeam !== '' && normalizedLeaderTeam !== '' && normalizedTaskTeam !== normalizedLeaderTeam && !isHighPriority) {
+        return false;
+      }
+
+      // 担当看護師が明示的に指定されている場合の所属チームチェック
       const tNurseName = (task.nurse_name || '').replace(/[\s　]+/g, '');
-      const tNurseId = (task.nurse_id || task.staff_id || (task as any).assigned_nurse_id || '').trim();
+      const tNurseId = (task.nurse_id || task.staff_id || task.assigned_nurse_id || '').trim();
       if (tNurseName || tNurseId) {
         const assignedNurse = nurseMaster.find(n => {
           const nName = (n.name || '').replace(/[\s　]+/g, '');
-          const nId = (n.nurse_id || n.id || '').trim();
+          const nId = (n.nurse_id || '').trim();
           return (
             (nId !== '' && (nId === tNurseId || nId === tNurseName)) ||
             (nName !== '' && (nName === tNurseName || nName === tNurseId || tNurseName.includes(nName) || nName.includes(tNurseName)))
           );
         });
-        if (assignedNurse && assignedNurse.team && assignedNurse.team !== leaderTeam) {
-          return false;
+
+        // 看護師が見つかり、そのチームがリーダーチームと異なり、かつ high 優先度でない場合のみ除外
+        if (assignedNurse && assignedNurse.team) {
+          const normalizedNurseTeam = normalizeTeamName(assignedNurse.team);
+          if (normalizedNurseTeam !== '' && normalizedLeaderTeam !== '' && normalizedNurseTeam !== normalizedLeaderTeam && !isHighPriority) {
+            return false;
+          }
         }
       }
+
+      return true;
     }
-    return true;
+
+    // 💡 通常の受け持ち選択モードの場合：受け持ち患者リスト（selectedPatients）でフィルタリング
+    return selectedPatients.includes(task.patient_id);
   });
 
   // 🎯 表示に使うメモは、100%ストア（Zustand）側が管理しているものだけに一本化！
@@ -101,6 +123,10 @@ export default function TimelineMain({
     message: '', visible: false, status: null,
   });
 
+  const timelineStartTime = useTimelineStore((state) => state.timelineStartTime);
+  const timelineEndTime = useTimelineStore((state) => state.timelineEndTime);
+  const setTimelineTimeRange = useTimelineStore((state) => state.setTimelineTimeRange);
+
   const isPastTime = (targetTime: string): boolean => {
     if (!targetTime || !targetTime.includes(':')) return false;
     const now = new Date();
@@ -108,10 +134,51 @@ export default function TimelineMain({
     return (now.getHours() * 60 + now.getMinutes()) > (h * 60 + m);
   };
 
-  const timeSlots = Array.from({ length: 24 * (60 / timelineMode) }, (_, i) => {
-    const h = String(Math.floor(i / (60 / timelineMode))).padStart(2, '0');
-    const m = String((i % (60 / timelineMode)) * timelineMode).padStart(2, '0');
-    return `${h}:${m}`;
+  const parseTimeToMinutes = (tStr: string): number => {
+    if (!tStr || !tStr.includes(':')) return -1;
+    const normalized = normalizeToHHMM(tStr);
+    const [h, m] = normalized.split(':').map(Number);
+    return (h || 0) * 60 + (m || 0);
+  };
+
+  const startMins = parseTimeToMinutes(timelineStartTime) >= 0 ? parseTimeToMinutes(timelineStartTime) : 480;
+  const rawEndMins = parseTimeToMinutes(timelineEndTime) >= 0 ? parseTimeToMinutes(timelineEndTime) : 1050;
+
+  // 💡 日またぎ判定 (例: 夜勤 17:00 〜 翌09:00 のように startMins > rawEndMins の場合)
+  const isCrossDay = startMins > rawEndMins;
+  const effectiveEndMins = isCrossDay ? rawEndMins + 24 * 60 : rawEndMins;
+
+  // 💡 ユーザーが選択した表示時間幅（開始〜終了・日またぎ対応）に基づく動的目盛り生成
+  const timeSlots = (() => {
+    const slots: string[] = [];
+    for (let m = startMins; m <= effectiveEndMins; m += timelineMode) {
+      const h = String(Math.floor(m / 60) % 24).padStart(2, '0');
+      const minute = String(m % 60).padStart(2, '0');
+      slots.push(`${h}:${minute}`);
+    }
+    return slots;
+  })();
+
+  // 💡 時間幅の範囲外（指定時間帯より前／後）に予定されているタスクの抽出
+  const outOfBoundsBeforeTasks = extendedTasks.filter((t) => {
+    const tMins = parseTimeToMinutes(t.display_period);
+    if (tMins < 0) return false;
+    if (!isCrossDay) {
+      return tMins < startMins;
+    } else {
+      // 日またぎ時（例: 17:00〜翌09:00）は、09:00超 かつ 17:00未満 が範囲外
+      return tMins > rawEndMins && tMins < startMins;
+    }
+  });
+
+  const outOfBoundsAfterTasks = extendedTasks.filter((t) => {
+    const tMins = parseTimeToMinutes(t.display_period);
+    if (tMins < 0) return false;
+    if (!isCrossDay) {
+      return tMins > effectiveEndMins;
+    } else {
+      return false; // 日またぎ時は before 側に集約
+    }
   });
 
   const pendingTasks = (() => {
@@ -200,14 +267,31 @@ export default function TimelineMain({
 
       <div 
         ref={containerRef} 
-        className="relative flex-1 overflow-y-auto border border-gray-200 rounded bg-white"
+        className="relative flex-1 overflow-y-auto border border-gray-200 rounded-2xl bg-white shadow-xs"
       >
         <LiveCurrentTimeLine timelineMode={timelineMode} containerRef={containerRef} rowRefs={rowRefs} />
 
+        {/* ⚠️ 指定開始時間より前に予定されている枠外タスク通知インジケーター */}
+        {outOfBoundsBeforeTasks.length > 0 && (
+          <div className="sticky top-0 z-20 bg-amber-500/90 backdrop-blur-md text-white px-4 py-2 text-xs font-bold flex items-center justify-between shadow-sm border-b border-amber-600">
+            <div className="flex items-center gap-2">
+              <span className="text-base">⚠️</span>
+              <span>
+                表示開始時刻（<strong>{timelineStartTime}</strong>）より前に <strong>{outOfBoundsBeforeTasks.length} 件</strong> の予定ケアタスクがあります
+              </span>
+            </div>
+            <button
+              type="button"
+              onClick={() => setTimelineTimeRange('06:00', timelineEndTime)}
+              className="!px-3 !py-1 !bg-white hover:!bg-amber-50 !text-amber-950 !rounded-lg !text-xs !font-extrabold cursor-pointer border-none shadow-xs transition-colors"
+            >
+              早出・全時間表示にする (06:00〜)
+            </button>
+          </div>
+        )}
+
         {timeSlots.map((time) => {
           const currentRows = extendedTasks.filter(t => {
-            // 💡 display_period にコロン (:) が含まれないタスク ("午前", "午後", "随時" 等) は
-            // scheduled_at の値に関わらずタイムラインの時刻行へは配置しない
             if (!t.display_period || !t.display_period.includes(':')) {
               return false;
             }
@@ -232,17 +316,36 @@ export default function TimelineMain({
               key={time}
               id={time}
               time={time}
-              isCurrentRow={false} // 💡型エラー対策。現在時刻行の変数があればここに割り当ててください
+              isCurrentRow={false}
               rowTasks={filteredRowTasks}         
               placeholders={filteredPlaceholders} 
               expandedGroups={expandedGroups}
               toggleGroup={toggleGroup}
               setRowRef={(time, el) => rowRefs.current[time] = el}
-              timeMemos={storeMemos} // ✅ ストアの独立したメモデータを渡す
+              timeMemos={storeMemos}
               isPastTime={isPastTime}
             />
           );
         })}
+
+        {/* ⚠️ 指定終了時間より後に予定されている枠外タスク通知インジケーター */}
+        {outOfBoundsAfterTasks.length > 0 && (
+          <div className="sticky bottom-0 z-20 bg-amber-500/90 backdrop-blur-md text-white px-4 py-2 text-xs font-bold flex items-center justify-between shadow-sm border-t border-amber-600">
+            <div className="flex items-center gap-2">
+              <span className="text-base">⚠️</span>
+              <span>
+                表示終了時刻（<strong>{timelineEndTime}</strong>）以降に <strong>{outOfBoundsAfterTasks.length} 件</strong> の予定ケアタスクがあります
+              </span>
+            </div>
+            <button
+              type="button"
+              onClick={() => setTimelineTimeRange(timelineStartTime, '23:00')}
+              className="!px-3 !py-1 !bg-white hover:!bg-amber-50 !text-amber-950 !rounded-lg !text-xs !font-extrabold cursor-pointer border-none shadow-xs transition-colors"
+            >
+              遅出・全時間表示にする (〜23:00)
+            </button>
+          </div>
+        )}
       </div>
 
       <PendingTray pendingTasks={pendingTasks} onTaskClick={setActivePopupTaskId} />
@@ -274,6 +377,7 @@ export default function TimelineMain({
                   unexecuted: '未実施に設定しました',
                   initial: '初期状態に戻しました',
                   untouched: '未着手に設定しました',
+                  deleted: '削除しました',
                 };
 
                 setActivePopupTaskId(null); 

@@ -91,7 +91,6 @@ export default function MapContainer({ selectedPatients }: MapContainerProps): R
 
   const currentUserName = useUserName();
   const myPinName = currentUserName || "ログイン看護師";
-  const myPinId = `nurse-me-${myPinName}`;
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
 
   // 💡 Zustandストアから状態とアクションを取得

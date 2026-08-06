@@ -1,4 +1,3 @@
-import React from 'react';
 import { useTimelineStore } from '../../stores/useTimelineStore'; // ★追加
 import { TaskCard } from './TaskCard';
 import { GroupParentCard } from './GroupParentCard';

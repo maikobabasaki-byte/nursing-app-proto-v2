@@ -1,7 +1,7 @@
 import { initializeApp } from "firebase/app";
 import { getAuth } from "firebase/auth";
 import { getAnalytics } from "firebase/analytics";
-import { getFirestore, doc, updateDoc, setDoc, deleteDoc, runTransaction, collection, serverTimestamp } from "firebase/firestore"; 
+import { getFirestore, doc, updateDoc, setDoc, runTransaction, collection, serverTimestamp } from "firebase/firestore"; 
 import type { TaskStatus, LeaderTodo } from '../types/types';
 
 const firebaseConfig = {

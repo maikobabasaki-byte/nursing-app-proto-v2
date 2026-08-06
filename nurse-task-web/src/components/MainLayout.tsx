@@ -4,8 +4,8 @@ import GlobalFooter from "./GlobalFooter";
 
 interface MainLayoutProps {
   children: React.ReactNode; 
-  currentScreen: 'login' | 'patientSelect' | 'patientMaster' | 'timeline' | 'map' | 'leaderTodo';
-  onNavigate: (screen: 'patientSelect' | 'patientMaster' | 'timeline' | 'map' | 'leaderTodo') => void;
+  currentScreen: 'login' | 'patientSelect' | 'patientMaster' | 'timeline' | 'map' | 'leaderTodo' | 'settings';
+  onNavigate: (screen: 'patientSelect' | 'patientMaster' | 'timeline' | 'map' | 'leaderTodo' | 'settings') => void;
 }
 
 export default function MainLayout({ children, currentScreen, onNavigate }: MainLayoutProps) {
@@ -19,8 +19,8 @@ export default function MainLayout({ children, currentScreen, onNavigate }: Main
         {children}
       </div>
       
-      {/* ログイン後の共通フッター */}
-      <GlobalFooter />
+      {/* ログイン後の共通フッター（システム設定リンク連動） */}
+      <GlobalFooter onNavigate={onNavigate} />
     </div>
   );
 }

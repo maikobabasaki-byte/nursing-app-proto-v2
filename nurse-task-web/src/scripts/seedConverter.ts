@@ -1,19 +1,14 @@
-import type{ TaskDocument } from "../types/types"; // 型定義をインポート
+import type { TaskDocument } from "../types/types"; // 型定義をインポート
 
 // JSONデータ（インポート）
 import tasksData from "../../public/data/tasks.json"; // タスクのダミーデータ
 import patientsData from "../../public/data/patients.json";
-import roomsData from "../../public/data/rooms.json"; // { rooms: [], facilities: [] }
 
 export const prepareTasksForFirestore = (): TaskDocument[] => {
-  // 施設情報と部屋情報を統合して検索しやすくする
-  const allRooms = [...roomsData.rooms, ...roomsData.facilities];
 
   return tasksData.map((task: any) => {
     // 患者情報を取得
     const patient = patientsData.find(p => p.patient_id === task.patient_id);
-    // 部屋情報を取得
-    const room = allRooms.find(r => r.room_id === task.room_id);
 
     // 変換後のオブジェクト
     const integratedTask: TaskDocument = {

@@ -1,7 +1,8 @@
 import { create } from 'zustand';
 import type { ExtendedTask, Memo, ExtendedTaskStatus, LeaderTodo } from '../types/types';
+import { addSingleTaskToGAS, resetAdditionalTasksInGAS } from '../services/gasService';
 import { updateTask } from '../hooks/useTaskUpdate';
-import { collection, doc, setDoc, getDocs, deleteDoc } from "firebase/firestore";
+import { doc, setDoc, deleteDoc } from "firebase/firestore";
 import { db, updateNurseSos, updateNurseAssignedPatients, toggleTaskSosInFirestore, saveLeaderTodoInFirestore, updateLeaderTodoInFirestore, deleteLeaderTodoInFirestore } from "../lib/firebase";
 
 export interface NurseMaster {
@@ -29,6 +30,7 @@ export interface NursePin extends NurseMaster {
 
 export interface CurrentUser {
   nurse_id: string;
+  staff_id?: string;
   name: string;
   email: string;
   team?: string;
@@ -50,6 +52,10 @@ interface TimelineStore {
   groupingMode: string | null;
   activeId: string | null;
   activePopupTaskId: string | null;
+  
+  timelineStartTime: string;
+  timelineEndTime: string;
+  setTimelineTimeRange: (start: string, end: string) => void;
   
   activeMemoTime: string | null;
   editingMemo: Memo | null;
@@ -90,6 +96,9 @@ interface TimelineStore {
   closeMemoPopup: () => void;
   handleSaveMemo: (memo: Memo) => void;
   handleDeleteMemo: (memoId: string) => void;
+  duplicateTask: (taskId: string, targetPeriod?: string, customNote?: string) => Promise<ExtendedTask | null>;
+  deleteTask: (taskId: string) => Promise<void>;
+  resetAdditionalTasks: () => Promise<number>;
 }
 
 const removeUndefined = (obj: any): any => {
@@ -224,6 +233,10 @@ export const useTimelineStore = create<TimelineStore>((set, get) => ({
   activeId: null,
   activePopupTaskId: null,
   
+  timelineStartTime: '07:00',
+  timelineEndTime: '20:00',
+  setTimelineTimeRange: (start, end) => set({ timelineStartTime: start, timelineEndTime: end }),
+
   activeMemoTime: null,
   editingMemo: null,
   newMemoText: "",
@@ -434,17 +447,19 @@ export const useTimelineStore = create<TimelineStore>((set, get) => ({
     const { allTasks } = get();
     if (draggedId === targetId) return;
 
-    let draggedTask: ExtendedTask | null = null;
-    let targetTask: ExtendedTask | null = null;
-
-    const findTaskRecursive = (list: ExtendedTask[]) => {
+    const findTaskById = (list: ExtendedTask[], id: string): ExtendedTask | null => {
       for (const t of list) {
-        if (t.task_id === draggedId) draggedTask = t;
-        if (t.task_id === targetId) targetTask = t;
-        if (t.children) findTaskRecursive(t.children);
+        if (t.task_id === id) return t;
+        if (t.children) {
+          const found = findTaskById(t.children, id);
+          if (found) return found;
+        }
       }
+      return null;
     };
-    findTaskRecursive(allTasks);
+
+    const draggedTask = findTaskById(allTasks, draggedId);
+    const targetTask = findTaskById(allTasks, targetId);
 
     if (!draggedTask || !targetTask) return;
 
@@ -789,4 +804,153 @@ export const useTimelineStore = create<TimelineStore>((set, get) => ({
     editingMemo: null,
     newMemoText: ""
   })),
+
+  duplicateTask: async (taskId, targetPeriod, customNote) => {
+    const { allTasks, currentUser } = get();
+    
+    const findTask = (list: ExtendedTask[]): ExtendedTask | null => {
+      for (const t of list) {
+        if (t.task_id === taskId) return t;
+        if (t.children && t.children.length > 0) {
+          const found = findTask(t.children);
+          if (found) return found;
+        }
+      }
+      return null;
+    };
+
+    const targetTask = findTask(allTasks);
+    if (!targetTask) return null;
+
+    const timestamp = Date.now();
+    const newTaskId = `dup-task-${targetTask.patient_id}-${timestamp}`;
+    const period = targetPeriod || targetTask.display_period || '14:00';
+    const nurseName = currentUser?.name || sessionStorage.getItem('nurse_name') || targetTask.nurse_name || '';
+
+    const titlePrefix = targetTask.title.includes('【看護判断】') || targetTask.title.includes('【追加実施】') 
+      ? '' 
+      : '【看護判断・追加】';
+
+    const duplicatedTask: ExtendedTask = {
+      ...targetTask,
+      task_id: newTaskId,
+      emr_order_id: newTaskId,
+      title: `${titlePrefix}${targetTask.title}`,
+      details: customNote 
+        ? `${targetTask.details ? targetTask.details + ' / ' : ''}看護判断備考: ${customNote}` 
+        : targetTask.details,
+      status: 'untouched',
+      display_period: period,
+      initial_period: period,
+      scheduled_at: `${new Date().toISOString().split('T')[0]}T${period.includes(':') ? period : '14:00'}:00`,
+      completed_at: undefined,
+      is_additional: true,
+      parent_id: null,
+      nurse_name: nurseName,
+      is_sos: false,
+      sos_reason: undefined,
+    };
+
+    try {
+      await setDoc(doc(db, 'tasks', newTaskId), removeUndefined(duplicatedTask), { merge: true });
+      // ⚡ [リアルタイム自動同期] 複製生成された瞬間に自動でGAS API経由でスプレッドシートへ新しい行として送信・追加
+      addSingleTaskToGAS(duplicatedTask).catch((err) =>
+        console.error("複製タスクのGASリアルタイム送信エラー:", err)
+      );
+    } catch (e) {
+      console.error("複製タスクのFirestore保存エラー:", e);
+    }
+
+    set((state) => ({
+      allTasks: [duplicatedTask, ...state.allTasks],
+    }));
+
+    return duplicatedTask;
+  },
+
+  deleteTask: async (taskId: string) => {
+    try {
+      await setDoc(doc(db, 'tasks', taskId), { status: 'deleted' }, { merge: true });
+    } catch (e) {
+      console.error("Firestoreタスク論理削除エラー:", e);
+    }
+
+    set((state) => {
+      const markAsDeleted = (list: ExtendedTask[]): ExtendedTask[] => {
+        return list.map((t) => {
+          if (t.task_id === taskId || t.emr_order_id === taskId) {
+            return { ...t, status: 'deleted' as const };
+          }
+          if (t.children && t.children.length > 0) {
+            return { ...t, children: markAsDeleted(t.children) };
+          }
+          return t;
+        });
+      };
+
+      return {
+        allTasks: markAsDeleted(state.allTasks),
+        activePopupTaskId: state.activePopupTaskId === taskId ? null : state.activePopupTaskId,
+      };
+    });
+  },
+
+  resetAdditionalTasks: async () => {
+    const { allTasks } = get();
+
+    const isAdditionalTask = (t: ExtendedTask) => {
+      const isAddFlag = t.is_additional === true || String(t.is_additional).toLowerCase() === 'true';
+      const isDupId = String(t.task_id).startsWith('dup-task-') || String(t.task_id).startsWith('copied-');
+      return isAddFlag || isDupId;
+    };
+
+    const targetTasks: ExtendedTask[] = [];
+    const findAdditional = (list: ExtendedTask[]) => {
+      list.forEach((t) => {
+        if (isAdditionalTask(t) && t.status !== 'deleted') {
+          targetTasks.push(t);
+        }
+        if (t.children && t.children.length > 0) {
+          findAdditional(t.children);
+        }
+      });
+    };
+    findAdditional(allTasks);
+
+    if (targetTasks.length === 0) return 0;
+
+    // 1. スプレッドシート側の追加タスクリセット命令をGASへ送信
+    await resetAdditionalTasksInGAS().catch((err) =>
+      console.error("GAS一括リセット送信エラー:", err)
+    );
+
+    // 2. Firestore 上の追加タスクドキュメントを論理削除 (status = 'deleted')
+    const updatePromises = targetTasks.map((t) =>
+      setDoc(doc(db, 'tasks', t.task_id), { status: 'deleted' }, { merge: true }).catch((e) =>
+        console.error(`追加タスク ${t.task_id} の削除エラー:`, e)
+      )
+    );
+    await Promise.all(updatePromises);
+
+    // 3. ローカルステート内の追加タスクを status = 'deleted' に更新し、画面から非表示化
+    set((state) => {
+      const markDeleted = (list: ExtendedTask[]): ExtendedTask[] => {
+        return list.map((t) => {
+          if (isAdditionalTask(t)) {
+            return { ...t, status: 'deleted' as const };
+          }
+          if (t.children && t.children.length > 0) {
+            return { ...t, children: markDeleted(t.children) };
+          }
+          return t;
+        });
+      };
+
+      return {
+        allTasks: markDeleted(state.allTasks),
+      };
+    });
+
+    return targetTasks.length;
+  },
 }));

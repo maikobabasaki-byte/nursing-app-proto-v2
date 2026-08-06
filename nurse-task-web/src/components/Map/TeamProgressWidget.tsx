@@ -2,7 +2,6 @@ import React, { useMemo } from 'react';
 import { useTimelineStore, type NursePin } from '../../stores/useTimelineStore';
 import {
   calculateNurseProgressList,
-  calculateSelectedPatientProgress,
   calculateExtendedTasksProgress,
   useCurrentTimeMinutes,
 } from '../../utils/progressCalculator';

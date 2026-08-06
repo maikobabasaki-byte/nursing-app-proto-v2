@@ -1,6 +1,4 @@
-/**
- * Google Apps Script (GAS) Web API とのハイブリッド同期サービス（429エラー対策キャッシュ付き）
- */
+import type { ExtendedTask } from '../types/types';
 
 const GAS_API_URL = import.meta.env.VITE_GAS_API_URL;
 
@@ -33,6 +31,8 @@ export interface GASTaskResponse {
   unexecuted_reason?: string;
   display_period?: string;
   details?: string;
+  instruction_type?: string;
+  placement_type?: string;
   priority?: 'high' | 'medium' | 'low';
 }
 
@@ -203,6 +203,118 @@ export const syncTaskToGAS = async (payload: GASTaskPayload): Promise<boolean> =
     return result.success ?? true;
   } catch (error) {
     console.error("GASへの書き戻し同期エラー:", error);
+    return false;
+  }
+};
+
+/**
+ * 💡 臨時追加されたタスク群を GAS API 経由でスプレッドシート（Tasksシート）へ一括保存・同期する
+ */
+export const saveAdditionalTasksToGAS = async (tasks: ExtendedTask[]): Promise<boolean> => {
+  if (!GAS_API_URL || tasks.length === 0) {
+    return true;
+  }
+
+  try {
+    const promises = tasks.map(async (task) => {
+      const params = new URLSearchParams({
+        action: 'add_task',
+        emr_order_id: String(task.task_id || task.emr_order_id),
+        patient_id: String(task.patient_id || ''),
+        title: String(task.title || ''),
+        details: String(task.details || ''),
+        instruction_type: String(task.instruction_type || '看護指示'),
+        display_period: String(task.display_period || '14:00'),
+        placement_type: String(task.placement_type || 'time_slot'),
+        priority: String(task.priority || 'medium'),
+        status: String(task.status || 'untouched'),
+        completed_at: String(task.completed_at || ''),
+        is_additional: 'true',
+        nurse_id: String(task.nurse_id || ''),
+        nurse_name: String(task.nurse_name || ''),
+        unexecuted_reason: String(task.unexecuted_reason || ''),
+      });
+
+      const url = `${GAS_API_URL}?${params.toString()}`;
+      console.log("GASへ臨時追加タスク保存送信中:", url);
+
+      const res = await fetch(url, { method: 'GET' });
+      return res.ok;
+    });
+
+    const results = await Promise.all(promises);
+    return results.every((r) => r);
+  } catch (err) {
+    console.error("GASへの追加タスク一括保存エラー:", err);
+    return false;
+  }
+};
+
+/**
+ * 💡 タスクが複製・臨時追加された瞬間に、自動でGAS API経由でスプレッドシートへリアルタイム送信・追加する
+ */
+export const addSingleTaskToGAS = async (task: ExtendedTask): Promise<boolean> => {
+  if (!GAS_API_URL) {
+    console.warn("VITE_GAS_API_URL が設定されていないため、GASリアルタイム送信をスキップします");
+    return false;
+  }
+
+  try {
+    const params = new URLSearchParams({
+      action: 'add_task',
+      emr_order_id: String(task.task_id || task.emr_order_id),
+      patient_id: String(task.patient_id || ''),
+      room_id: String(task.room_id || ''),
+      title: String(task.title || ''),
+      details: String(task.details || ''),
+      instruction_type: String(task.instruction_type || '看護指示'),
+      display_period: String(task.display_period || '14:00'),
+      placement_type: String(task.placement_type || 'time_slot'),
+      priority: String(task.priority || 'medium'),
+      status: String(task.status || 'untouched'),
+      completed_at: String(task.completed_at || ''),
+      is_additional: 'true',
+      nurse_name: String(task.nurse_name || ''),
+      unexecuted_reason: String(task.unexecuted_reason || ''),
+    });
+
+    const url = `${GAS_API_URL}?${params.toString()}`;
+    console.log("⚡ [自動同期] 臨時追加タスクをGASへ送信中:", url);
+
+    const response = await fetch(url, { method: 'GET' });
+    if (!response.ok) {
+      console.warn("GASリアルタイム追加レスポンス異常:", response.statusText);
+      return false;
+    }
+
+    const data = await response.json().catch(() => ({}));
+    console.log("⚡ [自動同期] GAS追加結果:", data);
+    return true;
+  } catch (error) {
+    console.error("GASへのリアルタイムタスク追加エラー:", error);
+    return false;
+  }
+};
+
+/**
+ * 💡 スプレッドシート上の臨時追加タスクを一括リセット・削除するシグナルをGASへ送信
+ */
+export const resetAdditionalTasksInGAS = async (): Promise<boolean> => {
+  if (!GAS_API_URL) return true;
+
+  try {
+    const params = new URLSearchParams({
+      action: 'reset_additional_tasks',
+      reset_additional: 'true',
+    });
+
+    const url = `${GAS_API_URL}?${params.toString()}`;
+    console.log("🧹 [一括リセット] GASへリセット命令送信中:", url);
+
+    const response = await fetch(url, { method: 'GET' });
+    return response.ok;
+  } catch (error) {
+    console.error("GASリセット送信エラー:", error);
     return false;
   }
 };

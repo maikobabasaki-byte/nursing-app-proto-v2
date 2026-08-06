@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, lazy, Suspense } from 'react';
 import { onAuthStateChanged } from 'firebase/auth';
 import type { User } from 'firebase/auth';
 import { auth, db } from '../lib/firebase';
@@ -9,18 +9,30 @@ import type { NurseMaster, NursePin } from '../stores/useTimelineStore';
 import type { ExtendedTask } from '../types/types';
 import Header from '../components/Header';
 import Footer from '../components/Footer';
-import Login from './Login';
-import PatientSelect from "./PatientSelect";
-import PatientMasterPage from "./PatientMaster";
-import Timeline from "./Timeline";
-import MapContainer from "./Map";
-import { LeaderTodoPage } from "./LeaderTodoPage";
 import MainLayout from "../components/MainLayout";
-// import { seedDatabase } from "../scripts/seedDatabase";
+
+// 🚀 コードスプリッティング（遅延ローディング）の設定
+const Login = lazy(() => import('./Login'));
+const PatientSelect = lazy(() => import('./PatientSelect'));
+const PatientMasterPage = lazy(() => import('./PatientMaster'));
+const Timeline = lazy(() => import('./Timeline'));
+const MapContainer = lazy(() => import('./Map'));
+const LeaderTodoPage = lazy(() => import('./LeaderTodoPage').then((module) => ({ default: module.LeaderTodoPage })));
+const Settings = lazy(() => import('./Settings'));
+
+// 🎨 画面読み込み用の上質スピナーコンポーネント
+const PageLoadingFallback = () => (
+  <div className="flex flex-col items-center justify-center min-h-[400px] h-full w-full bg-gray-50/80 animate-fade-in">
+    <div className="flex flex-col items-center gap-3">
+      <div className="w-10 h-10 border-4 border-cyan-500 border-t-transparent rounded-full animate-spin shadow-md"></div>
+      <p className="text-xs font-bold text-gray-500 tracking-wider">画面コンポーネントを読み込み中...</p>
+    </div>
+  </div>
+);
 
 import { ensureTodayTasksSynced } from '../services/taskSyncService';
 
-type ScreenType = 'login' | 'patientSelect' | 'timeline' | 'patientMaster' | 'map' | 'leaderTodo';
+type ScreenType = 'login' | 'patientSelect' | 'timeline' | 'patientMaster' | 'map' | 'leaderTodo' | 'settings';
 
 import { GlobalSosToast } from '../components/GlobalSosToast';
 
@@ -28,7 +40,6 @@ import { fetchGASData } from '../services/gasService';
 
 export default function App() {
   const [user, setUser] = useState<User | null>(null);
-  const [userName, setUserName] = useState<string>('');
   const [loading, setLoading] = useState<boolean>(true);
   const setTasks = useTimelineStore((state) => state.setTasks);
 
@@ -60,7 +71,6 @@ export default function App() {
       if (currentUser && currentUser.email) {
         setUser(currentUser);
         const id = currentUser.email.split('@')[0];
-        setUserName(id);
         
         // 💡 スプレッドシート (GAS) から絶対正本データを直取得して同期
         ensureTodayTasksSynced(id);
@@ -79,7 +89,6 @@ export default function App() {
               team: data.team || '',
               is_leader: Boolean(data.is_leader),
             };
-            setUserName(profile.name);
             useTimelineStore.getState().setCurrentUser(profile);
           } else {
             const fallbackProfile = {
@@ -109,7 +118,6 @@ export default function App() {
         });
       } else {
         setUser(null);
-        setUserName('');
         setCurrentScreen('login');
         // ログアウト時はストレージおよびストアのデータもクリア
         sessionStorage.removeItem('currentScreen');
@@ -127,43 +135,50 @@ export default function App() {
   useEffect(() => {
     if (!user) return;
 
-    const unsubscribe = onSnapshot(collection(db, "tasks"), (snapshot) => {
-      const firestoreTasks = snapshot.docs.map((doc) => {
-        const data = doc.data();
-        return {
-          ...data,
-          task_id: doc.id,
-          display_period: (data.display_period === "undefined" || !data.display_period) 
-              ? "" 
-              : data.display_period,
-        } as ExtendedTask;
-      });
+    const unsubscribe = onSnapshot(
+      collection(db, "tasks"), 
+      (snapshot) => {
+        const firestoreTasks = snapshot.docs.map((doc) => {
+          const data = doc.data();
+          return {
+            ...data,
+            task_id: doc.id,
+            display_period: (data.display_period === "undefined" || !data.display_period) 
+                ? "" 
+                : data.display_period,
+          } as ExtendedTask;
+        });
 
-      // 🧠 【チラつき完全防止】自分自身の書き込み中 (hasPendingWrites) の通知はローカル楽観Stateを優先してスキップ
-      if (snapshot.metadata.hasPendingWrites) {
-        return;
-      }
-
-      const currentLocalTasks = useTimelineStore.getState().allTasks;
-
-      // 💡 防御ロジック: Firestoreの取得件数が0件でローカルに既存タスクが存在する場合、誤消去を防ぐため更新を破棄
-      if (firestoreTasks.length === 0 && currentLocalTasks.length > 0) {
-        return;
-      }
-
-      const mergedTasks = firestoreTasks.map((ft) => {
-        const localMatch = currentLocalTasks.find(lt => lt.task_id === ft.task_id) ||
-                           currentLocalTasks.flatMap(lt => lt.children || []).find(c => c.task_id === ft.task_id);
-        if (localMatch && localMatch.parent_id !== undefined) {
-          return { ...ft, parent_id: localMatch.parent_id };
+        if (snapshot.metadata.hasPendingWrites) {
+          return;
         }
-        return ft;
-      });
 
-      // グループ構造を再構築した上でZustandにセット
-      const reconstructed = reconstructGroups(mergedTasks);
-      setTasks(reconstructed);
-    });
+        const currentLocalTasks = useTimelineStore.getState().allTasks;
+
+        if (firestoreTasks.length === 0 && currentLocalTasks.length > 0) {
+          return;
+        }
+
+        const mergedTasks = firestoreTasks.map((ft) => {
+          const localMatch = currentLocalTasks.find(lt => lt.task_id === ft.task_id) ||
+                             currentLocalTasks.flatMap(lt => lt.children || []).find(c => c.task_id === ft.task_id);
+          if (localMatch && localMatch.parent_id !== undefined) {
+            return { ...ft, parent_id: localMatch.parent_id };
+          }
+          return ft;
+        });
+
+        const reconstructed = reconstructGroups(mergedTasks);
+        setTasks(reconstructed);
+      },
+      (error) => {
+        if (error.code === 'resource-exhausted') {
+          console.warn("⚠️ [Tasks] Firestoreのクォータ上限を超発したため、静的・GASデータ優先モードで動作を継続します。");
+        } else {
+          console.error("Firestore tasks 取得エラー:", error);
+        }
+      }
+    );
 
     return () => unsubscribe();
   }, [user, setTasks]);
@@ -172,23 +187,31 @@ export default function App() {
   useEffect(() => {
     if (!user) return;
 
-    const unsubscribeNurseMaster = onSnapshot(collection(db, "nurse_master"), (snapshot) => {
-      const masters = snapshot.docs.map((doc) => {
-        const data = doc.data();
-        return {
-          nurse_id: doc.id,
-          name: data.name || '',
-          gender: data.gender || '',
-          team: data.team || '',
-          email: data.email || '',
-          is_leader: Boolean(data.is_leader),
-        } as NurseMaster;
-      });
+    const unsubscribeNurseMaster = onSnapshot(
+      collection(db, "nurse_master"), 
+      (snapshot) => {
+        const masters = snapshot.docs.map((doc) => {
+          const data = doc.data();
+          return {
+            nurse_id: doc.id,
+            name: data.name || '',
+            gender: data.gender || '',
+            team: data.team || '',
+            email: data.email || '',
+            is_leader: Boolean(data.is_leader),
+          } as NurseMaster;
+        });
 
-      if (masters.length > 0) {
-        useTimelineStore.getState().setNurseMaster(masters);
+        if (masters.length > 0) {
+          useTimelineStore.getState().setNurseMaster(masters);
+        }
+      },
+      (error) => {
+        if (error.code === 'resource-exhausted') {
+          console.warn("⚠️ [NurseMaster] Firestoreのクォータ上限に到達しました。");
+        }
       }
-    });
+    );
 
     return () => unsubscribeNurseMaster();
   }, [user]);
@@ -197,23 +220,31 @@ export default function App() {
   useEffect(() => {
     if (!user) return;
 
-    const unsubscribeNurses = onSnapshot(collection(db, "nurses"), (snapshot) => {
-      if (snapshot.metadata.hasPendingWrites) {
-        return;
-      }
+    const unsubscribeNurses = onSnapshot(
+      collection(db, "nurses"), 
+      (snapshot) => {
+        if (snapshot.metadata.hasPendingWrites) {
+          return;
+        }
 
-      const firestoreNurses = snapshot.docs.map((doc) => {
-        const data = doc.data();
-        return {
-          nurse_id: doc.id,
-          ...data,
-        } as NursePin;
-      });
+        const firestoreNurses = snapshot.docs.map((doc) => {
+          const data = doc.data();
+          return {
+            nurse_id: doc.id,
+            ...data,
+          } as NursePin;
+        });
 
-      if (firestoreNurses.length > 0) {
-        useTimelineStore.getState().setNurses(firestoreNurses);
+        if (firestoreNurses.length > 0) {
+          useTimelineStore.getState().setNurses(firestoreNurses);
+        }
+      },
+      (error) => {
+        if (error.code === 'resource-exhausted') {
+          console.warn("⚠️ [Nurses] Firestoreのクォータ上限に到達しました。");
+        }
       }
-    });
+    );
 
     return () => unsubscribeNurses();
   }, [user]);
@@ -236,7 +267,9 @@ export default function App() {
         <>
           <Header currentPage="login" />
           <main className="flex-1 !flex items-center justify-center bg-gray-50">
-            <Login />
+            <Suspense fallback={<PageLoadingFallback />}>
+              <Login />
+            </Suspense>
           </main>
           <Footer />
         </>
@@ -246,35 +279,41 @@ export default function App() {
         <>
           <Header currentPage="patientSelect" />
           <main className="flex-1 !flex items-center justify-center bg-gray-50">
-            <PatientSelect onSelectComplete={(list) => {
-              setSelectedPatients(list);
-              setCurrentScreen('patientMaster');
-            }} />
+            <Suspense fallback={<PageLoadingFallback />}>
+              <PatientSelect onSelectComplete={(list) => {
+                setSelectedPatients(list);
+                setCurrentScreen('patientMaster');
+              }} />
+            </Suspense>
           </main>
           <Footer />
         </>
       )}
 
       {/* ─── 【B：ログイン後の世界（MainLayoutを使うグループ）】 ─── */}
-      {(currentScreen === 'patientMaster' || currentScreen === 'timeline' || currentScreen === 'map' || currentScreen === 'leaderTodo') && (
+      {(currentScreen === 'patientMaster' || currentScreen === 'timeline' || currentScreen === 'map' || currentScreen === 'leaderTodo' || currentScreen === 'settings') && (
         <MainLayout currentScreen={currentScreen} onNavigate={(screen) => setCurrentScreen(screen)}>
-          
-          {currentScreen === 'patientMaster' && (
-            <PatientMasterPage selectedIds={selectedPatients} />
-          )}
+          <Suspense fallback={<PageLoadingFallback />}>
+            {currentScreen === 'patientMaster' && (
+              <PatientMasterPage selectedIds={selectedPatients} />
+            )}
 
-          {currentScreen === 'timeline' && (
-            <Timeline selectedPatients={selectedPatients} />
-          )}
+            {currentScreen === 'timeline' && (
+              <Timeline selectedPatients={selectedPatients} />
+            )}
 
-          {currentScreen === 'map' && (
-            <MapContainer selectedPatients={selectedPatients} />
-          )}
+            {currentScreen === 'map' && (
+              <MapContainer selectedPatients={selectedPatients} />
+            )}
 
-          {currentScreen === 'leaderTodo' && (
-            <LeaderTodoPage />
-          )}
-          
+            {currentScreen === 'leaderTodo' && (
+              <LeaderTodoPage />
+            )}
+
+            {currentScreen === 'settings' && (
+              <Settings />
+            )}
+          </Suspense>
         </MainLayout>
       )}
 

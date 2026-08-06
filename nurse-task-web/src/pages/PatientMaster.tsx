@@ -139,7 +139,7 @@ export default function PatientMasterPage({ selectedIds }: DashboardProps) {
           {/* 検索結果のカード一覧 */}
           {filteredPatients.length > 0 ? (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mt-1">
-              {filteredPatients.map((patient, index) => (
+              {filteredPatients.map((patient) => (
                 <div key={`search-${patient.patient_id}`} className="bg-white rounded shadow-md border-2 border-cyan-400 flex flex-col min-h-[160px] overflow-hidden">
                   <div className="px-4 pt-3 pb-2 border-b border-slate-100 flex flex-col gap-1.5 bg-cyan-50 text-xs">
                     <div className="flex justify-between items-center">

@@ -13,7 +13,6 @@ interface GroupAccordionProps {
 }
 
 export const GroupAccordion = ({ task, isExpanded, onChildClick }: GroupAccordionProps) => {
-  const groupingMode = useTimelineStore((state) => state.groupingMode);
   if (!isExpanded) return null;
 
   const childIds = task.children?.map(c => c.task_id) || [];
@@ -25,7 +24,6 @@ export const GroupAccordion = ({ task, isExpanded, onChildClick }: GroupAccordio
           <SortableChildItem 
             key={child.task_id} 
             child={child} 
-            parentTaskId={task.task_id}
             parentDisplayPeriod={task.display_period}
             onChildClick={onChildClick}
           />
@@ -35,12 +33,12 @@ export const GroupAccordion = ({ task, isExpanded, onChildClick }: GroupAccordio
   );
 };
 
-const SortableChildItem = ({ child, parentTaskId, parentDisplayPeriod, onChildClick }: { 
-  child: ExtendedTask, parentTaskId: string, parentDisplayPeriod: string, onChildClick: (taskId: string) => void 
+const SortableChildItem = ({ child, parentDisplayPeriod, onChildClick }: { 
+  child: ExtendedTask, parentDisplayPeriod: string, onChildClick: (taskId: string) => void 
 }) => {
   const handleUngroupTask = useTimelineStore((state) => state.handleUngroupTask);
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: child.task_id });
   const groupingMode = useTimelineStore((state) => state.groupingMode);
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: child.task_id });
 
   // 🎨 【完璧な同期】
   // 新しくなった getTaskStyles に子フラグを渡して、完璧にトリアージされたスタイルを受け取る

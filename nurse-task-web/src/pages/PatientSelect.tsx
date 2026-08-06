@@ -299,9 +299,15 @@ export default function PatientSelect({ onSelectComplete }: PatientSelectProps) 
             onClick={async () => {
               setIsSyncing(true);
               try {
-                await ensureTodayTasksSynced(userName);
+                // 💡 クォータ超過や通信遅延で画面遷移がストールするのを防ぐため、最長1.5秒で安全画面遷移
+                const syncPromise = ensureTodayTasksSynced(userName).catch((e) =>
+                  console.error("タスク同期処理エラー:", e)
+                );
+                const timeoutPromise = new Promise((resolve) => setTimeout(resolve, 1500));
+                
+                await Promise.race([syncPromise, timeoutPromise]);
               } catch (e) {
-                console.error("タスク同期処理エラー:", e);
+                console.error("画面遷移中同期エラー:", e);
               } finally {
                 setIsSyncing(false);
                 onSelectComplete(selectedPatientIds);

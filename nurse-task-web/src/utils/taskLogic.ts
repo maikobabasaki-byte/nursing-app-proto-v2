@@ -14,6 +14,16 @@ export const normalizeToHHMM = (timeStr?: string): string => {
   return timeStr.trim();
 };
 
+/**
+ * チーム名の表記揺れ ("A", "Aチーム", "A-team", "teamA") を統一比較用の文字列に正規化する
+ */
+export const normalizeTeamName = (teamName?: string): string => {
+  if (!teamName) return "";
+  const cleaned = String(teamName).toUpperCase().trim();
+  const match = cleaned.match(/([A-Z0-9]+)/);
+  return match ? match[1] : cleaned;
+};
+
 export const handleCardClick = (task: ExtendedTask) => {
   if (task.priority === 'high') {
     alert("このタスクは重要度が高いため、グループ化できません");
@@ -128,6 +138,7 @@ export const reconstructGroups = (flatTasks: ExtendedTask[]): ExtendedTask[] => 
 
   // 1. parent_id や isGroup に応じて分類
   flatTasks.forEach((task) => {
+    if (!task || task.status === 'deleted') return;
     if (task.isGroup) {
       // 💡 Firestore上に独立して存在する親グループドキュメント
       existingGroupNodes[task.task_id] = task;

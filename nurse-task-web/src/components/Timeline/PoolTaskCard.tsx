@@ -1,5 +1,5 @@
 import { TaskCard } from './TaskCard';
-import type { Task } from '../../types/types'; 
+import type { ExtendedTask } from '../../types/types'; 
 import { getTaskStyles } from '../../utils/taskStyles'
 import { useDraggable } from '@dnd-kit/core';
 
@@ -8,7 +8,7 @@ export function PoolTaskCard({
   groupingMode, 
   onStartGrouping 
 }: { 
-  task: Task; 
+  task: ExtendedTask; 
   groupingMode: string | null; 
   onStartGrouping: (taskId: string) => void; 
 }) {
@@ -26,7 +26,6 @@ export function PoolTaskCard({
       {...attributes}
       className={isDragging ? 'opacity-40' : 'opacity-100'}
     >
-      {/* 💡 ここを完全にこの通りに書き換えてください！ */}
       <TaskCard 
         task={task} 
         cardColorClass={cardColorClass} 
@@ -36,6 +35,5 @@ export function PoolTaskCard({
         onStartGrouping={onStartGrouping}
       />
     </div>
-    
   );
 }

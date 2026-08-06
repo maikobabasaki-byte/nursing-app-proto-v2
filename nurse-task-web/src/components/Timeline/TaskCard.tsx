@@ -1,14 +1,11 @@
 import type { TaskCardPropsInner } from "../../types/types";
-import { useDraggable,useDroppable } from '@dnd-kit/core';
-import { useTimelineStore } from "../../stores/useTimelineStore";
+import { useDraggable, useDroppable } from '@dnd-kit/core';
 import { GroupingButton } from "./GroupingButton";
 
 export const TaskCard = (props: TaskCardPropsInner) => {
-  const handleStartGrouping = useTimelineStore((state) => state.handleStartGrouping);
   // ここでデフォルト値を設定すれば、プロパティが渡されなくても絶対にエラーにならない
   const { 
     task, 
-    groupingMode,
     onEdit,         // 必須
     style,          // 任意
     originalTime,   // 任意
@@ -34,19 +31,7 @@ export const TaskCard = (props: TaskCardPropsInner) => {
     transform: `translate3d(${transform.x}px, ${transform.y}px, 0)`,
   } : undefined;
 
-  const isCurrentlySelected = 
-    groupingMode === task.task_id || 
-    (task.isGroup && task.children?.some(child => child.task_id === groupingMode));
 
-  const handleGroupingClick = (e: React.MouseEvent) => {
-  e.stopPropagation();
-  if (!onEdit) return;
-
-  // ボタンを押した時、ストアの handleStartGrouping が呼ばれる
-  // ストア側で (state) => ({ groupingMode: state.groupingMode === taskId ? null : taskId }) 
-  // のようなロジックになっていれば、これで自然とトグルします。
-  handleStartGrouping(task.task_id);
-};
 
 if (transform) {
   console.log(`🔍 [ドラッグ中のタスク情報] ID: ${task.task_id} | ${task.title}`, {
@@ -94,11 +79,25 @@ if (transform) {
           onEdit?.();
         }}
       >
-        <div className="flex items-center justify-between mb-1 gap-1 min-w-0">
-          <div className="flex items-center gap-1.5 min-w-0">
+        <div className="flex items-center justify-between mb-1 gap-1 min-w-0 flex-wrap">
+          <div className="flex items-center gap-1.5 min-w-0 flex-wrap">
             <span className="text-sm font-bold whitespace-nowrap flex-shrink-0">
               {task.display_period || task.scheduled_at || ''}
             </span>
+            {task.is_additional && (
+              <span className="bg-purple-600 text-white text-[10px] px-1.5 py-0.5 rounded font-bold whitespace-nowrap shadow-sm flex items-center gap-0.5">
+                ✨ 臨時追加
+              </span>
+            )}
+            {task.instruction_type === '看護指示' ? (
+              <span className="bg-emerald-600 text-white text-[10px] px-1.5 py-0.5 rounded font-bold whitespace-nowrap shadow-sm flex items-center gap-0.5">
+                🩺 看護指示
+              </span>
+            ) : (
+              <span className="bg-indigo-100 text-indigo-800 border border-indigo-200 text-[10px] px-1.5 py-0.5 rounded font-semibold whitespace-nowrap flex items-center gap-0.5 opacity-90">
+                👨‍⚕️ 医師指示
+              </span>
+            )}
             {originalTime &&
              originalTime !== task.display_period &&
              originalTime !== task.scheduled_at &&

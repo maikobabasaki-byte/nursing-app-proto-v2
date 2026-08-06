@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 
 export const useTimelineClock = (timelineMode: 15 | 30 | 60, containerRef: React.RefObject<HTMLDivElement>, rowRefs: React.RefObject<Record<string, HTMLDivElement | null>>) => {
   const [currentTime, setCurrentTime] = useState(new Date());

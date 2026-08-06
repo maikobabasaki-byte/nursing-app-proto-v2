@@ -1,11 +1,16 @@
-export default function GlobalFooter() {
+interface GlobalFooterProps {
+  onNavigate?: (screen: 'settings' | 'patientSelect' | 'patientMaster' | 'timeline' | 'map' | 'leaderTodo') => void;
+}
+
+export default function GlobalFooter({ onNavigate }: GlobalFooterProps) {
   return (
-    // 💡 !つけることで、既存の強固なCSS（space-betweenなど）が外側にあっても
-    // 確実にTailwindのスタイル（高さ、背景色、文字色、パディング）を適用させます。
-    <footer className="w-full min-h-[50px] bg-sky-200 text-gray-700 flex justify-between items-center px-6">
+    <footer className="theme-header w-full min-h-[50px] flex justify-between items-center px-6 border-t border-current/10 transition-colors duration-300">
       
-      {/* ⚙️ 左側：システム設定（クリックできるようにcursor-pointerを付与） */}
-      <div className="setting flex items-center cursor-pointer hover:opacity-80 transition-opacity">
+      {/* ⚙️ 左側：システム設定（クリックで settings 画面に移動） */}
+      <div 
+        onClick={() => onNavigate?.('settings')}
+        className="setting flex items-center cursor-pointer hover:opacity-80 transition-opacity"
+      >
         <img 
           src="/icon_b/settings_48dp.png" 
           alt="システム設定" 
