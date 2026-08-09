@@ -97,7 +97,10 @@ export const TimelinePopup: React.FC<TimelinePopupProps> = ({ task, onClose, ren
 
   return (
     <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
-      <div className={`relative ${colorSet.bg} ${colorSet.border} ${colorSet.text} border-2 rounded-xl shadow-2xl p-6 w-[380px]`}>
+      <div 
+        id={task.task_id === 'demo-task-tutorial' ? 'tour-status-modal' : undefined}
+        className={`relative ${colorSet.bg} ${colorSet.border} ${colorSet.text} border-2 rounded-xl shadow-2xl p-6 w-[380px]`}
+      >
         <div className="absolute top-4 right-14 flex items-center gap-1.5">
           {task.is_additional && (
             <span className="bg-purple-600 text-white text-[10px] font-bold px-2 py-0.5 rounded-full shadow-sm">

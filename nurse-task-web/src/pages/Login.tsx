@@ -5,6 +5,7 @@ import { auth } from '../lib/firebase';
 export default function Login() {
   const [userId, setUserId] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
 
   const handleLogin = async (e: React.MouseEvent<HTMLButtonElement>) => {
     e.preventDefault();
@@ -44,21 +45,37 @@ export default function Login() {
           <label className="block text-base font-medium text-gray-700 mb-1">
             パスワード
           </label>
-          <input 
-            id="password_input" 
-            type="password" 
-            name="user_password" 
-            required 
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            className="w-full !border !border-gray-300 !p-2 focus:outline-none focus:ring-1 focus:ring-blue-500"
-          />
-          <img
-            src="/icon_b/visibility_off_24dp_1A365D_FILL0_wght400_GRAD0_opsz24.png"
-            id="toggle_icon"
-            alt="表示切り替え"
-            className="absolute !right-3 !top-1/2 w-5 h-5 cursor-pointer opacity-70"
-          />
+          <div className="relative flex items-center">
+            <input 
+              id="password_input" 
+              type={showPassword ? 'text' : 'password'}
+              name="user_password" 
+              required 
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              className="w-full !border !border-gray-300 !p-2 !pr-10 focus:outline-none focus:ring-1 focus:ring-blue-500"
+            />
+            <button
+              type="button"
+              onClick={(e) => {
+                e.preventDefault();
+                setShowPassword((prev) => !prev);
+              }}
+              className="absolute right-2 top-1/2 -translate-y-1/2 bg-transparent border-none p-1 cursor-pointer opacity-70 hover:opacity-100 focus:outline-none flex items-center justify-center"
+              aria-label={showPassword ? "パスワードを非表示にする" : "パスワードを表示する"}
+              title={showPassword ? "パスワードを非表示にする" : "パスワードを表示する"}
+            >
+              <img
+                src={showPassword 
+                  ? "/icon_b/visibility_24dp_1A365D_FILL0_wght400_GRAD0_opsz24.png" 
+                  : "/icon_b/visibility_off_24dp_1A365D_FILL0_wght400_GRAD0_opsz24.png"
+                }
+                id="toggle_icon"
+                alt={showPassword ? "非表示" : "表示"}
+                className="w-5 h-5 pointer-events-none"
+              />
+            </button>
+          </div>
         </div>
 
         <p id="error_message" style={{ color: 'red' }} className="text-sm mb-4"></p>

@@ -39,6 +39,7 @@ export default function WardMap({
 }: WardMapProps): React.JSX.Element {
   const storeNurses = useTimelineStore((state) => state.nurses);
   const toggleNurseSos = useTimelineStore((state) => state.toggleNurseSos);
+  const storeMemos = useTimelineStore((state) => state.memos);
   const nurses = displayNurses || storeNurses;
   const currentUserName = useUserName();
 
@@ -102,12 +103,23 @@ export default function WardMap({
         <svg viewBox="0 0 1500 870" width="100%" height="100%" style={{ border: '1px solid #e0e0e0', backgroundColor: '#f9f9f9', display: 'block' }}>
         
         {/* 1. 施設（ナースステーション・物品庫など） */}
-        {facilities.map((fac) => (
-          <g key={fac.room_id}>
-            <rect x={fac.x - fac.w / 2} y={fac.y - fac.h / 2} width={fac.w} height={fac.h} fill="white" stroke="#b2ebf2" strokeWidth={2} />
-            <text x={fac.x} y={fac.y - 20} textAnchor="middle" dominantBaseline="central" fontSize={24} fill="#333" fontWeight="bold">{fac.name}</text>
-          </g>
-        ))}
+        {facilities.map((fac) => {
+          const facMemos = storeMemos.filter(m => m.target_room_id === fac.room_id && !m.is_completed);
+          return (
+            <g key={fac.room_id}>
+              <rect x={fac.x - fac.w / 2} y={fac.y - fac.h / 2} width={fac.w} height={fac.h} fill="white" stroke="#b2ebf2" strokeWidth={2} />
+              <text x={fac.x} y={fac.y - 20} textAnchor="middle" dominantBaseline="central" fontSize={24} fill="#333" fontWeight="bold">{fac.name}</text>
+              {facMemos.length > 0 && (
+                <g>
+                  <rect x={fac.x - 40} y={fac.y + 10} width={80} height={20} rx={10} fill="#f59e0b" />
+                  <text x={fac.x} y={fac.y + 20} textAnchor="middle" dominantBaseline="central" fontSize={11} fill="#ffffff" fontWeight="bold">
+                    📝 メモ {facMemos.length}件
+                  </text>
+                </g>
+              )}
+            </g>
+          );
+        })}
 
         {/* 2. 病室と患者 */}
         {rooms.map((room) => {
@@ -118,6 +130,7 @@ export default function WardMap({
           const topY = isTopRow ? room.y : room.y - roomH;
           const headerY = isTopRow ? topY : topY + (BED_H * room.rows);
           const roomPatients = patients.filter((p) => p.room_id === room.room_id);
+          const roomMemos = storeMemos.filter(m => m.target_room_id === room.room_id && !m.is_completed);
 
           return (
             <g key={room.room_id}>
@@ -126,6 +139,16 @@ export default function WardMap({
               {/* 部屋名の背景（薄い青のバー） */}
               <rect x={room.x - roomW / 2} y={headerY} width={roomW} height={HEADER_H} fill="#b2ebf2" />
               <text x={room.x - roomW / 4} y={headerY + HEADER_H / 2} textAnchor="middle" dominantBaseline="central" fontSize="18" fill="#333" fontWeight="bold">{room.name}</text>
+
+              {/* 📝 部屋内の未完了メモバッジ */}
+              {roomMemos.length > 0 && (
+                <g>
+                  <rect x={room.x + roomW / 8} y={headerY + 6} width={roomW / 3} height={HEADER_H - 12} rx={4} fill="#f59e0b" />
+                  <text x={room.x + roomW / 8 + roomW / 6} y={headerY + HEADER_H / 2} textAnchor="middle" dominantBaseline="central" fontSize="11" fill="#ffffff" fontWeight="bold">
+                    📝 メモ{roomMemos.length}件
+                  </text>
+                </g>
+              )}
 
               {/* 💡 部屋のベッド枠（グリッド線）の描画 */}
               {Array.from({ length: room.cols * room.rows }).map((_, i) => {

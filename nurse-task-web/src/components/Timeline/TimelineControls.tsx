@@ -1,5 +1,6 @@
 import type { TimelineControlsProps } from '../../types/types';
 import { useTimelineStore } from '../../stores/useTimelineStore';
+import { startHandsOnTutorial } from '../../utils/tutorial';
 
 // 💡 30分刻みの時間オプション（00:00 〜 23:30）を網羅
 const TIME_RANGE_OPTIONS = Array.from({ length: 48 }, (_, i) => {
@@ -25,6 +26,9 @@ export const TimelineControls = ({
   const timelineStartTime = useTimelineStore((state) => state.timelineStartTime);
   const timelineEndTime = useTimelineStore((state) => state.timelineEndTime);
   const setTimelineTimeRange = useTimelineStore((state) => state.setTimelineTimeRange);
+
+  const addDemoTask = useTimelineStore((state) => state.addDemoTask);
+  const removeDemoTask = useTimelineStore((state) => state.removeDemoTask);
 
   const configs = [
     { label: '1時間', value: 60 },
@@ -119,6 +123,16 @@ export const TimelineControls = ({
             ))}
           </select>
         </div>
+
+        {/* 🖐️ 体験型チュートリアル起動ボタン */}
+        <button
+          type="button"
+          onClick={() => startHandsOnTutorial(addDemoTask, removeDemoTask)}
+          className="!bg-amber-500 hover:!bg-amber-600 !text-white !font-extrabold !text-xs !px-3 !py-1.5 !rounded-xl !shadow-xs !transition-all !cursor-pointer !flex !items-center !gap-1"
+          title="実際にタスクを操作してガイドを進める体験型チュートリアル"
+        >
+          <span>🖐️ 体験ガイド</span>
+        </button>
       </div>
     </div>
   );

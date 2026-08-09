@@ -155,40 +155,54 @@ export default function TimelineSidebar({
               <span>実施中・記録中の<br />タスクはありません</span>
             </div>
           ) : (
-            myProgressingTasks.map((task: ExtendedTask) => (
-              <div
-                key={task.task_id}
-                onClick={() => setActivePopupTaskId(task.task_id)}
-                className="w-full p-2.5 rounded-lg shadow-sm border border-sky-200 bg-white hover:border-sky-400 hover:shadow transition-all cursor-pointer relative overflow-hidden flex flex-col gap-1 text-left"
-              >
-                <div className="absolute top-0 left-0 right-0 h-1 bg-sky-500" />
-                
-                <div className="flex items-center justify-between text-[11px] text-gray-500 font-bold">
-                  <span className="bg-sky-100 text-sky-800 px-1.5 py-0.5 rounded font-mono">
-                    {task.display_period || '随時'}
-                  </span>
-                  <span className="text-gray-600 truncate max-w-[110px]">
-                    {task.room_id ? `${task.room_id}号室 ` : ''}{task.patient_name ? `${task.patient_name}様` : ''}
-                  </span>
-                </div>
+            myProgressingTasks.map((task: ExtendedTask) => {
+              let elementId: string | undefined = undefined;
+              if (task.task_id === 'demo-task-tutorial') {
+                if (task.status === 'progressing') {
+                  elementId = 'dummy-task-progressing';
+                } else if (task.status === 'record_start') {
+                  elementId = 'dummy-task-recording';
+                } else if (task.status === 'record_pending') {
+                  elementId = 'dummy-task-record-pending';
+                }
+              }
 
-                <div className="text-xs font-bold text-gray-800 truncate mt-0.5">
-                  {task.title}
-                </div>
+              return (
+                <div
+                  key={task.task_id}
+                  id={elementId}
+                  onClick={() => setActivePopupTaskId(task.task_id)}
+                  className="w-full p-2.5 rounded-lg shadow-sm border border-sky-200 bg-white hover:border-sky-400 hover:shadow transition-all cursor-pointer relative overflow-hidden flex flex-col gap-1 text-left"
+                >
+                  <div className="absolute top-0 left-0 right-0 h-1 bg-sky-500" />
+                  
+                  <div className="flex items-center justify-between text-[11px] text-gray-500 font-bold">
+                    <span className="bg-sky-100 text-sky-800 px-1.5 py-0.5 rounded font-mono">
+                      {task.display_period || '随時'}
+                    </span>
+                    <span className="text-gray-600 truncate max-w-[110px]">
+                      {task.room_id ? `${task.room_id}号室 ` : ''}{task.patient_name ? `${task.patient_name}様` : ''}
+                    </span>
+                  </div>
 
-                <div className="flex items-center justify-between mt-1 text-[10px]">
-                  <span className={`px-1.5 py-0.5 rounded font-bold ${
-                    task.status === 'progressing' 
-                      ? 'bg-cyan-100 text-cyan-800' 
-                      : task.status === 'record_start'
-                      ? 'bg-blue-100 text-blue-800'
-                      : 'bg-orange-100 text-orange-800'
-                  }`}>
-                    {task.status === 'progressing' ? '🔵 実施中' : task.status === 'record_start' ? '🟢 記録中' : '🟠 記録一時中断'}
-                  </span>
+                  <div className="text-xs font-bold text-gray-800 truncate mt-0.5">
+                    {task.title}
+                  </div>
+
+                  <div className="flex items-center justify-between mt-1 text-[10px]">
+                    <span className={`px-1.5 py-0.5 rounded font-bold ${
+                      task.status === 'progressing' 
+                        ? 'bg-cyan-100 text-cyan-800' 
+                        : task.status === 'record_start'
+                        ? 'bg-blue-100 text-blue-800'
+                        : 'bg-purple-100 text-purple-800'
+                    }`}>
+                      {task.status === 'progressing' ? '🔵 実施中' : task.status === 'record_start' ? '🔵 記録中' : '🟣 記録一時中断'}
+                    </span>
+                  </div>
                 </div>
-              </div>
-            ))
+              );
+            })
           )}
         </div>
       </div>

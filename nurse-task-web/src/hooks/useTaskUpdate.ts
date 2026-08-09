@@ -27,6 +27,11 @@ export const updateTask = async (
     emr_order_id?: string;
   }
 ) => {
+  // 🛡️ チュートリアル用のデモタスク（demo-task-tutorial）は Firestore / GAS への送信をスキップ
+  if (taskId === 'demo-task-tutorial') {
+    return;
+  }
+
   try {
     const taskRef = doc(db, 'tasks', taskId);
     const docSnap = await getDoc(taskRef);

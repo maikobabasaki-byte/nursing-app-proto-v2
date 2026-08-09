@@ -12,18 +12,33 @@ export const TimelinePopupButtons: React.FC<TimelinePopupButtonsProps> = ({ task
   // ボタンの共通スタイルを定数化
   const btnBase = "w-full flex justify-center !py-2.5 !font-bold !rounded-lg !text-lg !shadow cursor-pointer transition-colors";
   
-  const renderBtn = (status: ExtendedTaskStatus, label: string, colorClass: string) => (
-    <button 
-      type="button" 
-      onClick={(e) => {
-      e.stopPropagation(); // ★ここでイベントの伝播を確実に止める
-      onStatusChange(task, status);
-    }}
-      className={`${btnBase} ${colorClass}`}
-    >
-      {label}
-    </button>
-  );
+  const getTourBtnId = (targetStatus: ExtendedTaskStatus) => {
+    if (task.task_id !== 'demo-task-tutorial') return undefined;
+    if (targetStatus === 'progressing') return 'tour-modal-start-btn';
+    if (targetStatus === 'pending') return 'tour-modal-pending-btn';
+    if (targetStatus === 'completed') return 'tour-modal-complete-btn';
+    if (targetStatus === 'record_start') return 'tour-modal-record-start-btn';
+    if (targetStatus === 'record_pending') return 'tour-modal-record-pending-btn';
+    if (targetStatus === 'record_complete') return 'tour-modal-record-complete-btn';
+    return undefined;
+  };
+
+  const renderBtn = (status: ExtendedTaskStatus, label: string, colorClass: string) => {
+    const btnId = getTourBtnId(status);
+    return (
+      <button 
+        id={btnId}
+        type="button" 
+        onClick={(e) => {
+          e.stopPropagation(); // ★ここでイベントの伝播を確実に止める
+          onStatusChange(task, status);
+        }}
+        className={`${btnBase} ${colorClass}`}
+      >
+        {label}
+      </button>
+    );
+  };
 
   return (
     <div className="flex flex-col gap-2">

@@ -43,8 +43,20 @@ if (transform) {
   });
 }
 
+  let elementId: string | undefined = undefined;
+  if (task.task_id === 'demo-task-tutorial') {
+    if (task.status === 'untouched') {
+      elementId = 'dummy-task-step1-untouched';
+    } else if (task.status === 'completed') {
+      elementId = 'dummy-task-step5-completed-timeline';
+    } else if (task.status === 'progressing') {
+      elementId = 'dummy-task-inprogress-timeline';
+    }
+  }
+
   return (
     <div 
+      id={elementId}
       ref={setCombinedRef}
       style={{ ...dndStyle, ...style }}
       className={`relative w-64 p-2.5 rounded shadow-sm font-bold transition-all select-none flex items-start gap-2 ${cardColorClass} ${borderStyle} ${className}`}

@@ -79,6 +79,7 @@ export function TimelineRow({
           return (
             <div 
               key={`placeholder-${task.task_id}`} 
+              id={task.task_id === 'demo-task-tutorial' ? 'dummy-task-inprogress-pool' : undefined}
               onClick={() => setActivePopupTaskId(task.task_id)}
               className={`w-64 border-2 border-dashed ${borderBgStyle} p-2.5 rounded shadow-sm flex flex-col justify-between font-bold text-xs min-h-[80px] cursor-pointer hover:shadow-md transition-all select-none`}
             >

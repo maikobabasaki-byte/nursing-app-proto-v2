@@ -61,6 +61,8 @@ interface TimelineStore {
   editingMemo: Memo | null;
   newMemoText: string;
 
+  addDemoTask: () => void;
+  removeDemoTask: () => void;
   setTasks: (tasks: ExtendedTask[]) => void;
   setMemos: (memos: Memo[]) => void;
   setNurseMaster: (masters: NurseMaster[]) => void;
@@ -241,6 +243,31 @@ export const useTimelineStore = create<TimelineStore>((set, get) => ({
   editingMemo: null,
   newMemoText: "",
 
+  addDemoTask: () => {
+    const demoTask: ExtendedTask = {
+      task_id: 'demo-task-tutorial',
+      patient_id: 'P-DEMO-001',
+      patient_name: '中島 伊織',
+      room_id: '201',
+      title: '【練習用】術前絶飲食確認',
+      details: '手術前に水・食事の摂取がないか最終確認を行う練習用タスクです。',
+      status: 'untouched',
+      initial_period: '09:00',
+      display_period: '09:00',
+      category: '確認',
+      priority: 'high',
+      isGroup: false,
+      isChild: false,
+    };
+    set((state) => ({
+      allTasks: [demoTask, ...state.allTasks.filter(t => t.task_id !== 'demo-task-tutorial')]
+    }));
+  },
+  removeDemoTask: () => {
+    set((state) => ({
+      allTasks: state.allTasks.filter(t => t.task_id !== 'demo-task-tutorial')
+    }));
+  },
   setTasks: (tasks) => set({ allTasks: tasks }),
   setMemos: (memos) => set({ memos }),
   setCurrentUser: (user) => set({ currentUser: user }),

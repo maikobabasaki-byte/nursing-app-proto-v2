@@ -24,6 +24,7 @@ export const PendingTray: React.FC<PendingTrayProps> = ({ pendingTasks, onTaskCl
           {pendingTasks.map(task => (
             <div
               key={task.task_id}
+              id={task.task_id === 'demo-task-tutorial' ? 'dummy-task-pending' : undefined}
               onClick={(e) => { e.stopPropagation(); onTaskClick(task.task_id); }}
               className="w-56 p-2 rounded-lg shadow border bg-white border-orange-300 text-gray-800 cursor-pointer hover:border-orange-500 hover:shadow-md transition-all shrink-0 relative overflow-hidden"
             >

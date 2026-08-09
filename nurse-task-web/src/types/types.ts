@@ -188,6 +188,8 @@ export interface Memo {
   text: string;
   time: string;
   scheduledAt?: string;
+  target_room_id?: string;
+  is_completed?: boolean;
 }
 
 export type LeaderTodoCategory = '患者対応' | '家族対応' | '医師への連絡' | '検査・処置' | 'その他';

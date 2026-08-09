@@ -206,16 +206,21 @@ export const extractUserProgressingTasks = (
 
   const traverse = (list: ExtendedTask[]) => {
     for (const task of list) {
-      // 実施中 (progressing) または 記録中 (record_start, record_pending)
-      const isProgressingStatus = 
+      // 左サイドバー表示用: 実施中 (progressing)、記録中 (record_start)、記録一時中断 (record_pending)
+      // ※ pending (実施一時中断・保留) は画面下部の中断トレイ (PendingTray) に表示するため除外
+      const isSidebarStatus = 
         task.status === 'progressing' || 
         task.status === 'record_start' || 
         task.status === 'record_pending';
 
+      const isDemoSidebarTask = 
+        task.task_id === 'demo-task-tutorial' && 
+        isSidebarStatus;
+
       // 担当者名が一致するか
       const isNurseMatch = !userName || !task.nurse_name || task.nurse_name === userName;
 
-      if (isProgressingStatus && isNurseMatch) {
+      if ((isSidebarStatus || isDemoSidebarTask) && isNurseMatch) {
         result.push(task);
       }
 

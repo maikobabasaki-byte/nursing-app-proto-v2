@@ -16,16 +16,39 @@ export const MemoPopup = () => {
   const [editingText, setEditingText] = useState("");
   const [scheduledAt, setScheduledAt] = useState("");
   const [memoTime, setMemoTime] = useState("");
+  const [targetRoomId, setTargetRoomId] = useState("");
+  const [isCompleted, setIsCompleted] = useState(false);
+  const [roomOptions, setRoomOptions] = useState<{ id: string; name: string }[]>([]);
+
+  useEffect(() => {
+    fetch('/data/rooms.json')
+      .then((res) => res.json())
+      .then((data) => {
+        const options: { id: string; name: string }[] = [];
+        if (data.rooms) {
+          data.rooms.forEach((r: any) => options.push({ id: r.room_id, name: r.name || `${r.room_id}号室` }));
+        }
+        if (data.facilities) {
+          data.facilities.forEach((f: any) => options.push({ id: f.room_id, name: f.name }));
+        }
+        setRoomOptions(options);
+      })
+      .catch((err) => console.error("MemoPopup rooms fetch error:", err));
+  }, []);
 
   useEffect(() => {
     if (editingMemo) {
       setEditingText(editingMemo.text);
       setScheduledAt(editingMemo.scheduledAt || "");
       setMemoTime(editingMemo.time);
+      setTargetRoomId(editingMemo.target_room_id || "");
+      setIsCompleted(!!editingMemo.is_completed);
     } else {
       setEditingText("");
       setScheduledAt("");
       setMemoTime(activeMemoTime || "");
+      setTargetRoomId("");
+      setIsCompleted(false);
     }
   }, [editingMemo, activeMemoTime]); // 開く対象が変わったら強制同期
 
@@ -48,6 +71,23 @@ export const MemoPopup = () => {
           />
         </div>
 
+        {/* 紐づけ部屋選択 */}
+        <div className="mb-4">
+          <label className="block text-sm font-bold text-gray-600 mb-1">📍 対象の部屋/施設（通知用）：</label>
+          <select
+            value={targetRoomId}
+            onChange={(e) => setTargetRoomId(e.target.value)}
+            className="w-full !p-2 !border !rounded-lg !bg-gray-50 !text-sm focus:!ring-2 focus:!ring-blue-400 !outline-none text-gray-800"
+          >
+            <option value="">-- 部屋を指定しない --</option>
+            {roomOptions.map((room) => (
+              <option key={room.id} value={room.id}>
+                {room.name}
+              </option>
+            ))}
+          </select>
+        </div>
+
         {/* 実施予定日時（カレンダー＋時間） */}
         <div className="mb-4">
           <label className="block text-sm font-bold text-gray-600 mb-1">実施予定日時：</label>
@@ -60,13 +100,27 @@ export const MemoPopup = () => {
         </div>
 
         {/* メモ内容 */}
-        <div className="mb-6">
+        <div className="mb-4">
           <textarea
             className="w-full !h-24 !p-3 !bg-gray-50 !border !rounded-lg focus:!ring-2 focus:!ring-blue-400 !outline-none text-gray-800"
-            placeholder="メモ内容を入力..."
+            placeholder="メモ内容を入力... (例: 手袋補充)"
             value={editingMemo ? editingText : newMemoText}
             onChange={(e) => editingMemo ? setEditingText(e.target.value) : setNewMemoText(e.target.value)}
           />
+        </div>
+
+        {/* 完了フラグ */}
+        <div className="mb-6 flex items-center gap-2">
+          <input 
+            type="checkbox"
+            id="memo-completed"
+            checked={isCompleted}
+            onChange={(e) => setIsCompleted(e.target.checked)}
+            className="w-4 h-4 text-blue-600 rounded focus:ring-blue-500 cursor-pointer"
+          />
+          <label htmlFor="memo-completed" className="text-sm font-bold text-gray-700 cursor-pointer">
+            完了済みにする
+          </label>
         </div>
 
         {/* ボタンエリア */}
@@ -93,13 +147,23 @@ export const MemoPopup = () => {
             type="button"
             className="!flex-1 flex justify-center !py-2.5 !bg-blue-600 hover:!bg-blue-700 !text-white !rounded-lg !font-bold cursor-pointer transition-colors"
             onClick={() => {
+              const textToSave = editingMemo ? editingText : newMemoText;
               const memoToSave = editingMemo 
-                ? { ...editingMemo, time: memoTime, text: editingText, scheduledAt: scheduledAt }
+                ? { 
+                    ...editingMemo, 
+                    time: memoTime, 
+                    text: textToSave, 
+                    scheduledAt: scheduledAt,
+                    target_room_id: targetRoomId || undefined,
+                    is_completed: isCompleted
+                  }
                 : { 
                     id: Date.now().toString(), 
                     time: memoTime, 
-                    text: newMemoText, 
-                    scheduledAt: scheduledAt 
+                    text: textToSave, 
+                    scheduledAt: scheduledAt,
+                    target_room_id: targetRoomId || undefined,
+                    is_completed: isCompleted
                   };
               
               handleSaveMemo(memoToSave);

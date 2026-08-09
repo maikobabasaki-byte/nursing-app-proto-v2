@@ -76,3 +76,17 @@ body,
 .theme-accent-btn:hover {
   background-color: var(--color-accent-hover) !important;
 }
+
+/* 🚗 driver.js の Popover・Overlay とアプリ内モーダル背景の z-index 干渉回避 */
+.driver-overlay {
+  z-index: 100000 !important;
+}
+
+.driver-popover {
+  z-index: 100001 !important;
+}
+
+.driver-active-element {
+  z-index: 100002 !important;
+  pointer-events: auto !important;
+}
