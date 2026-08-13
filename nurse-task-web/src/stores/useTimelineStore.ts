@@ -246,8 +246,8 @@ export const useTimelineStore = create<TimelineStore>((set, get) => ({
   activeId: null,
   activePopupTaskId: null,
   
-  timelineStartTime: '07:00',
-  timelineEndTime: '20:00',
+  timelineStartTime: '08:00',
+  timelineEndTime: '17:00',
   setTimelineTimeRange: (start, end) => set({ timelineStartTime: start, timelineEndTime: end }),
 
   activeMemoTime: null,

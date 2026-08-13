@@ -2,19 +2,22 @@ import type { TimelineControlsProps } from '../../types/types';
 import { useTimelineStore } from '../../stores/useTimelineStore';
 import { startHandsOnTutorial } from '../../utils/tutorial';
 
-// 💡 30分刻みの時間オプション（00:00 〜 23:30）を網羅
-const TIME_RANGE_OPTIONS = Array.from({ length: 48 }, (_, i) => {
-  const h = String(Math.floor(i / 2)).padStart(2, '0');
-  const m = i % 2 === 0 ? '00' : '30';
-  return `${h}:${m}`;
-});
+// 💡 30分刻みの時間オプション（00:00 〜 24:00）を網羅
+const TIME_RANGE_OPTIONS = [
+  ...Array.from({ length: 48 }, (_, i) => {
+    const h = String(Math.floor(i / 2)).padStart(2, '0');
+    const m = i % 2 === 0 ? '00' : '30';
+    return `${h}:${m}`;
+  }),
+  '24:00'
+];
 
 const SHIFT_PRESETS = [
-  { label: '日勤', start: '08:00', end: '17:30' },
+  { label: '日勤', start: '08:00', end: '17:00' },
   { label: '早出', start: '07:00', end: '16:00' },
-  { label: '遅出', start: '11:00', end: '20:00' },
-  { label: '夜勤', start: '17:00', end: '09:00' },
-  { label: '全時間', start: '06:00', end: '23:30' },
+  { label: '遅出', start: '09:30', end: '18:30' },
+  { label: '夜勤', start: '16:30', end: '09:00' },
+  { label: '全時間', start: '00:00', end: '24:00' },
 ];
 
 export const TimelineControls = ({ 

@@ -18,7 +18,7 @@ export const GroupAccordion = ({ task, isExpanded, onChildClick }: GroupAccordio
   const childIds = task.children?.map(c => c.task_id) || [];
 
   return (
-    <div className="absolute top-[90%] left-2 w-64 bg-[#1e3a6a] rounded-xl p-2 z-30 shadow-xl border border-blue-900 animate-fade-in max-h-[320px] overflow-y-auto scrollbar-thin">
+    <div className="absolute top-[90%] left-2 w-62 bg-[#1e3a6a] rounded-xl p-2 z-30 shadow-xl border border-blue-900 animate-fade-in max-h-[320px] overflow-y-auto scrollbar-thin">
       <SortableContext items={childIds} strategy={verticalListSortingStrategy}>
         {task.children?.map((child) => (
           <SortableChildItem 

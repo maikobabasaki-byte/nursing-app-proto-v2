@@ -101,19 +101,21 @@ export const updateNurseSos = async (
   }
 };
 
-// 💡 看護師ごとの選択患者リスト（受け持ち割り当て）をFirestoreに保存・更新する関数
+// 💡 看護師ごとの選択患者リスト（受け持ち割り当て）および本日セットアップ日付をFirestoreに保存・更新する関数
 export const updateNurseAssignedPatients = async (
   nurseId: string,
   assignedPatients: string[]
 ) => {
   if (!nurseId) return;
   try {
+    const todayStr = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
     const nurseRef = doc(db, 'nurses', nurseId);
     await setDoc(
       nurseRef,
       {
         nurse_id: nurseId,
         assigned_patients: assignedPatients,
+        last_setup_date: todayStr,
         updatedAt: serverTimestamp(),
       },
       { merge: true }

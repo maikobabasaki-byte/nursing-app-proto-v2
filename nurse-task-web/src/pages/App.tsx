@@ -2,7 +2,7 @@ import { useState, useEffect, lazy, Suspense } from 'react';
 import { onAuthStateChanged } from 'firebase/auth';
 import type { User } from 'firebase/auth';
 import { auth, db } from '../lib/firebase';
-import { collection, getDocs, onSnapshot, query, where } from 'firebase/firestore';
+import { collection, getDocs, onSnapshot, query, where, doc, getDoc } from 'firebase/firestore';
 import { reconstructGroups } from '../utils/taskLogic';
 import { useTimelineStore } from '../stores/useTimelineStore';
 import type { NurseMaster, NursePin } from '../stores/useTimelineStore';
@@ -44,6 +44,7 @@ export default function App() {
   const { currentConfig } = useTheme();
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
+  const [isSyncingWithPC, setIsSyncingWithPC] = useState<boolean>(false);
   const setTasks = useTimelineStore((state) => state.setTasks);
 
   // 1. sessionStorageから現在の画面状態を復元（タブごとの独立セッション対応）
@@ -112,7 +113,38 @@ export default function App() {
           }
         });
 
-        // 💡 クロージャの古い変数に頼らず関数型更新で常に最新の表示画面を判定
+        // 🎯 【本日の初期設定完了チェック＆PC同期引き継ぎ判定】
+        try {
+          const todayStr = new Date().toISOString().split('T')[0];
+          const nurseRef = doc(db, 'nurses', id);
+          const nurseSnap = await getDoc(nurseRef);
+
+          if (nurseSnap.exists()) {
+            const nurseData = nurseSnap.data();
+            if (
+              nurseData.last_setup_date === todayStr &&
+              Array.isArray(nurseData.assigned_patients) &&
+              nurseData.assigned_patients.length > 0
+            ) {
+              // 🚀 本日の初期設定が別端末(PC等)ですでに完了している！
+              setSelectedPatients(nurseData.assigned_patients);
+              sessionStorage.setItem('selectedPatients', JSON.stringify(nurseData.assigned_patients));
+              
+              setIsSyncingWithPC(true);
+              setTimeout(() => {
+                setIsSyncingWithPC(false);
+                setCurrentScreen('patientMaster');
+              }, 1200);
+              
+              setLoading(false);
+              return;
+            }
+          }
+        } catch (e) {
+          console.error("本日データ同期チェックエラー:", e);
+        }
+
+        // 💡 未完了の場合は従来通り患者選択画面へ案内
         setCurrentScreen((prevScreen) => {
           if (prevScreen === 'login') {
             return 'patientSelect';
@@ -293,6 +325,42 @@ export default function App() {
         style={{ backgroundColor: currentConfig.bgColor }}
       >
         <p>読み込み中...</p>
+      </div>
+    );
+  }
+
+  {/* 💻 ↔ 📱 本日のデータをPCと同期中... クッション画面 */}
+  if (isSyncingWithPC) {
+    return (
+      <div
+        className="min-h-screen flex flex-col items-center justify-center relative transition-colors duration-300 select-none p-6"
+        style={{ backgroundColor: currentConfig.bgColor }}
+      >
+        <div className="bg-white/95 backdrop-blur-md p-8 rounded-3xl shadow-2xl border border-sky-100 max-w-md w-full flex flex-col items-center gap-5 text-center animate-fade-in">
+          {/* 💻 ↔ 📱 同期アニメーションバッジ */}
+          <div className="relative flex items-center justify-center w-20 h-20 bg-gradient-to-tr from-sky-500 to-indigo-600 rounded-3xl shadow-lg text-white">
+            <span className="material-symbols-outlined text-4xl animate-bounce">sync</span>
+            <span className="absolute -top-1 -right-1 flex h-4 w-4">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+              <span className="relative inline-flex rounded-full h-4 w-4 bg-emerald-500"></span>
+            </span>
+          </div>
+
+          <div>
+            <h2 className="text-lg font-black text-slate-800 tracking-tight mb-1">
+              本日のデータをPCと同期中...
+            </h2>
+            <p className="text-xs font-bold text-slate-500 leading-relaxed">
+              PCで設定された受け持ち患者計画を検出しました。<br />
+              最新のタイムラインと設定を引き継いでメイン画面へ移動します。
+            </p>
+          </div>
+
+          {/* スムーズなプログレスバー */}
+          <div className="w-full bg-slate-100 rounded-full h-2 overflow-hidden shadow-inner mt-2">
+            <div className="bg-gradient-to-r from-sky-500 via-indigo-500 to-emerald-400 h-full rounded-full animate-pulse w-full"></div>
+          </div>
+        </div>
       </div>
     );
   }

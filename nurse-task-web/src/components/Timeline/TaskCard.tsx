@@ -49,7 +49,7 @@ export const TaskCard = (props: TaskCardPropsInner) => {
       style={style}
       {...(isCardDrag ? listeners : {})}
       {...(isCardDrag ? attributes : {})}
-      className={`relative w-62 flex-shrink-0 p-2.5 rounded shadow-sm font-bold select-none flex items-start gap-2 ${cardColorClass} ${borderStyle} ${className} ${
+      className={`relative w-full min-w-0 flex-shrink-0 p-2.5 rounded shadow-sm font-bold select-none flex items-start gap-2 ${cardColorClass} ${borderStyle} ${className} ${
         isDragging
           ? 'opacity-0 pointer-events-none shadow-none'
           : isCardDrag 

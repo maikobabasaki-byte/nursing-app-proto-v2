@@ -83,17 +83,17 @@ export default function Login() {
         </div>
 
         {/* 🔒 共有PCログアウト忘れ防止 ＆ スマホ保持切り替えチェックボックス */}
-        <div className="mb-5 flex items-start gap-2 select-none cursor-pointer">
+        <div className="mb-5 flex items-center gap-2.5 select-none cursor-pointer bg-slate-50 p-3 rounded-xl border border-slate-200 hover:bg-slate-100/80 transition-colors">
           <input
             id="remember_me_checkbox"
             type="checkbox"
             checked={rememberMe}
             onChange={(e) => setRememberMe(e.target.checked)}
-            className="mt-0.5 w-4 h-4 text-sky-600 rounded border-gray-300 focus:ring-sky-500 cursor-pointer shrink-0"
+            className="w-5 h-5 accent-[#1A365D] !appearance-auto cursor-pointer shrink-0"
           />
-          <label htmlFor="remember_me_checkbox" className="text-xs font-bold text-gray-700 cursor-pointer leading-tight">
+          <label htmlFor="remember_me_checkbox" className="text-xs font-bold text-gray-800 cursor-pointer leading-tight flex-1">
             この端末にログイン状態を保持する
-            <span className="block text-[10px] text-gray-400 font-normal mt-0.5">（※ナースステーション共有PCではチェックを外してください）</span>
+            <span className="block text-[10px] text-gray-500 font-normal mt-0.5">（※ナースステーション共有PCではチェックを外してください）</span>
           </label>
         </div>
 

@@ -72,8 +72,8 @@ export function TimelineRow({
         {time}
       </div>
 
-      {/* 中央：タスクカード配置エリア (8/12 - 横幅完全固定) */}
-      <div className="col-span-8 p-2 min-h-[60px] flex flex-wrap gap-1 items-start content-start min-w-0">
+      {/* 中央：タスクカード配置エリア (8/12 - 横3つ並び) */}
+      <div className="col-span-8 p-1.5 min-h-[60px] grid grid-cols-1 md:grid-cols-3 gap-1.5 items-start content-start min-w-0">
         {placeholders.map(task => {
           const isProgressing = task.status === 'progressing';
           const isRecordStart = task.status === 'record_start';
@@ -102,7 +102,7 @@ export function TimelineRow({
               key={`placeholder-${task.task_id}`} 
               id={task.task_id === 'demo-task-tutorial' ? 'dummy-task-inprogress-pool' : undefined}
               onClick={() => setActivePopupTaskId(task.task_id)}
-              className={`w-64 border-2 border-dashed ${borderBgStyle} p-2.5 rounded shadow-sm flex flex-col justify-between font-bold text-xs min-h-[80px] cursor-pointer hover:shadow-md select-none`}
+              className={`w-full min-w-0 border-2 border-dashed ${borderBgStyle} p-2.5 rounded shadow-sm flex flex-col justify-between font-bold text-xs min-h-[80px] cursor-pointer hover:shadow-md select-none`}
             >
               <div className="flex justify-between items-center w-full text-[10px]">
                 <span className="font-extrabold flex items-center gap-1">
@@ -122,7 +122,7 @@ export function TimelineRow({
           const { cardColorClass, borderStyle } = getTaskStyles(task, isPastTime);
 
           return (
-            <div key={task.task_id} className="relative flex-shrink-0">
+            <div key={task.task_id} className="relative w-full min-w-0 flex-shrink-0">
               {task.isGroup ? (
                 // 💡 引数がスッキリ！
                 <GroupParentCard 

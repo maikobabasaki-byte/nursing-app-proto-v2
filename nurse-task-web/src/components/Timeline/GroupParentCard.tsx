@@ -63,7 +63,7 @@ export const GroupParentCard = (props: GroupParentCardProps) => {
       {...(isCardDrag ? listeners : {})}
       {...(isCardDrag ? attributes : {})}
       className={`
-        w-62 flex-shrink-0 p-3 rounded-xl border-2 shadow-sm flex gap-2 items-start select-none ${isCardDrag ? '' : 'cursor-pointer'}
+        w-full min-w-0 flex-shrink-0 p-3 rounded-xl border-2 shadow-sm flex gap-2 items-start select-none ${isCardDrag ? '' : 'cursor-pointer'}
         ${getBackgroundColorClass()}
         ${isOver ? 'ring-4 ring-yellow-400' : ''}
         ${isDragging ? 'opacity-0 pointer-events-none shadow-none' : ''}

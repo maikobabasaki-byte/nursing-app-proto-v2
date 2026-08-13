@@ -244,6 +244,8 @@ export default function TimelineMain({
   })();
 
   const [unexecutedModalTask, setUnexecutedModalTask] = useState<ExtendedTask | null>(null);
+  const [isBeforeTasksDismissed, setIsBeforeTasksDismissed] = useState(false);
+  const [isAfterTasksDismissed, setIsAfterTasksDismissed] = useState(false);
 
   const handleConfirmUnexecuted = (task: ExtendedTask, reason: string) => {
     setActivePopupTaskId(null);
@@ -449,21 +451,32 @@ export default function TimelineMain({
       >
         <LiveCurrentTimeLine timelineMode={timelineMode} containerRef={containerRef} rowRefs={rowRefs} />
 
-        {outOfBoundsBeforeTasks.length > 0 && (
-          <div className="sticky top-0 z-20 bg-amber-500/90 backdrop-blur-md text-white px-4 py-2 text-xs font-bold flex items-center justify-between shadow-sm border-b border-amber-600">
+        {outOfBoundsBeforeTasks.length > 0 && !isBeforeTasksDismissed && (
+          <div className="my-2 mx-2 bg-amber-500/95 backdrop-blur-md text-white p-3 rounded-xl text-xs font-bold flex items-center justify-between shadow-md border border-amber-600 animate-fade-in">
             <div className="flex items-center gap-2">
               <span className="text-base">⚠️</span>
               <span>
                 表示開始時刻（<strong>{timelineStartTime}</strong>）より前に <strong>{outOfBoundsBeforeTasks.length} 件</strong> の予定ケアタスクがあります
               </span>
             </div>
-            <button
-              type="button"
-              onClick={() => setTimelineTimeRange('06:00', timelineEndTime)}
-              className="!px-3 !py-1 !bg-white hover:!bg-amber-50 !text-amber-950 !rounded-lg !text-xs !font-extrabold cursor-pointer border-none shadow-xs transition-colors"
-            >
-              早出・全時間表示にする (06:00〜)
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setTimelineTimeRange('06:00', timelineEndTime)}
+                className="!px-3 !py-1 !bg-white hover:!bg-amber-50 !text-amber-950 !rounded-lg !text-xs !font-extrabold cursor-pointer border-none shadow-xs transition-colors"
+              >
+                早出・全時間表示にする (06:00〜)
+              </button>
+              <button
+                type="button"
+                onClick={() => setIsBeforeTasksDismissed(true)}
+                className="p-1 text-white/80 hover:text-white hover:bg-amber-600/60 rounded-full transition-colors cursor-pointer flex items-center justify-center border-none bg-transparent"
+                title="この通知を閉じる"
+                aria-label="閉じる"
+              >
+                <span className="material-symbols-outlined text-lg">close</span>
+              </button>
+            </div>
           </div>
         )}
 
@@ -508,21 +521,32 @@ export default function TimelineMain({
           );
         })}
 
-        {outOfBoundsAfterTasks.length > 0 && (
-          <div className="sticky bottom-0 z-20 bg-amber-500/90 backdrop-blur-md text-white px-4 py-2 text-xs font-bold flex items-center justify-between shadow-sm border-t border-amber-600">
+        {outOfBoundsAfterTasks.length > 0 && !isAfterTasksDismissed && (
+          <div className="my-3 mx-2 bg-amber-500/95 backdrop-blur-md text-white p-3 rounded-xl text-xs font-bold flex items-center justify-between shadow-md border border-amber-600 animate-fade-in">
             <div className="flex items-center gap-2">
               <span className="text-base">⚠️</span>
               <span>
                 表示終了時刻（<strong>{timelineEndTime}</strong>）以降に <strong>{outOfBoundsAfterTasks.length} 件</strong> の予定ケアタスクがあります
               </span>
             </div>
-            <button
-              type="button"
-              onClick={() => setTimelineTimeRange(timelineStartTime, '23:00')}
-              className="!px-3 !py-1 !bg-white hover:!bg-amber-50 !text-amber-950 !rounded-lg !text-xs !font-extrabold cursor-pointer border-none shadow-xs transition-colors"
-            >
-              遅出・全時間表示にする (〜23:00)
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setTimelineTimeRange(timelineStartTime, '24:00')}
+                className="!px-3 !py-1 !bg-white hover:!bg-amber-50 !text-amber-950 !rounded-lg !text-xs !font-extrabold cursor-pointer border-none shadow-xs transition-colors"
+              >
+                全時間表示にする (〜24:00)
+              </button>
+              <button
+                type="button"
+                onClick={() => setIsAfterTasksDismissed(true)}
+                className="p-1 text-white/80 hover:text-white hover:bg-amber-600/60 rounded-full transition-colors cursor-pointer flex items-center justify-center border-none bg-transparent"
+                title="この通知を閉じる"
+                aria-label="閉じる"
+              >
+                <span className="material-symbols-outlined text-lg">close</span>
+              </button>
+            </div>
           </div>
         )}
 
