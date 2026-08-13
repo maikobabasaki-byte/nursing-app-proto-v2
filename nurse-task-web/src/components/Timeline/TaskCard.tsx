@@ -42,6 +42,16 @@ export const TaskCard = (props: TaskCardPropsInner) => {
 
   const isCardDrag = Boolean(props.isSortMode);
 
+  const isInterruptTask = Boolean(
+    task.title?.includes('ナースコール') || 
+    task.title?.includes('SOS') || 
+    task.task_id?.startsWith('CALL_INTERRUPT_')
+  );
+
+  const effectiveColorClass = isInterruptTask
+    ? 'bg-rose-50/90 border-rose-500 text-rose-950 ring-2 ring-rose-200 shadow-md'
+    : cardColorClass;
+
   return (
     <div 
       id={elementId}
@@ -49,7 +59,7 @@ export const TaskCard = (props: TaskCardPropsInner) => {
       style={style}
       {...(isCardDrag ? listeners : {})}
       {...(isCardDrag ? attributes : {})}
-      className={`relative w-full min-w-0 flex-shrink-0 p-2.5 rounded shadow-sm font-bold select-none flex items-start gap-2 ${cardColorClass} ${borderStyle} ${className} ${
+      className={`relative w-full min-w-0 flex-shrink-0 p-2.5 rounded shadow-sm font-bold select-none flex items-start gap-2 ${effectiveColorClass} ${borderStyle} ${className} ${
         isDragging
           ? 'opacity-0 pointer-events-none shadow-none'
           : isCardDrag 
@@ -99,11 +109,15 @@ export const TaskCard = (props: TaskCardPropsInner) => {
             <span className="text-sm font-bold whitespace-nowrap flex-shrink-0">
               {task.display_period || task.scheduled_at || ''}
             </span>
-            {task.is_additional && (
+            {isInterruptTask ? (
+              <span className="bg-rose-600 text-white text-[10px] px-1.5 py-0.5 rounded font-bold whitespace-nowrap shadow-sm flex items-center gap-0.5 animate-pulse">
+                ⚡ 突発割り込み
+              </span>
+            ) : task.is_additional ? (
               <span className="bg-purple-600 text-white text-[10px] px-1.5 py-0.5 rounded font-bold whitespace-nowrap shadow-sm flex items-center gap-0.5">
                 臨時追加
               </span>
-            )}
+            ) : null}
             {task.instruction_type === '看護指示' ? (
               <span className="bg-emerald-600 text-white text-[10px] px-1.5 py-0.5 rounded font-bold whitespace-nowrap shadow-sm flex items-center gap-0.5">
                 看護指示

@@ -130,3 +130,75 @@ export const updateTask = async (
     console.error("Firestoreタスクの更新エラー:", error);
   }
 };
+
+/**
+ * ⚡ 「ナースコール・SOS対応」割り込みタスクの動的生成と自動ステータス変更
+ * 1. 既存の「実施中 (progressing)」タスクを自動的に「中断中 (pending)」へ変更
+ * 2. 現在時刻（HH:mm）で新しい「ナースコール・SOS急変対応」タスクを生成してFirestoreへ保存
+ * 3. 新規タスクを「実施中 (progressing)」として登録
+ */
+export const triggerNurseCallInterruption = async (options?: {
+  patientId?: string;
+  patientName?: string;
+  roomId?: string;
+  sosReason?: string;
+}) => {
+  const now = new Date();
+  const hh = String(now.getHours()).padStart(2, '0');
+  const mm = String(now.getMinutes()).padStart(2, '0');
+  const currentTimeStr = `${hh}:${mm}`;
+
+  const { useTimelineStore } = await import('../stores/useTimelineStore');
+  const store = useTimelineStore.getState();
+  const allTasks = store.allTasks;
+  const currentUser = store.currentUser;
+
+  const nurseId = String(currentUser?.nurse_id || currentUser?.staff_id || 'guest_nurse').trim();
+  const nurseName = String(currentUser?.name || '自分').trim();
+
+  // 1. 既存の「実施中 (progressing)」タスクを自動的に「中断中 (pending)」へ切り替え
+  const activeTasks = allTasks.filter((t) => t.status === 'progressing');
+  for (const activeTask of activeTasks) {
+    store.handleTaskStatusChange(activeTask.task_id, 'pending');
+    await updateTask(activeTask.task_id, { status: 'pending', nurse_name: nurseName });
+  }
+
+  // 2. 新規割り込みタスク（実績）の生成
+  const taskId = `CALL_INTERRUPT_${Date.now()}`;
+  const newTask: any = {
+    task_id: taskId,
+    patient_id: options?.patientId || 'P-GUEST-102',
+    patient_name: options?.patientName || '佐藤 花子 (B様)',
+    room_id: options?.roomId || '202',
+    title: '📞 ナースコール・SOS急変対応',
+    details: `【突発割り込み実績】${options?.sosReason || '離床センサー検知・ナースコール緊急対応'} (対応開始: ${currentTimeStr})`,
+    status: 'progressing', // 🔵 新規タスクを実施中にセット
+    scheduled_at: currentTimeStr,
+    initial_period: currentTimeStr,
+    display_period: currentTimeStr,
+    category: '処置',
+    priority: 'high',
+    is_additional: true, // 💡 臨時追加割り込みフラグ
+    is_sos: false,
+    nurse_id: nurseId,
+    nurse_name: nurseName,
+    isGroup: false,
+    isChild: false,
+  };
+
+  // 3. Firestore へ即時保存 ＆ Store へ即時反映
+  try {
+    const taskRef = doc(db, 'tasks', taskId);
+    await setDoc(taskRef, {
+      ...newTask,
+      created_at: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    });
+    store.addTask(newTask);
+    console.log("⚡ ナースコール割り込みタスクを動的追加・実施中に設定しました:", newTask);
+  } catch (err) {
+    console.error("ナースコール割り込みタスク追加エラー:", err);
+  }
+
+  return newTask;
+};

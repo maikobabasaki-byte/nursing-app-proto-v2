@@ -29,6 +29,39 @@ interface DashboardProps {
   selectedIds: string[];
 }
 
+const GUEST_PATIENTS_MOCK: Patient[] = [
+  {
+    patient_id: 'P-GUEST-101',
+    name: '山田 太郎 (A様)',
+    gender: '男',
+    adl: '全介助',
+    risk_level: '高',
+    allergy: 'NSAIDs',
+    room_id: '201',
+    bed_number: 1,
+  },
+  {
+    patient_id: 'P-GUEST-102',
+    name: '佐藤 花子 (B様)',
+    gender: '女',
+    adl: '一部介助',
+    risk_level: '高',
+    allergy: 'アルコール綿',
+    room_id: '202',
+    bed_number: 1,
+  },
+  {
+    patient_id: 'P-GUEST-103',
+    name: '鈴木 一郎 (C様)',
+    gender: '男',
+    adl: '全介助',
+    risk_level: '高',
+    allergy: 'なし',
+    room_id: '203',
+    bed_number: 1,
+  },
+];
+
 export default function PatientMasterPage({ selectedIds }: DashboardProps) {
   const [rawPatients, setRawPatients] = useState<Patient[]>([]);
   const allTasks = useTimelineStore((state) => state.allTasks);
@@ -55,9 +88,19 @@ export default function PatientMasterPage({ selectedIds }: DashboardProps) {
 
   // 2. リアルタイムのタスクデータと結合し、フィルタリング・ソートを行う
   const patients = useMemo(() => {
-    if (rawPatients.length === 0) return [];
+    // 💡 rawPatients と GUEST_PATIENTS_MOCK をマップ構造で結合
+    const patientMap = new Map<string, Patient>();
+    rawPatients.forEach((p) => patientMap.set(p.patient_id, p));
+    GUEST_PATIENTS_MOCK.forEach((gp) => {
+      if (!patientMap.has(gp.patient_id)) {
+        patientMap.set(gp.patient_id, gp);
+      }
+    });
 
-    const mergedPatients = rawPatients.map(patient => {
+    const allPatientsList = Array.from(patientMap.values());
+    if (allPatientsList.length === 0) return [];
+
+    const mergedPatients = allPatientsList.map(patient => {
       // 親グループが展開されたフラットなタスク群から該当患者のタスクを紐付け
       const myTasks = flatTasks.filter(task => task.patient_id === patient.patient_id && task.status !== 'deleted') as any[];
       // 💡 朝から順（時系列昇順）にカスタムソートを適用
@@ -74,8 +117,11 @@ export default function PatientMasterPage({ selectedIds }: DashboardProps) {
       return a.bed_number - b.bed_number;
     });
 
-    // 選択された受け持ち患者に絞り込み
-    return sortedData.filter((p) => selectedIds.includes(p.patient_id));
+    // 選択された受け持ち患者に絞り込み（selectedIdsが指定されていればフィルタリング、無ければ全表示）
+    if (selectedIds && selectedIds.length > 0) {
+      return sortedData.filter((p) => selectedIds.includes(p.patient_id));
+    }
+    return sortedData;
   }, [rawPatients, flatTasks, selectedIds]);
 
 // 🌟 3. 表示する直前で、検索ワードにヒットする患者だけに絞り込む

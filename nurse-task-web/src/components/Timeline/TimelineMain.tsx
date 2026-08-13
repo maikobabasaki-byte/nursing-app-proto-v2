@@ -577,8 +577,20 @@ export default function TimelineMain({
                   return;
                 }
 
+                // 🎯 【病棟業務ルール：実施中は1つのみ】
+                // 新しいタスクを実施中(progressing)にする場合、既存の実施中タスクを自動的に「中断・保留(pending)」へ移動
+                if (s === 'progressing') {
+                  const existingProgressing = storeAllTasks.find(
+                    (other) => other.task_id !== t.task_id && other.status === 'progressing'
+                  );
+                  if (existingProgressing) {
+                    handleUpdateStatus(existingProgressing.task_id, 'pending');
+                    updateTask(existingProgressing.task_id, { status: 'pending', nurse_name: userName });
+                  }
+                }
+
                 const messages: Record<ExtendedTaskStatus, string> = {
-                  progressing: '実施を開始しました',
+                  progressing: '実施を開始しました（前タスクは自動で中断・保留へ移動）',
                   pending: '中断・保留しました',
                   completed: '実施を完了しました',
                   record_start: '記録を開始しました',

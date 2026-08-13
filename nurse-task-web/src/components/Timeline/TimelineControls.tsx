@@ -127,6 +127,21 @@ export const TimelineControls = ({
           </select>
         </div>
 
+        {/* ⚡ ナースコール・SOS対応の動的割り込み発生アクションボタン */}
+        <button
+          type="button"
+          onClick={async () => {
+            const { triggerNurseCallInterruption } = await import('../../hooks/useTaskUpdate');
+            triggerNurseCallInterruption({
+              sosReason: '202号室離床センサー検知・ナースコール緊急割り込み対応',
+            });
+          }}
+          className="!bg-rose-600 hover:!bg-rose-700 !text-white !font-extrabold !text-xs !px-3 !py-1.5 !rounded-xl !shadow-md !transition-all !cursor-pointer !flex !items-center !gap-1 animate-pulse"
+          title="既存の「実施中」タスクを自動中断し、現在時刻でナースコール割り込み対応タスクを生成して「実施中」化します"
+        >
+          <span>📞 コール対応を開始</span>
+        </button>
+
         {/* 🖐️ 体験型チュートリアル起動ボタン */}
         <button
           type="button"

@@ -1,12 +1,14 @@
 import { useState } from 'react';
-import { signInWithEmailAndPassword, setPersistence, browserSessionPersistence, browserLocalPersistence } from 'firebase/auth';
+import { signInWithEmailAndPassword, signInAnonymously, setPersistence, browserSessionPersistence, browserLocalPersistence } from 'firebase/auth';
 import { auth } from '../lib/firebase';
+import { seedGuestData } from '../services/guestSeedService';
 
 export default function Login() {
   const [userId, setUserId] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(false);
+  const [isLoadingGuest, setIsLoadingGuest] = useState(false);
 
   const handleLogin = async (e: React.MouseEvent<HTMLButtonElement>) => {
     e.preventDefault();
@@ -28,9 +30,53 @@ export default function Login() {
     }
   };
 
+  const handleGuestLogin = async (e: React.MouseEvent<HTMLButtonElement>) => {
+    e.preventDefault();
+    console.log("🚀 [GuestLogin] ゲストログインボタンがクリックされました");
+    setIsLoadingGuest(true);
+    const errorEl = document.getElementById('error_message');
+    if (errorEl) errorEl.innerText = '';
+
+    try {
+      console.log("🔑 [GuestLogin] ログインセッションをローカル保持 (browserLocalPersistence) に設定中...");
+      await setPersistence(auth, browserLocalPersistence);
+      let userCredential;
+      
+      try {
+        console.log("🔑 [GuestLogin] Firebase signInAnonymously (匿名認証) を呼び出します...");
+        userCredential = await signInAnonymously(auth);
+        console.log("✅ [GuestLogin] signInAnonymously 成功! UID:", userCredential.user?.uid);
+      } catch (anonErr: any) {
+        console.warn("⚠️ [GuestLogin] 匿名認証でエラーが発生しました (Firebase Consoleで匿名認証が未有効等の可能性があります):", anonErr);
+        console.log("🔄 [GuestLogin] デモアカウント (guest@nurseflow.local) への全自動フォールバックを試みます...");
+        
+        try {
+          userCredential = await signInWithEmailAndPassword(auth, 'guest@nurseflow.local', 'guest1234');
+          console.log("✅ [GuestLogin] デモアカウントへのログイン成功! UID:", userCredential.user?.uid);
+        } catch (emailErr: any) {
+          console.log("🆕 [GuestLogin] デモアカウントを新規作成します (createUserWithEmailAndPassword)...");
+          const { createUserWithEmailAndPassword } = await import('firebase/auth');
+          userCredential = await createUserWithEmailAndPassword(auth, 'guest@nurseflow.local', 'guest1234');
+          console.log("✅ [GuestLogin] デモアカウント新規作成＆ログイン成功! UID:", userCredential.user?.uid);
+        }
+      }
+      
+      if (userCredential && userCredential.user) {
+        console.log("🎉 [GuestLogin] ゲスト認証成功! App.tsx の一元判定フックへ引き渡します (UID:", userCredential.user.uid, ")");
+      }
+    } catch (error: any) {
+      if (errorEl) {
+        errorEl.innerText = `ゲストログインエラー: ${error?.message || 'Firebase設定をご確認ください'}`;
+      }
+      console.error('❌ [GuestLogin] 最終エラー:', error);
+    } finally {
+      setIsLoadingGuest(false);
+    }
+  };
+
   return (
     <>
-      <div className="bg-white p-8 rounded-lg shadow-md w-full max-w-sm border border-gray-200">
+      <div className="bg-white p-8 rounded-2xl shadow-xl w-full max-w-sm border border-gray-200">
         <div className="mb-4">
           <label className="block text-base font-medium text-gray-700 mb-1">
             ログインID
@@ -41,7 +87,7 @@ export default function Login() {
             required 
             value={userId}
             onChange={(e) => setUserId(e.target.value)}
-            className="w-full !border !border-gray-300 !p-2 focus:outline-none focus:ring-1 focus:ring-blue-500"
+            className="w-full !border !border-gray-300 !p-2 focus:outline-none focus:ring-1 focus:ring-blue-500 rounded-lg"
           />
         </div>
 
@@ -57,7 +103,7 @@ export default function Login() {
               required 
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              className="w-full !border !border-gray-300 !p-2 !pr-10 focus:outline-none focus:ring-1 focus:ring-blue-500"
+              className="w-full !border !border-gray-300 !p-2 !pr-10 focus:outline-none focus:ring-1 focus:ring-blue-500 rounded-lg"
             />
             <button
               type="button"
@@ -100,11 +146,27 @@ export default function Login() {
         <p id="error_message" style={{ color: 'red' }} className="text-sm mb-4"></p>
         
         <button 
-          className="w-1/2 !block !mx-auto !bg-[#1A365D] !text-white !font-bold !p-2 !rounded !text-center cursor-pointer hover:bg-slate-800 transition-colors"
+          className="w-full !bg-[#1A365D] !text-white !font-bold !p-2.5 !rounded-xl !text-center cursor-pointer hover:bg-slate-800 transition-colors shadow-sm"
           onClick={handleLogin} 
           type="button"
         >
           ログイン
+        </button>
+
+        {/* 🚀 ポートフォリオ用：ゲスト体験ボタン区切り */}
+        <div className="!relative !my-5 !flex !items-center !justify-center">
+          <div className="!border-t !border-gray-200 !w-full"></div>
+          <span className="!bg-white !px-3 !text-xs !text-gray-400 !font-bold !shrink-0">または</span>
+        </div>
+
+        <button
+          type="button"
+          onClick={handleGuestLogin}
+          disabled={isLoadingGuest}
+          className="!w-full !bg-gradient-to-r !from-emerald-600 !to-teal-600 hover:!from-emerald-700 hover:!to-teal-700 !text-white !font-extrabold !p-3 !rounded-xl !shadow-md !text-sm !flex !items-center !justify-center !gap-2 !cursor-pointer !transition-all !active:!scale-95 disabled:!opacity-50"
+        >
+          <span className="material-symbols-outlined !text-lg">rocket_launch</span>
+          <span>{isLoadingGuest ? 'ゲスト環境を準備中...' : 'ゲストとして試してみる（1秒体験）'}</span>
         </button>
       </div>
     </>

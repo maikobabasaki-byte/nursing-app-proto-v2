@@ -72,46 +72,71 @@ export default function App() {
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
-      if (currentUser && currentUser.email) {
+      if (currentUser) {
         setUser(currentUser);
-        const id = currentUser.email.split('@')[0];
-        
-        // 💡 スプレッドシート (GAS) から絶対正本データを直取得して同期
-        ensureTodayTasksSynced(id);
+        const id = currentUser.email ? currentUser.email.split('@')[0] : currentUser.uid;
 
-        // 💡 Firestoreの nurse_master コレクションから email でクエリ名寄せ検索
-        try {
-          const q = query(collection(db, 'nurse_master'), where('email', '==', currentUser.email));
-          const querySnapshot = await getDocs(q);
-          if (!querySnapshot.empty) {
-            const matchedDoc = querySnapshot.docs[0];
-            const data = matchedDoc.data();
-            const profile = {
-              nurse_id: matchedDoc.id,
-              name: data.name || id,
-              email: currentUser.email,
-              team: data.team || '',
-              is_leader: Boolean(data.is_leader),
-            };
-            useTimelineStore.getState().setCurrentUser(profile);
-          } else {
-            const fallbackProfile = {
-              nurse_id: id,
-              name: id,
-              email: currentUser.email,
-            };
-            useTimelineStore.getState().setCurrentUser(fallbackProfile);
-          }
-        } catch (e) {
-          console.error("Auth nurse_master クエリ設定エラー:", e);
+        // 🎯 ゲストユーザー（匿名ログイン / guestアカウント）の場合はシードデータを自動生成してダイレクト同期
+        if (currentUser.isAnonymous || id.includes('guest')) {
+          console.log(`👤 [AuthCheck] ゲストユーザーを検出しました! (UID: ${currentUser.uid}, isAnonymous: ${currentUser.isAnonymous})`);
+          const guestPatients = ['P-GUEST-101', 'P-GUEST-102', 'P-GUEST-103', 'P-GUEST-104'];
+          setSelectedPatients(guestPatients);
+          sessionStorage.setItem('selectedPatients', JSON.stringify(guestPatients));
+          sessionStorage.setItem('currentScreen', 'patientMaster');
+
+          useTimelineStore.getState().setCurrentUser({
+            nurse_id: currentUser.uid,
+            name: 'ゲスト看護師（体験用）',
+            email: currentUser.email || 'guest@nurseflow.local',
+          });
+
+          console.log("🌱 [AuthCheck] ゲスト患者をセット完了。バックグラウンドでシードタスク・TODOを同期します...");
+          import('../services/guestSeedService').then(({ seedGuestData }) => {
+            seedGuestData(currentUser.uid);
+          });
+
+          setIsSyncingWithPC(true);
+          setTimeout(() => {
+            console.log("🚀 [AuthCheck] 同期完了! メイン画面(patientMaster)へ遷移します");
+            setIsSyncingWithPC(false);
+            setCurrentScreen('patientMaster');
+          }, 1000);
+
+          setLoading(false);
+          return;
         }
 
-        // 💡 看護師マスターデータをGASから取得してZustandにセット (フォールバック)
-        fetchGASData().then((res) => {
-          if (res.nurses && res.nurses.length > 0) {
-            useTimelineStore.getState().setNurseMaster(res.nurses);
+        // 💡 スプレッドシート (GAS) から絶対正本データを直取得して同期
+        if (currentUser.email) {
+          ensureTodayTasksSynced(id);
+
+          // 💡 Firestoreの nurse_master コレクションから email でクエリ名寄せ検索
+          try {
+            const q = query(collection(db, 'nurse_master'), where('email', '==', currentUser.email));
+            const querySnapshot = await getDocs(q);
+            if (!querySnapshot.empty) {
+              const matchedDoc = querySnapshot.docs[0];
+              const data = matchedDoc.data();
+              const profile = {
+                nurse_id: matchedDoc.id,
+                name: data.name || id,
+                email: currentUser.email,
+                team: data.team || '',
+                is_leader: Boolean(data.is_leader),
+              };
+              useTimelineStore.getState().setCurrentUser(profile);
+            } else {
+              const fallbackProfile = {
+                nurse_id: id,
+                name: id,
+                email: currentUser.email,
+              };
+              useTimelineStore.getState().setCurrentUser(fallbackProfile);
+            }
+          } catch (e) {
+            console.error("Auth nurse_master クエリ設定エラー:", e);
           }
-        });
+        }
 
         // 🎯 【本日の初期設定完了チェック＆PC同期引き継ぎ判定】
         try {
@@ -172,16 +197,26 @@ export default function App() {
     const unsubscribe = onSnapshot(
       collection(db, "tasks"), 
       (snapshot) => {
-        const firestoreTasks = snapshot.docs.map((doc) => {
-          const data = doc.data();
-          return {
+        // 💡 重複タスクの完全排除（task_id単位 ＆ 患者ID_タスク名_時間単位でのデデュープ）
+        const uniqueTaskMap = new Map<string, ExtendedTask>();
+        snapshot.docs.forEach((docItem) => {
+          const data = docItem.data();
+          const taskId = docItem.id;
+          const period = (data.display_period === "undefined" || !data.display_period) ? "" : data.display_period;
+          const taskObj = {
             ...data,
-            task_id: doc.id,
-            display_period: (data.display_period === "undefined" || !data.display_period) 
-                ? "" 
-                : data.display_period,
+            task_id: taskId,
+            display_period: period,
           } as ExtendedTask;
+
+          const contentKey = `${taskObj.patient_id}_${taskObj.title}_${taskObj.display_period}`;
+          if (!uniqueTaskMap.has(taskId) && !uniqueTaskMap.has(contentKey)) {
+            uniqueTaskMap.set(taskId, taskObj);
+            uniqueTaskMap.set(contentKey, taskObj);
+          }
         });
+
+        const firestoreTasks = Array.from(new Set(uniqueTaskMap.values()));
 
         if (snapshot.metadata.hasPendingWrites) {
           return;
@@ -208,6 +243,8 @@ export default function App() {
       (error) => {
         if (error.code === 'resource-exhausted') {
           console.warn("⚠️ [Tasks] Firestoreのクォータ上限を超発したため、静的・GASデータ優先モードで動作を継続します。");
+        } else if (error.code === 'permission-denied') {
+          console.warn("⚠️ [Tasks] Firestoreアクセス権限を確定中（認証トークン確立待ち）...");
         } else {
           console.error("Firestore tasks 取得エラー:", error);
         }
@@ -243,6 +280,8 @@ export default function App() {
       (error) => {
         if (error.code === 'resource-exhausted') {
           console.warn("⚠️ [NurseMaster] Firestoreのクォータ上限に到達しました。");
+        } else if (error.code === 'permission-denied') {
+          console.warn("⚠️ [NurseMaster] Firestoreアクセス権限を確定中...");
         }
       }
     );
@@ -276,6 +315,8 @@ export default function App() {
       (error) => {
         if (error.code === 'resource-exhausted') {
           console.warn("⚠️ [Nurses] Firestoreのクォータ上限に到達しました。");
+        } else if (error.code === 'permission-denied') {
+          console.warn("⚠️ [Nurses] Firestoreアクセス権限を確定中...");
         }
       }
     );

@@ -99,6 +99,18 @@ export const GlobalSosToast: React.FC = () => {
 
   // 💡 修正：ボタンを押した瞬間に0秒でUIを更新（楽観的更新）し、全端末へブロードキャスト送信
   const handleRespondNurse = async (nurseId: string) => {
+    // 0. 既存実施中タスクの自動中断 ＆ 現在時刻でのナースコール・SOS割り込みタスクの動的生成
+    try {
+      const targetNurse = nurses.find((n) => n.nurse_id === nurseId);
+      const { triggerNurseCallInterruption } = await import('../hooks/useTaskUpdate');
+      triggerNurseCallInterruption({
+        patientId: 'P-GUEST-102',
+        patientName: '佐藤 花子 (B様)',
+        roomId: '202',
+        sosReason: targetNurse?.sos_reason || `${targetNurse?.name || '他スタッフ'}からの緊急SOS対応要請`,
+      });
+    } catch (e) {}
+
     // 1. 即座にローカルストアと画面表示をクリア（0秒で反応）
     respondToNurseSos(nurseId, responderName);
     setDismissedIds((prev) => [...prev, nurseId]);
@@ -126,6 +138,17 @@ export const GlobalSosToast: React.FC = () => {
   };
 
   const handleRespondTask = async (taskId: string) => {
+    // 0. 既存実施中タスクの自動中断 ＆ 現在時刻でのナースコール・SOS割り込みタスクの動的生成
+    try {
+      const { triggerNurseCallInterruption } = await import('../hooks/useTaskUpdate');
+      triggerNurseCallInterruption({
+        patientId: 'P-GUEST-102',
+        patientName: '佐藤 花子 (B様)',
+        roomId: '202',
+        sosReason: 'タスク支援要請への応援対応',
+      });
+    } catch (e) {}
+
     // 1. 即座にローカルストアと画面表示をクリア（0秒で反応）
     respondToTaskSos(taskId, responderName);
     setDismissedIds((prev) => [...prev, taskId]);
