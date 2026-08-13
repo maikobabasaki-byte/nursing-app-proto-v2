@@ -3,6 +3,7 @@ import { db } from '../lib/firebase';
 import { fetchGASData, type GASTaskResponse, type GASPatientResponse } from './gasService';
 import { getJSTDateString } from '../utils/dateUtils';
 import type { ExtendedTask } from '../types/types';
+import { assignDefaultPriority } from '../utils/taskLogic';
 
 /**
  * スプレッドシート (GAS) の生データをアプリ用の ExtendedTask 配列に変換する。
@@ -59,6 +60,14 @@ export const mapGASTaskToExtendedTask = (
   const resolvedNurseName = String(item.nurse_name || rawItem.nurseName || userName || '').trim();
   const resolvedTeam = String(item.team || rawItem.team || matchedPatient?.team || '').trim();
 
+  // 現場ルールに基づく優先度の自動判定
+  const assignedPriority = assignDefaultPriority({
+    title: resolvedTitle,
+    details: item.details,
+    priority: item.priority,
+    requiresAssist: Boolean(rawItem.requiresAssist || rawItem.requires_assist)
+  });
+
   return {
     task_id: taskId,
     emr_order_id: taskId,
@@ -67,7 +76,7 @@ export const mapGASTaskToExtendedTask = (
     status: (item.status as any) || 'untouched',
     display_period: period,
     initial_period: period,
-    priority: item.priority || 'medium',
+    priority: assignedPriority,
     scheduled_at: period.includes(':') ? `${todayJST}T${period}:00` : '',
     completed_at: item.completed_at || "",
     patient_id: targetPatientId,

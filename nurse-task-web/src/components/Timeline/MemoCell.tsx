@@ -1,33 +1,28 @@
 import React from 'react';
 import type { Memo } from '../../types/types';
-import { useSortable } from '@dnd-kit/sortable';
-import { CSS } from '@dnd-kit/utilities';
-import { useTimelineStore } from '../../stores/useTimelineStore'; // ★追加
+import { useDraggable } from '@dnd-kit/core';
+import { useTimelineStore } from '../../stores/useTimelineStore';
 
 interface MemoCellProps {
   memo: Memo;
+  isSortMode?: boolean;
+  isOverlay?: boolean;
 }
 
-export const MemoCell = ({ memo }: MemoCellProps) => {
-  // 🎯 ストアから、メモ編集ポップアップを開くためのアクションを一本釣り
+export const MemoCell = ({ memo, isSortMode, isOverlay }: MemoCellProps) => {
   const setEditingMemo = useTimelineStore((state) => state.setEditingMemo);
+  const isCardDrag = Boolean(isSortMode);
 
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+  const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
     id: `memo-${memo.id}`,
+    disabled: Boolean(isOverlay),
   });
-
-  const style = {
-    transform: CSS.Transform.toString(transform),
-    transition,
-    opacity: isDragging ? 0.5 : 1,
-  };
 
   const dateObj = memo.scheduledAt ? new Date(memo.scheduledAt) : null;
   const formattedDate = dateObj && !isNaN(dateObj.getTime()) 
         ? `${(dateObj.getMonth() + 1).toString().padStart(2, '0')}/${dateObj.getDate().toString().padStart(2, '0')} ${dateObj.getHours().toString().padStart(2, '0')}:${dateObj.getMinutes().toString().padStart(2, '0')}`
         : null;
 
-  // 💡 あなたが実装したポインターイベントのマージ関数（そのまま完全流用）
   const handlePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
     if (listeners?.onPointerDown) {
       listeners.onPointerDown(e);
@@ -49,35 +44,45 @@ export const MemoCell = ({ memo }: MemoCellProps) => {
   return (
     <div 
       ref={setNodeRef}
-      style={{
-        ...style,
-        touchAction: 'none'
-      }}
-      className="w-full text-[12px] bg-yellow-100 p-1.5 rounded shadow-sm border border-yellow-300 mb-1 flex items-start gap-1 select-none hover:bg-yellow-200 transition-colors"
+      style={{ touchAction: 'none' }}
+      {...(isCardDrag ? listeners : {})}
+      {...(isCardDrag ? attributes : {})}
+      className={`w-full text-[12px] bg-yellow-100 p-1.5 rounded shadow-sm border border-yellow-300 mb-1 flex items-start gap-1 select-none ${
+        isDragging
+          ? 'opacity-0 pointer-events-none shadow-none'
+          : isCardDrag 
+            ? 'touch-none cursor-grab active:cursor-grabbing border-amber-400 ring-2 ring-amber-300 shadow-md' 
+            : 'hover:bg-yellow-200'
+      }`}
     >
-      {/* ⠿ ハンドル部分 */}
-      <div 
-        {...attributes}
-        {...listeners}
-        onPointerDown={handlePointerDown}
-        onPointerMove={handlePointerMove}
-        onPointerUp={handlePointerUp}
-        className="cursor-grab active:cursor-grabbing text-yellow-500 font-bold px-0.5 text-xs select-none"
-      >
-        ⠿
-      </div>
+      {!isCardDrag && (
+        <div 
+          {...attributes}
+          {...listeners}
+          onPointerDown={handlePointerDown}
+          onPointerMove={handlePointerMove}
+          onPointerUp={handlePointerUp}
+          className="hidden md:block cursor-grab active:cursor-grabbing text-yellow-500 font-bold px-0.5 text-xs select-none"
+        >
+          ⠿
+        </div>
+      )}
 
-      {/* 💡 クリックで直接ストアの編集用ステートへこのメモを叩き込む */}
       <div 
-        className="flex-1 min-w-0 cursor-pointer" 
+        className={`flex-1 min-w-0 ${isCardDrag ? '' : 'cursor-pointer'}`} 
         onClick={(e) => { 
+          if (isCardDrag) {
+            e.preventDefault();
+            e.stopPropagation();
+            return;
+          }
           e.stopPropagation(); 
-          setEditingMemo(memo); // ⚡親を経由せず、直接エディタを起動！
+          setEditingMemo(memo);
         }}
       >
         <div className="font-bold border-b border-yellow-300/60 mb-0.5">{memo.time}</div>
         {formattedDate && (
-          <div className="text-[12px] text-gray-600 mb-0.5">
+          <div className="text-[11px] text-gray-600 mb-0.5">
             実施予定：{formattedDate}
           </div>
         )}

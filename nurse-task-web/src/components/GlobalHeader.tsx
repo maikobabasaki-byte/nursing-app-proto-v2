@@ -33,8 +33,9 @@ export default function GlobalHeader({ currentPage, onNavigate}: GlobalHeaderPro
         <span className="header-title-text font-bold text-lg">NurseFlowApp</span>
       </h1>
       
-      <nav className={isLeader ? "w-96" : "w-72"}>
-        <ul className="flex justify-between items-center text-center text-xs">
+      {/* 💻 デスクトップ版ヘッダーナビゲーション（md以上で表示、モバイルでは非表示） */}
+      <nav className={`hidden md:flex ${isLeader ? "w-96" : "w-72"}`}>
+        <ul className="flex justify-between items-center text-center text-xs w-full">
           {/* 👥 患者マスター */}
           <li className="cursor-pointer" onClick={() => onNavigate('patientMaster')}>
             <img 

@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useTimelineStore } from '../stores/useTimelineStore';
-import { normalizeToHHMM } from '../utils/taskLogic';
+import { normalizeToHHMM, flattenTasks, sortTasksChronologically } from '../utils/taskLogic';
 
 // --- 型定義 ---
 interface Patient {
@@ -36,6 +36,11 @@ export default function PatientMasterPage({ selectedIds }: DashboardProps) {
   // 検索ワードを管理するStateを追加
   const [searchWord, setSearchWord] = useState('');
 
+  // 親グループを展開（フラット化）したタスク一覧を作成
+  const flatTasks = useMemo(() => {
+    return flattenTasks(allTasks);
+  }, [allTasks]);
+
   // 1. マウント時に患者マスタの静的データだけを取得
   useEffect(() => {
     fetch('/data/patients.json')
@@ -53,11 +58,13 @@ export default function PatientMasterPage({ selectedIds }: DashboardProps) {
     if (rawPatients.length === 0) return [];
 
     const mergedPatients = rawPatients.map(patient => {
-      // グループそのものを除外した、純粋なタスク群を紐付け
-      const myTasks = allTasks.filter(task => task.patient_id === patient.patient_id && !task.isGroup) as any[];
+      // 親グループが展開されたフラットなタスク群から該当患者のタスクを紐付け
+      const myTasks = flatTasks.filter(task => task.patient_id === patient.patient_id && task.status !== 'deleted') as any[];
+      // 💡 朝から順（時系列昇順）にカスタムソートを適用
+      const sortedTasks = sortTasksChronologically(myTasks);
       return {
         ...patient,
-        tasks: myTasks
+        tasks: sortedTasks
       };
     });
 
@@ -69,7 +76,7 @@ export default function PatientMasterPage({ selectedIds }: DashboardProps) {
 
     // 選択された受け持ち患者に絞り込み
     return sortedData.filter((p) => selectedIds.includes(p.patient_id));
-  }, [rawPatients, allTasks, selectedIds]);
+  }, [rawPatients, flatTasks, selectedIds]);
 
 // 🌟 3. 表示する直前で、検索ワードにヒットする患者だけに絞り込む
   const filteredPatients = patients.filter((patient) => {

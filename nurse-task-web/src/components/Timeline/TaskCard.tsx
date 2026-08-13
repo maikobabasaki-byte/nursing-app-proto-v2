@@ -13,35 +13,21 @@ export const TaskCard = (props: TaskCardPropsInner) => {
     borderStyle = 'border-solid',
     className = '',
   } = props;
-  // 3. ドラッグの設定
-  const { attributes, listeners, setNodeRef: setDraggableRef, transform } = useDraggable({
+  // 3. ドラッグの設定（isOverlayがtrueの時はフック登録を完全無効化し2重登録を防止）
+  const { attributes, listeners, setNodeRef: setDraggableRef, isDragging } = useDraggable({
     id: task.task_id,
+    disabled: Boolean(props.isOverlay),
   });
 
   const { setNodeRef: setDroppableRef} = useDroppable({
     id: task.task_id, // 自分のIDをドロップ先IDとして登録
+    disabled: Boolean(props.isOverlay),
   });
 
   const setCombinedRef = (node: HTMLElement | null) => {
     setDraggableRef(node);
     setDroppableRef(node);
   };
-  // ドラッグ中のスタイル
-  const dndStyle = transform ? {
-    transform: `translate3d(${transform.x}px, ${transform.y}px, 0)`,
-  } : undefined;
-
-
-
-if (transform) {
-  console.log(`🔍 [ドラッグ中のタスク情報] ID: ${task.task_id} | ${task.title}`, {
-    parent_id: task.parent_id,
-    isGroup: task.isGroup,
-    isChild: task.isChild,
-    childrenCount: task.children?.length ?? 0,
-    childrenIDs: task.children?.map(c => c.task_id) ?? [],
-  });
-}
 
   let elementId: string | undefined = undefined;
   if (task.task_id === 'demo-task-tutorial') {
@@ -54,24 +40,36 @@ if (transform) {
     }
   }
 
+  const isCardDrag = Boolean(props.isSortMode);
+
   return (
     <div 
       id={elementId}
       ref={setCombinedRef}
-      style={{ ...dndStyle, ...style }}
-      className={`relative w-64 p-2.5 rounded shadow-sm font-bold transition-all select-none flex items-start gap-2 ${cardColorClass} ${borderStyle} ${className}`}
+      style={style}
+      {...(isCardDrag ? listeners : {})}
+      {...(isCardDrag ? attributes : {})}
+      className={`relative w-62 flex-shrink-0 p-2.5 rounded shadow-sm font-bold select-none flex items-start gap-2 ${cardColorClass} ${borderStyle} ${className} ${
+        isDragging
+          ? 'opacity-0 pointer-events-none shadow-none'
+          : isCardDrag 
+            ? 'touch-none cursor-grab active:cursor-grabbing border-amber-400 ring-2 ring-amber-300 shadow-md' 
+            : ''
+      }`}
     >
       {/* 💡 左端エリア：ドラッグハンドルとステータスアイコンを綺麗に縦並びにする */}
       <div className="flex flex-col items-center gap-1 flex-shrink-0 w-5 select-none pt-0.5">
         
-        {/* 1. ドラッグハンドル（上段） */}
-        <div 
-          {...listeners} 
-          {...attributes} 
-          className="cursor-grab active:cursor-grabbing text-gray-400 hover:text-gray-600 text-base"
-        >
-          ⠿
-        </div>
+        {/* 1. ドラッグハンドル（上段: PC表示時かつ通常モード時のみ表示） */}
+        {!isCardDrag && (
+          <div 
+            {...listeners} 
+            {...attributes} 
+            className="hidden md:block cursor-grab active:cursor-grabbing text-gray-400 hover:text-gray-600 text-base"
+          >
+            ⠿
+          </div>
+        )}
         
         {/* 2. ステータスアイコン（下段） */}
         <div className="flex items-center justify-center h-4 text-xs">
@@ -85,8 +83,13 @@ if (transform) {
 
       {/* 2. カードの内容（右側エリア：クリックで onEdit） */}
       <div 
-        className="flex-1 min-w-0 cursor-pointer" 
+        className={`flex-1 min-w-0 ${isCardDrag ? '' : 'cursor-pointer'}`}
         onClick={(e) => {
+          if (isCardDrag) {
+            e.preventDefault();
+            e.stopPropagation();
+            return;
+          }
           if ((e.target as HTMLElement).closest('button')) return;
           onEdit?.();
         }}

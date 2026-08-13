@@ -87,6 +87,7 @@ interface TimelineStore {
   handleStartGrouping: (taskId: string | null) => void;
   handleUpdateStatus: (taskId: string, status: ExtendedTaskStatus, unexecutedReason?: string) => void;
   handleUpdateTaskPeriod: (taskId: string, period: string) => void;
+  handleUpdatePriority: (taskId: string, priority: 'high' | 'medium' | 'low') => void;
   handleGroupTasks: (draggedId: string, targetId: string) => Promise<void>;
   handleUngroupTask: (childId: string) => Promise<void>;
   
@@ -213,7 +214,16 @@ export function mergeNurseData(
 
 export const useTimelineStore = create<TimelineStore>((set, get) => ({
   allTasks: [],
-  memos: [],
+  memos: (() => {
+    try {
+      const saved = localStorage.getItem('timeline_memos');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) return parsed;
+      }
+    } catch (e) {}
+    return [];
+  })(),
   nurseMaster: [],
   nurses: [],
   leaderTodos: [],
@@ -252,6 +262,7 @@ export const useTimelineStore = create<TimelineStore>((set, get) => ({
       title: '【練習用】術前絶飲食確認',
       details: '手術前に水・食事の摂取がないか最終確認を行う練習用タスクです。',
       status: 'untouched',
+      scheduled_at: '09:00',
       initial_period: '09:00',
       display_period: '09:00',
       category: '確認',
@@ -383,32 +394,47 @@ export const useTimelineStore = create<TimelineStore>((set, get) => ({
     updateTask(taskId, updatePayload);
 
     set((state) => {
-      let targetPreviousProgressingId: string | null = null;
+      const isActiveTarget = status === 'progressing' || status === 'record_start';
+      const targetPreviousProgressingIds: string[] = [];
+      const targetPreviousRecordingIds: string[] = [];
 
-      if (status === 'progressing') {
-        state.allTasks.forEach(task => {
-          if (task.status === 'progressing' && task.task_id !== taskId) {
-            targetPreviousProgressingId = task.task_id;
-          }
-          task.children?.forEach(child => {
-            if (child.status === 'progressing' && child.task_id !== taskId) {
-              targetPreviousProgressingId = child.task_id;
+      if (isActiveTarget) {
+        const findAndCollect = (list: ExtendedTask[]) => {
+          for (const task of list) {
+            if (task.task_id !== taskId) {
+              if (task.status === 'progressing') {
+                targetPreviousProgressingIds.push(task.task_id);
+              } else if (task.status === 'record_start') {
+                targetPreviousRecordingIds.push(task.task_id);
+              }
             }
-          });
-        });
+            if (task.children && task.children.length > 0) {
+              findAndCollect(task.children);
+            }
+          }
+        };
+        findAndCollect(state.allTasks);
       }
 
-      if (targetPreviousProgressingId) {
-        updateTask(targetPreviousProgressingId, { status: 'pending' });
-      }
+      targetPreviousProgressingIds.forEach(id => {
+        updateTask(id, { status: 'pending' });
+      });
+
+      targetPreviousRecordingIds.forEach(id => {
+        updateTask(id, { status: 'record_pending' });
+      });
 
       const updatedTasks = state.allTasks.map((task) => {
         let newParentStatus = task.status;
 
         if (task.task_id === taskId) {
           newParentStatus = status;
-        } else if (status === 'progressing' && task.status === 'progressing') {
-          newParentStatus = 'pending';
+        } else if (isActiveTarget) {
+          if (task.status === 'progressing') {
+            newParentStatus = 'pending';
+          } else if (task.status === 'record_start') {
+            newParentStatus = 'record_pending';
+          }
         }
 
         let updatedChildren = task.children;
@@ -423,8 +449,12 @@ export const useTimelineStore = create<TimelineStore>((set, get) => ({
                 ...(currentNurseId ? { assigned_nurse_id: currentNurseId, staff_id: currentNurseId } : {})
               };
             }
-            if (status === 'progressing' && child.status === 'progressing') {
-              return { ...child, status: 'pending' };
+            if (isActiveTarget) {
+              if (child.status === 'progressing') {
+                return { ...child, status: 'pending' };
+              } else if (child.status === 'record_start') {
+                return { ...child, status: 'record_pending' };
+              }
             }
             return child;
           });
@@ -468,6 +498,26 @@ export const useTimelineStore = create<TimelineStore>((set, get) => ({
         )
       }));
     }
+  },
+
+  handleUpdatePriority: (taskId, priority) => {
+    updateTask(taskId, { priority });
+
+    set((state) => ({
+      allTasks: state.allTasks.map((t) => {
+        let updatedChildren = t.children;
+        if (t.children) {
+          updatedChildren = t.children.map((c) =>
+            c.task_id === taskId ? { ...c, priority } : c
+          );
+        }
+        return {
+          ...t,
+          ...(t.task_id === taskId ? { priority } : {}),
+          children: updatedChildren,
+        };
+      }),
+    }));
   },
 
   handleGroupTasks: async (draggedId, targetId) => {
@@ -817,6 +867,10 @@ export const useTimelineStore = create<TimelineStore>((set, get) => ({
       ? state.memos.map(m => m.id === memoToSave.id ? memoToSave : m)
       : [...state.memos, memoToSave];
     
+    try {
+      localStorage.setItem('timeline_memos', JSON.stringify(updatedMemos));
+    } catch (e) {}
+
     return { 
       memos: updatedMemos,
       activeMemoTime: null,
@@ -825,12 +879,19 @@ export const useTimelineStore = create<TimelineStore>((set, get) => ({
     };
   }),
 
-  handleDeleteMemo: (memoId) => set((state) => ({
-    memos: state.memos.filter(m => m.id !== memoId),
-    activeMemoTime: null,
-    editingMemo: null,
-    newMemoText: ""
-  })),
+  handleDeleteMemo: (memoId) => set((state) => {
+    const updatedMemos = state.memos.filter(m => m.id !== memoId);
+    try {
+      localStorage.setItem('timeline_memos', JSON.stringify(updatedMemos));
+    } catch (e) {}
+
+    return {
+      memos: updatedMemos,
+      activeMemoTime: null,
+      editingMemo: null,
+      newMemoText: ""
+    };
+  }),
 
   duplicateTask: async (taskId, targetPeriod, customNote) => {
     const { allTasks, currentUser } = get();

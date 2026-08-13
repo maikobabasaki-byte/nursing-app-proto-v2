@@ -25,6 +25,7 @@ export const updateTask = async (
     staff_id?: string;
     completed_at?: string;
     emr_order_id?: string;
+    priority?: 'high' | 'medium' | 'low';
   }
 ) => {
   // 🛡️ チュートリアル用のデモタスク（demo-task-tutorial）は Firestore / GAS への送信をスキップ
@@ -41,6 +42,10 @@ export const updateTask = async (
     const updatePayload: any = {
       updatedAt: serverTimestamp(),
     };
+
+    if (data.priority !== undefined) {
+      updatePayload.priority = data.priority;
+    }
 
     if (data.status !== undefined) {
       updatePayload.status = data.status;

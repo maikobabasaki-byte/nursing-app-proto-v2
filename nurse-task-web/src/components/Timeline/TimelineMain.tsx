@@ -1,6 +1,6 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import type { ExtendedTaskStatus, ExtendedTask, TimelineMainProps } from '../../types/types';
-import { TimelineControls} from './TimelineControls';
+import { TimelineControls } from './TimelineControls';
 import { TimelineRow } from './TimelineRow';
 import { LiveCurrentTimeLine } from './LiveCurrentTimeLine';
 import { TimelinePopup } from '../Timeline/TimelinePopup';
@@ -9,15 +9,17 @@ import { TimelineToast } from './TimelineToast';
 import { TimelinePopupButtons } from './TimelinePopupButtons';
 import { UnexecutedReasonModal } from './UnexecutedReasonModal';
 import { PendingTray } from './PendingTray';
-import { useTimelineStore } from '../../stores/useTimelineStore'; // ★追加
+import { useTimelineStore } from '../../stores/useTimelineStore';
 import { updateTask } from '../../hooks/useTaskUpdate';
 import { useUserName } from '../../hooks/useUserName';
+import { PoolTaskCard } from './PoolTaskCard';
 import { normalizeToHHMM, normalizeTeamName } from '../../utils/taskLogic';
-
+import { useIsMobile } from '../../hooks/useIsMobile';
 
 export default function TimelineMain({ 
   selectedPatients
 }: TimelineMainProps) {
+  const isMobile = useIsMobile();
   const userName = useUserName();
   const handleUpdateStatus = useTimelineStore((state) => state.handleUpdateStatus);
   const storeAllTasks = useTimelineStore((state) => state.allTasks);
@@ -25,11 +27,48 @@ export default function TimelineMain({
   const currentUser = useTimelineStore((state) => state.currentUser);
   const showLowPriority = useTimelineStore((state) => state.showLowPriority);
   const toggleShowLowPriority = useTimelineStore((state) => state.toggleShowLowPriority);
+  const setActiveMemoTime = useTimelineStore((state) => state.setActiveMemoTime);
+  const groupingMode = useTimelineStore((state) => state.groupingMode);
+  const handleStartGrouping = useTimelineStore((state) => state.handleStartGrouping);
+  const activeId = useTimelineStore((state) => state.activeId);
+
+  const [isPoolExpanded, setIsPoolExpanded] = useState(false);
+  const [isSortMode, setIsSortMode] = useState(false);
+  const [isControlsDrawerOpen, setIsControlsDrawerOpen] = useState(false);
 
   const isLeader = currentUser?.is_leader === true;
   const leaderTeam = currentUser?.team || 'Aチーム';
-  
-  // 🎯 【Single Source of Truth】ストアの全タスクから評価（リーダー参照モード時は自チーム全患者・全重要タスクを網羅集約）
+
+  // 💡 有効な選択患者リスト（props または ストアから算出）
+  const storeSelectedPatients = useTimelineStore((state) => state.selectedPatients);
+  const effectiveSelectedPatients = (selectedPatients && selectedPatients.length > 0)
+    ? selectedPatients
+    : storeSelectedPatients;
+
+  // 💡 判定関数：患者が指定されていない（0件）場合は全タスクを表示し、PC画面消失を自動防止
+  const isPatientSelected = (patientId: string) => {
+    if (!effectiveSelectedPatients || effectiveSelectedPatients.length === 0) {
+      return true;
+    }
+    return effectiveSelectedPatients.includes(patientId);
+  };
+
+  // モバイル用未配置タスクプール算出
+  const poolTasks = storeAllTasks.filter(task => {
+    if (!task || task.status === 'deleted' || task.display_period?.includes(':')) {
+      return false;
+    }
+    if (isLeader) {
+      const isHighPriority = task.priority === 'high';
+      if (!isHighPriority && !showLowPriority && task.priority === 'low') {
+        return false;
+      }
+      return true;
+    }
+    return isPatientSelected(task.patient_id);
+  });
+
+  // 🎯 【Single Source of Truth】ストアの全タスクから評価
   const extendedTasks = storeAllTasks.filter((task) => {
     if (!task || task.status === 'deleted' || !task.display_period?.includes(':')) {
       return false;
@@ -37,24 +76,19 @@ export default function TimelineMain({
 
     // 💡 リーダー参照モード (isLeader === true) の場合
     if (isLeader) {
-      // 1. 優先度「high」のタスクは漏れなく最優先で表示（完全網羅を保証）
       const isHighPriority = task.priority === 'high';
 
-      // 2. showLowPriority が false の場合のみ、優先度「low」のタスクを除外
       if (!isHighPriority && !showLowPriority && task.priority === 'low') {
         return false;
       }
 
-      // 3. チーム判定：チーム名の表記揺れ（"A" と "Aチーム" 等）を統一正規化して比較
       const normalizedLeaderTeam = normalizeTeamName(leaderTeam);
       const normalizedTaskTeam = normalizeTeamName(task.team);
 
-      // タスク側にチーム指定があり、それがリーダーのチームと明確に異なる場合は除外（ただし high 優先度は除く）
       if (normalizedTaskTeam !== '' && normalizedLeaderTeam !== '' && normalizedTaskTeam !== normalizedLeaderTeam && !isHighPriority) {
         return false;
       }
 
-      // 担当看護師が明示的に指定されている場合の所属チームチェック
       const tNurseName = (task.nurse_name || '').replace(/[\s　]+/g, '');
       const tNurseId = (task.nurse_id || task.staff_id || task.assigned_nurse_id || '').trim();
       if (tNurseName || tNurseId) {
@@ -67,7 +101,6 @@ export default function TimelineMain({
           );
         });
 
-        // 看護師が見つかり、そのチームがリーダーチームと異なり、かつ high 優先度でない場合のみ除外
         if (assignedNurse && assignedNurse.team) {
           const normalizedNurseTeam = normalizeTeamName(assignedNurse.team);
           if (normalizedNurseTeam !== '' && normalizedLeaderTeam !== '' && normalizedNurseTeam !== normalizedLeaderTeam && !isHighPriority) {
@@ -79,19 +112,14 @@ export default function TimelineMain({
       return true;
     }
 
-    // 💡 通常の受け持ち選択モードの場合：受け持ち患者リスト（selectedPatients）でフィルタリング
-    return selectedPatients.includes(task.patient_id);
+    // 💡 通常の受け持ち選択モード：受け持ち指定なし（0件）の場合は全患者タスクを表示
+    return isPatientSelected(task.patient_id);
   });
 
-  // 🎯 表示に使うメモは、100%ストア（Zustand）側が管理しているものだけに一本化！
-  // （これで親との間でピンポン感染のようなデータ再レンダリングループが発生しなくなります）
   const storeMemos = useTimelineStore((state) => state.memos);
-
-  // 🎯 ポップアップの開閉状態もZustandから一本釣り
   const activePopupTaskId = useTimelineStore((state) => state.activePopupTaskId);
   const setActivePopupTaskId = useTimelineStore((state) => state.setActivePopupTaskId);
 
-  // 🎯 ストアの全タスクから親・子問わず安全に現在詳細を開いているタスクを深掘り特定
   const activePopupTask = (() => {
     if (!activePopupTaskId) return null;
     const findTask = (list: ExtendedTask[]): ExtendedTask | null => {
@@ -144,11 +172,9 @@ export default function TimelineMain({
   const startMins = parseTimeToMinutes(timelineStartTime) >= 0 ? parseTimeToMinutes(timelineStartTime) : 480;
   const rawEndMins = parseTimeToMinutes(timelineEndTime) >= 0 ? parseTimeToMinutes(timelineEndTime) : 1050;
 
-  // 💡 日またぎ判定 (例: 夜勤 17:00 〜 翌09:00 のように startMins > rawEndMins の場合)
   const isCrossDay = startMins > rawEndMins;
   const effectiveEndMins = isCrossDay ? rawEndMins + 24 * 60 : rawEndMins;
 
-  // 💡 ユーザーが選択した表示時間幅（開始〜終了・日またぎ対応）に基づく動的目盛り生成
   const timeSlots = (() => {
     const slots: string[] = [];
     for (let m = startMins; m <= effectiveEndMins; m += timelineMode) {
@@ -159,14 +185,12 @@ export default function TimelineMain({
     return slots;
   })();
 
-  // 💡 時間幅の範囲外（指定時間帯より前／後）に予定されているタスクの抽出
   const outOfBoundsBeforeTasks = extendedTasks.filter((t) => {
     const tMins = parseTimeToMinutes(t.display_period);
     if (tMins < 0) return false;
     if (!isCrossDay) {
       return tMins < startMins;
     } else {
-      // 日またぎ時（例: 17:00〜翌09:00）は、09:00超 かつ 17:00未満 が範囲外
       return tMins > rawEndMins && tMins < startMins;
     }
   });
@@ -177,19 +201,19 @@ export default function TimelineMain({
     if (!isCrossDay) {
       return tMins > effectiveEndMins;
     } else {
-      return false; // 日またぎ時は before 側に集約
+      return false;
     }
   });
 
   const pendingTasks = (() => {
     const list: ExtendedTask[] = [];
     extendedTasks.forEach(task => {
-      if (task.status === 'pending') {
+      if (task.status === 'pending' || task.status === 'record_pending') {
         list.push(task);
       }
       if (task.isGroup && task.children && Array.isArray(task.children)) {
         task.children.forEach(child => {
-          if (child.status === 'pending') {
+          if (child.status === 'pending' || child.status === 'record_pending') {
             list.push({
               ...child,
               parent_id: task.task_id
@@ -221,8 +245,22 @@ export default function TimelineMain({
     }, 1500);
   };
 
+  useEffect(() => {
+    if (isSortMode) {
+      document.body.style.touchAction = 'none';
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.touchAction = '';
+      document.body.style.overflow = '';
+    }
+    return () => {
+      document.body.style.touchAction = '';
+      document.body.style.overflow = '';
+    };
+  }, [isSortMode]);
+
   return (
-    <div className="flex flex-col h-full p-4 select-none">
+    <div className="flex-1 min-h-0 w-full flex flex-col p-2 md:p-4 select-none overflow-hidden">
       {/* 👑 リーダー参照モードコントロールヘッダー */}
       {isLeader && (
         <div className="bg-gradient-to-r from-indigo-900 to-indigo-950 text-white p-3 rounded-xl mb-3 flex items-center justify-between shadow-md border border-indigo-700/60 animate-fade-in">
@@ -244,7 +282,6 @@ export default function TimelineMain({
           </div>
 
           <div className="flex items-center gap-3">
-            {/* 💡 低優先度タスク表示トグルボタン */}
             <button
               type="button"
               onClick={toggleShowLowPriority}
@@ -260,18 +297,129 @@ export default function TimelineMain({
         </div>
       )}
 
-      <TimelineControls 
-        timelineMode={timelineMode} 
-        setTimelineMode={setTimelineMode}
-      />
+      {/* 📱 モバイル時（isMobile === true）のみ上部ツールバー & タスクプールアコーディオンをマウント */}
+      {isMobile && (
+        <>
+          <div className="flex lg:hidden items-center justify-between px-3 py-1.5 bg-slate-100 border-b border-slate-200 gap-2 mb-1.5 rounded-xl shadow-2xs">
+            {/* 左側：ハンバーガーボタン（表示設定ドロワー開閉） */}
+            <button
+              type="button"
+              onClick={() => setIsControlsDrawerOpen(true)}
+              className="flex items-center gap-1.5 px-3 py-1 bg-white border border-slate-300 hover:bg-slate-50 text-slate-800 rounded-lg text-xs font-extrabold cursor-pointer shadow-2xs transition-all"
+            >
+              <span className="material-symbols-outlined text-base text-indigo-600">menu</span>
+              <span>表示設定</span>
+            </button>
+
+            {/* 右側：並び替えモードボタン */}
+            <button
+              type="button"
+              onClick={() => setIsSortMode(!isSortMode)}
+              title={isSortMode ? '並び替えモード ON (D&D有効)' : '並び替えモード OFF'}
+              className={`px-2.5 py-1 rounded-lg text-xs font-black flex items-center gap-1 transition-all border cursor-pointer ${
+                isSortMode 
+                  ? 'bg-amber-500 text-white border-amber-600 shadow-sm animate-pulse'
+                  : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-50'
+              }`}
+            >
+              {isSortMode ? (
+                <>
+                  <span className="text-sm font-bold leading-none">⠿</span>
+                  <span className="text-[11px]">並び替え中</span>
+                </>
+              ) : (
+                <>
+                  <span className="material-symbols-outlined text-sm">swap_vert</span>
+                  <span className="text-[11px]">並び替え</span>
+                </>
+              )}
+            </button>
+          </div>
+
+          {poolTasks.length > 0 && (
+            <div className="block md:hidden bg-sky-50 border border-sky-200 mb-2 rounded-xl overflow-hidden shadow-xs">
+              <button
+                type="button"
+                onClick={() => setIsPoolExpanded(!isPoolExpanded)}
+                className="w-full px-4 py-2.5 bg-sky-100/90 text-sky-900 font-bold text-xs flex items-center justify-between cursor-pointer border-none"
+              >
+                <div className="flex items-center gap-2">
+                  <span className="material-symbols-outlined text-base">inbox</span>
+                  <span>未配置タスクプール</span>
+                  <span className="bg-sky-600 text-white text-[11px] px-2 py-0.5 rounded-full font-extrabold">
+                    {poolTasks.length}件
+                  </span>
+                </div>
+                <span className="material-symbols-outlined text-base transition-transform duration-200">
+                  {isPoolExpanded ? 'expand_less' : 'expand_more'}
+                </span>
+              </button>
+              {isPoolExpanded && (
+                <div className="p-2 flex flex-col gap-2 max-h-48 overflow-y-auto bg-white/90">
+                  {poolTasks.map(task => (
+                    <PoolTaskCard 
+                      key={task.task_id} 
+                      task={task} 
+                      groupingMode={groupingMode} 
+                      onStartGrouping={handleStartGrouping} 
+                    />
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+        </>
+      )}
+
+      {/* 📱 タブレット・モバイル用 ドロワー (1024px未満) */}
+      {isControlsDrawerOpen && (
+        <div className="fixed inset-0 z-50 flex lg:hidden">
+          {/* バックドロップ（タップで閉じる） */}
+          <div 
+            className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs transition-opacity animate-fade-in" 
+            onClick={() => setIsControlsDrawerOpen(false)}
+          />
+          
+          {/* スライドイン ドロワー本体 */}
+          <div className="relative w-84 max-w-[85vw] bg-white h-full shadow-2xl z-10 flex flex-col p-4 overflow-y-auto border-r border-slate-200">
+            <div className="flex items-center justify-between pb-3 mb-3 border-b border-slate-200">
+              <div className="flex items-center gap-2 font-black text-sm text-slate-800">
+                <span className="material-symbols-outlined text-indigo-600">tune</span>
+                <span>タイムライン表示設定</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsControlsDrawerOpen(false)}
+                className="p-1 rounded-lg hover:bg-slate-100 text-slate-500 cursor-pointer"
+              >
+                <span className="material-symbols-outlined text-xl">close</span>
+              </button>
+            </div>
+
+            <div className="flex-1">
+              <TimelineControls 
+                timelineMode={timelineMode} 
+                setTimelineMode={setTimelineMode}
+              />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 💻 PC版（1024px以上）: インライン常時表示 */}
+      <div className="hidden lg:block">
+        <TimelineControls 
+          timelineMode={timelineMode} 
+          setTimelineMode={setTimelineMode}
+        />
+      </div>
 
       <div 
         ref={containerRef} 
-        className="relative flex-1 overflow-y-auto border border-gray-200 rounded-2xl bg-white shadow-xs"
+        className="relative flex-1 min-h-0 overflow-y-auto border border-gray-200 rounded-2xl bg-white shadow-xs"
       >
         <LiveCurrentTimeLine timelineMode={timelineMode} containerRef={containerRef} rowRefs={rowRefs} />
 
-        {/* ⚠️ 指定開始時間より前に予定されている枠外タスク通知インジケーター */}
         {outOfBoundsBeforeTasks.length > 0 && (
           <div className="sticky top-0 z-20 bg-amber-500/90 backdrop-blur-md text-white px-4 py-2 text-xs font-bold flex items-center justify-between shadow-sm border-b border-amber-600">
             <div className="flex items-center gap-2">
@@ -324,11 +472,13 @@ export default function TimelineMain({
               setRowRef={(time, el) => rowRefs.current[time] = el}
               timeMemos={storeMemos}
               isPastTime={isPastTime}
+              isSortMode={isSortMode}
+              activeId={activeId}
+              timelineMode={timelineMode}
             />
           );
         })}
 
-        {/* ⚠️ 指定終了時間より後に予定されている枠外タスク通知インジケーター */}
         {outOfBoundsAfterTasks.length > 0 && (
           <div className="sticky bottom-0 z-20 bg-amber-500/90 backdrop-blur-md text-white px-4 py-2 text-xs font-bold flex items-center justify-between shadow-sm border-t border-amber-600">
             <div className="flex items-center gap-2">
@@ -389,7 +539,6 @@ export default function TimelineMain({
                 });
                 
                 handleUpdateStatus(t.task_id, s);
-                // Firestoreにステータス変更を保存（未実施から別ステータスへ変わる場合は理由もクリア）
                 const firestoreUpdate: { status: typeof s; unexecuted_reason?: string; nurse_name?: string } = { 
                   status: s,
                   nurse_name: userName 
@@ -416,6 +565,21 @@ export default function TimelineMain({
           onClose={() => setUnexecutedModalTask(null)}
         />
       )}
+
+      {/* 📱 モバイル時（isMobile === true）のみメモ追加FABをマウント */}
+      {isMobile && (
+        <button
+          type="button"
+          onClick={() => setActiveMemoTime(new Date().toTimeString().slice(0, 5))}
+          className="fixed bottom-16 right-4 z-40 md:hidden bg-amber-400 hover:bg-amber-500 text-amber-950 p-3.5 rounded-full shadow-2xl flex items-center justify-center font-black active:scale-95 transition-transform border-2 border-amber-300 cursor-pointer"
+          title="メモを追加"
+        >
+          <span className="material-symbols-outlined text-2xl">add_notes</span>
+        </button>
+      )}
+
+      {/* 📝 メモ作成・編集ポップアップマネージャー */}
+      <MemoManager />
 
       <TimelineToast toast={toast} />
     </div>

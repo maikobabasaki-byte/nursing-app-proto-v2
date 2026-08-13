@@ -3,35 +3,32 @@ import type { GroupParentCardProps } from '../../types/types';
 import { GroupingButton } from './GroupingButton';
 
 
-export const GroupParentCard = ({ 
-  task, 
-  isExpanded, 
-  onClick,
-}: GroupParentCardProps) => {
+export const GroupParentCard = (props: GroupParentCardProps) => {
+  const { task, isExpanded, onClick, isSortMode, isOverlay } = props;
   const childCount = task.children?.length || 0;
 
   // 全ての子タスクが完了、またはこの親グループ自体が完了状態か判定
   const isCompleted = task.status === 'record_complete';
+  const isCardDrag = Boolean(isSortMode);
 
-  // ドラッグ＆ドロップ設定
+  // ドラッグ＆ドロップ設定（isOverlayがtrueの時はフック登録を完全無効化）
   const { 
     setNodeRef: setDragRef, 
     listeners, 
     attributes, 
-    transform, 
     isDragging 
   } = useDraggable({
     id: task.task_id,
+    disabled: Boolean(isOverlay),
   });
 
   const { setNodeRef: setDropRef, isOver } = useDroppable({
     id: task.task_id, 
+    disabled: Boolean(isOverlay),
   });
 
-  // ドラッグ時の位置移動スタイル
-  const style = transform ? {
-    transform: `translate3d(${transform.x}px, ${transform.y}px, 0)`,
-  } : undefined;
+  // 移動表示は DragOverlay が全て担当するため、タイムライン行内の実体は一切 transform 移動させない（位置完全固定）
+  const style = undefined;
 
   const isPatientMode = task.groupType === 'patient';
 
@@ -55,22 +52,34 @@ export const GroupParentCard = ({
     <div 
       ref={setCombinedRef} 
       style={style}
-      onClick={onClick}
+      onClick={(e) => {
+        if (isCardDrag) {
+          e.preventDefault();
+          e.stopPropagation();
+          return;
+        }
+        onClick();
+      }}
+      {...(isCardDrag ? listeners : {})}
+      {...(isCardDrag ? attributes : {})}
       className={`
-        w-64 p-3 rounded-xl border-2 transition-all cursor-pointer shadow-sm flex gap-2 items-start
+        w-62 flex-shrink-0 p-3 rounded-xl border-2 shadow-sm flex gap-2 items-start select-none ${isCardDrag ? '' : 'cursor-pointer'}
         ${getBackgroundColorClass()}
-        ${isOver ? 'ring-4 ring-yellow-400 scale-105' : ''}
-        ${isDragging ? 'opacity-50' : ''}
+        ${isOver ? 'ring-4 ring-yellow-400' : ''}
+        ${isDragging ? 'opacity-0 pointer-events-none shadow-none' : ''}
+        ${isCardDrag && !isDragging ? 'touch-none cursor-grab active:cursor-grabbing border-amber-400 ring-2 ring-amber-300 shadow-md' : ''}
       `}
     >
-      {/* ⠿ ドラッグハンドル */}
-      <div 
-        {...listeners} 
-        {...attributes} 
-        className="cursor-grab active:cursor-grabbing text-gray-400 hover:text-gray-200 flex-shrink-0 pt-0.5 select-none"
-      >
-        ⠿
-      </div>
+      {/* ⠿ ドラッグハンドル（PCかつ通常モード時のみ表示） */}
+      {!isCardDrag && (
+        <div 
+          {...listeners} 
+          {...attributes} 
+          className="hidden md:block cursor-grab active:cursor-grabbing text-gray-400 hover:text-gray-200 flex-shrink-0 pt-0.5 select-none"
+        >
+          ⠿
+        </div>
+      )}
 
       {/* カードのメインコンテンツ */}
       <div className="flex-1 min-w-0">

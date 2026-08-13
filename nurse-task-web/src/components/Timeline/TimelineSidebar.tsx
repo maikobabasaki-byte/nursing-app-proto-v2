@@ -34,6 +34,9 @@ export default function TimelineSidebar({
       }
       return true;
     }
+    if (!selectedPatients || selectedPatients.length === 0) {
+      return true;
+    }
     return selectedPatients.includes(task.patient_id);
   });
 

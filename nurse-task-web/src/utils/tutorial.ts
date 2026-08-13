@@ -230,7 +230,7 @@ export function startHandsOnTutorial(
       popover: {
         title: '🖐️ 実務完全再現ハンズオンガイドへようこそ！',
         description: '「タスク選択」➔「モーダル説明」➔「ボタン操作」という看護現場の完全フローを体験しましょう。「次へ」を押して開始します。',
-        side: 'over',
+        side: 'bottom',
         align: 'center',
         showButtons: ['next', 'close'],
       },
@@ -412,7 +412,7 @@ export function startHandsOnTutorial(
       popover: {
         title: '🎉 全マスターおめでとうございます！',
         description: '素晴らしいです！タスク選択からモーダル操作に至る全ステータスフローを完璧に習得しました！',
-        side: 'over',
+        side: 'top',
         align: 'center',
       },
     },

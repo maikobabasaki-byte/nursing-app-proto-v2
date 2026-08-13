@@ -20,6 +20,7 @@ const TIME_OPTIONS = [
 export const TimelinePopup: React.FC<TimelinePopupProps> = ({ task, onClose, renderPopupButtons }) => {
   const duplicateTask = useTimelineStore((state) => state.duplicateTask);
   const deleteTask = useTimelineStore((state) => state.deleteTask);
+  const handleUpdatePriority = useTimelineStore((state) => state.handleUpdatePriority);
   const [showDuplicateModal, setShowDuplicateModal] = useState(false);
   const [duplicatePeriod, setDuplicatePeriod] = useState(
     TIME_OPTIONS.includes(task.display_period || '') ? task.display_period : '14:00'
@@ -134,7 +135,7 @@ export const TimelinePopup: React.FC<TimelinePopupProps> = ({ task, onClose, ren
             )}
           </div>
           <div className="text-base font-black mb-1">{task.title}</div>
-          <div className="text-xs opacity-80 mb-4 min-h-[40px] whitespace-pre-wrap text-left">{task.details || '詳細はありません'}</div>
+          <div className="text-xs opacity-80 mb-3 min-h-[40px] whitespace-pre-wrap text-left">{task.details || '詳細はありません'}</div>
           
           {task.status === 'unexecuted' && task.unexecuted_reason && (
             <div className="bg-red-100 border border-red-300 text-red-800 text-xs rounded-lg p-2.5 mb-4 text-left font-bold">
@@ -148,6 +149,46 @@ export const TimelinePopup: React.FC<TimelinePopupProps> = ({ task, onClose, ren
             {renderPopupButtons(task)} 
           </div>
 
+          {/* 🚨 優先度変更バー */}
+          <div className="!flex !items-center !justify-between !bg-white/70 !p-2 !rounded-lg !border !border-gray-300/70 !mb-3 !text-xs !shadow-xs">
+            <span className="!font-extrabold !text-gray-700">優先度設定:</span>
+            <div className="!flex !items-center !gap-3">
+              <button
+                type="button"
+                onClick={() => handleUpdatePriority(task.task_id, 'high')}
+                className={`!px-2.5 !py-1 !rounded-full !font-bold !cursor-pointer !transition-all !border ${
+                  task.priority === 'high'
+                    ? '!bg-red-600 !text-white !border-red-700 !shadow-sm !scale-105'
+                    : '!bg-gray-100 !text-gray-600 !border-gray-300 hover:!bg-red-50'
+                }`}
+              >
+                高
+              </button>
+              <button
+                type="button"
+                onClick={() => handleUpdatePriority(task.task_id, 'medium')}
+                className={`!px-2.5 !py-1 !rounded-full !font-bold !cursor-pointer !transition-all !border ${
+                  task.priority === 'medium'
+                    ? '!bg-emerald-600 !text-white !border-emerald-700 !shadow-sm !scale-105'
+                    : '!bg-gray-100 !text-gray-600 !border-gray-300 hover:!bg-emerald-50'
+                }`}
+              >
+                中
+              </button>
+              <button
+                type="button"
+                onClick={() => handleUpdatePriority(task.task_id, 'low')}
+                className={`!px-2.5 !py-1 !rounded-full !font-bold !cursor-pointer !transition-all !border ${
+                  task.priority === 'low'
+                    ? '!bg-blue-600 !text-white !border-blue-700 !shadow-sm !scale-105'
+                    : '!bg-gray-100 !text-gray-600 !border-gray-300 hover:!bg-blue-50'
+                }`}
+              >
+                低
+              </button>
+            </div>
+          </div>
+          
           {/* 2. 看護判断・管理用アクションセクション（実施ボタン群と明確に視覚分離） */}
           <div className="pt-3 border-t border-gray-300/80 flex flex-col gap-2">
             <div className="text-[11px] font-extrabold text-gray-500 text-left px-0.5 flex items-center gap-1">

@@ -66,8 +66,7 @@ export const MemoPopup = () => {
             type="time" 
             value={memoTime}
             onChange={(e) => setMemoTime(e.target.value)}
-            disabled={!editingMemo} // 新規時は行クリック時間で固定、編集時は必要なら変更可能に
-            className="w-full !p-2 !border !rounded-lg !bg-gray-50 disabled:!bg-gray-100 disabled:!text-gray-500 focus:!ring-2 focus:!ring-blue-400 !outline-none text-gray-800"
+            className="w-full !p-2 !border !rounded-lg !bg-gray-50 focus:!ring-2 focus:!ring-blue-400 !outline-none text-gray-800 font-bold cursor-pointer"
           />
         </div>
 

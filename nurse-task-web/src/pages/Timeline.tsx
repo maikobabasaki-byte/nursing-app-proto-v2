@@ -9,7 +9,8 @@ import { useTimelineDnd } from '../hooks/useTimelineDnd';
 import { useTimelineStore } from '../stores/useTimelineStore';
 
 import { useEffect } from 'react';
-import { startHandsOnTutorial, advanceHandsOnTutorialStep, getHandsOnActiveIndex } from '../utils/tutorial';
+import { advanceHandsOnTutorialStep, getHandsOnActiveIndex } from '../utils/tutorial';
+import { useIsMobile } from '../hooks/useIsMobile';
 
 interface TimelineProps {
   selectedPatients: string[];
@@ -30,8 +31,6 @@ export default function Timeline({ selectedPatients }: TimelineProps) {
   const storeAllTasks = useTimelineStore((state) => state.allTasks);
   const storeMemos = useTimelineStore((state) => state.memos);
   const handleStartGrouping = useTimelineStore((state) => state.handleStartGrouping);
-  const addDemoTask = useTimelineStore((state) => state.addDemoTask);
-  const removeDemoTask = useTimelineStore((state) => state.removeDemoTask);
 
   const activePopupTaskId = useTimelineStore((state) => state.activePopupTaskId);
   const demoTaskStatus = storeAllTasks.find(t => t.task_id === 'demo-task-tutorial')?.status;
@@ -83,29 +82,34 @@ export default function Timeline({ selectedPatients }: TimelineProps) {
     return <div className="flex w-full h-full justify-center items-center">データを読み込み中...</div>;
   }
 
+  const isMobile = useIsMobile();
+
   return (
     <DndContext 
       sensors={sensors}
       collisionDetection={customCollisionDetection}
       onDragStart={handleDragStart} 
       onDragEnd={handleDragEnd}
+      autoScroll={{ threshold: { x: 0.1, y: 0.15 }, acceleration: 10 }}
     >
-      <main 
-        className="flex flex-row w-full h-full bg-gray-50 overflow-hidden select-none"
-        style={{ display: 'flex', flexDirection: 'row' }}
+      <div 
+        className="flex flex-col md:flex-row flex-1 min-h-0 w-full h-full bg-gray-50 overflow-hidden select-none"
       >
-        <div className="w-72 flex-shrink-0 bg-white border-r border-gray-200 h-full overflow-hidden">
-          <TimelineSidebar 
-            selectedPatients={selectedPatients}
-          />
-        </div>
+        {/* 💻 PC版（!isMobile）でのみ左サイドバーをDOMツリーにマウント（重複Draggableのクラッシュ完全防止） */}
+        {!isMobile && (
+          <div className="w-72 flex-shrink-0 bg-white border-r border-gray-200 h-full overflow-hidden">
+            <TimelineSidebar 
+              selectedPatients={selectedPatients}
+            />
+          </div>
+        )}
 
-        <div className="flex-1 min-w-0 overflow-auto bg-white">
+        <div className="flex-1 min-w-0 min-h-0 overflow-hidden bg-white flex flex-col h-full">
           <TimelineMain 
             selectedPatients={selectedPatients}
           />
         </div>
-      </main>
+      </div>
 
       <DragOverlay dropAnimation={null}>
         {activeId ? (() => {
@@ -114,8 +118,8 @@ export default function Timeline({ selectedPatients }: TimelineProps) {
             const activeMemo = storeMemos.find(m => String(m.id) === pureActiveId); 
             if (!activeMemo) return null;
             return (
-              <div className="w-44 shadow-2xl scale-105 opacity-90 cursor-grabbing">
-                <MemoCell memo={activeMemo} />
+              <div className="w-48 shadow-2xl scale-105 opacity-95 cursor-grabbing">
+                <MemoCell memo={activeMemo} isOverlay={true} />
               </div>
             );
           }
@@ -133,6 +137,7 @@ export default function Timeline({ selectedPatients }: TimelineProps) {
               borderStyle={borderStyle}      
               className="shadow-2xl cursor-grabbing scale-105" 
               onClick={() => handleCardClick(activeTask)}
+              isOverlay={true}
             />
           );
         })() : null}

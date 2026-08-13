@@ -86,6 +86,7 @@ export interface TaskDocument {
   requested_by_name?: string;
   unexecuted_reason?: string;
   updated_by?: string;
+  category?: string;
 }
 
 export interface Patient {
@@ -147,6 +148,8 @@ export interface TaskCardPropsInner {
   groupingMode?: string | null;
   onClick?: () => void;
   onStartGrouping?: (taskId: string) => void;
+  isSortMode?: boolean;
+  isOverlay?: boolean;
 }
 
 export interface TimelineRowProps {
@@ -157,17 +160,20 @@ export interface TimelineRowProps {
     placeholders: ExtendedTask[];
     expandedGroups: Record<string, boolean>;
     toggleGroup: (groupId: string) => void;
-    onEdit: (task: ExtendedTask) => void;
-    onChildClick: (taskId: string) => void;
-    onUngroup: (childId: string) => Promise<void> | void;
+    onEdit?: (task: ExtendedTask) => void;
+    onChildClick?: (taskId: string) => void;
+    onUngroup?: (childId: string) => Promise<void> | void;
     setRowRef: (time: string, el: HTMLDivElement | null) => void;
     // メモ関連のprops
     timeMemos: Memo[];
-    onMemoClick: (time: string) => void;
-    onEditMemo: (memo: Memo) => void;
+    onMemoClick?: (time: string) => void;
+    onEditMemo?: (memo: Memo) => void;
     isPastTime: (time: string) => boolean;
-    groupingMode: string | null;
-    onStartGrouping: (taskId: string) => void;
+    groupingMode?: string | null;
+    onStartGrouping?: (taskId: string) => void;
+    isSortMode?: boolean;
+    activeId?: string | null;
+    timelineMode?: number;
   }
 
 export interface GroupParentCardProps {
@@ -176,6 +182,8 @@ export interface GroupParentCardProps {
   onClick: () => void;
   groupingMode?: string | null;
   onStartGrouping?: (taskId: string) => void;
+  isSortMode?: boolean;
+  isOverlay?: boolean;
 }
 
 export interface GroupingProps {

@@ -1,6 +1,6 @@
 import { useState, useRef, useMemo, useCallback } from 'react';
 import type { DragStartEvent, DragEndEvent } from '@dnd-kit/core';
-import { useSensors, useSensor, PointerSensor } from '@dnd-kit/core';
+import { useSensors, useSensor, MouseSensor, TouchSensor } from '@dnd-kit/core';
 import { useDndCollision } from './useDndCollision';
 import type { ExtendedTask } from '../types/types';
 import { useTimelineStore } from '../stores/useTimelineStore';
@@ -11,7 +11,14 @@ interface UseTimelineDndProps {
 
 export function useTimelineDnd({ selectedPatients }: UseTimelineDndProps) {
   const { customCollisionDetection } = useDndCollision();
-  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
+  const sensors = useSensors(
+    useSensor(MouseSensor, {
+      activationConstraint: { distance: 5 },
+    }),
+    useSensor(TouchSensor, {
+      activationConstraint: { delay: 150, tolerance: 5 },
+    })
+  );
 
   // Store からステートとアクションを取得
   const { 

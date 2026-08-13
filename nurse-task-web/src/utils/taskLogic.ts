@@ -206,12 +206,11 @@ export const extractUserProgressingTasks = (
 
   const traverse = (list: ExtendedTask[]) => {
     for (const task of list) {
-      // 左サイドバー表示用: 実施中 (progressing)、記録中 (record_start)、記録一時中断 (record_pending)
-      // ※ pending (実施一時中断・保留) は画面下部の中断トレイ (PendingTray) に表示するため除外
+      // 左サイドバー表示用: 実施中 (progressing)、記録中 (record_start)
+      // ※ pending (実施一時中断・保留) および record_pending (記録一時中断) は画面下部の中断トレイ (PendingTray) に表示するため除外
       const isSidebarStatus = 
         task.status === 'progressing' || 
-        task.status === 'record_start' || 
-        task.status === 'record_pending';
+        task.status === 'record_start';
 
       const isDemoSidebarTask = 
         task.task_id === 'demo-task-tutorial' && 
@@ -232,4 +231,100 @@ export const extractUserProgressingTasks = (
 
   traverse(tasks);
   return result;
+};
+
+/**
+ * 親グループを含むタスク配列を再帰的に展開（フラット化）し、全ての実体タスク（子タスク含む）の1次元配列を返す
+ */
+export const flattenTasks = (tasks: ExtendedTask[]): ExtendedTask[] => {
+  if (!tasks || tasks.length === 0) return [];
+  const result: ExtendedTask[] = [];
+
+  const traverse = (list: ExtendedTask[]) => {
+    for (const task of list) {
+      if (!task) continue;
+      if (task.isGroup && task.children && task.children.length > 0) {
+        traverse(task.children);
+      } else {
+        result.push(task);
+      }
+    }
+  };
+
+  traverse(tasks);
+  return result;
+};
+
+/**
+ * 現場ルールに基づいた初期優先度（high, medium, low）を自動判定する関数
+ */
+export const assignDefaultPriority = (task: {
+  title?: string;
+  details?: string;
+  priority?: string;
+  requiresAssist?: boolean;
+  requires_assist?: boolean;
+}): 'high' | 'medium' | 'low' => {
+  if (task.priority === 'high' || task.priority === 'medium' || task.priority === 'low') {
+    return task.priority;
+  }
+
+  const text = `${task.title || ''} ${task.details || ''}`.toLowerCase();
+
+  // 🔴 High: 「血糖」「点滴」「配薬」「インスリン」「投薬」等、生命・薬効に直接関わる業務
+  const highKeywords = ['血糖', '点滴', '配薬', 'インスリン', '投薬', '注射', '輸液', '抗生剤'];
+  if (highKeywords.some(kw => text.includes(kw))) {
+    return 'high';
+  }
+
+  // 🟢 Medium: 複数人での対応が必要な業務（介助、移乗、体位変換、ダブルチェック等）または複数人フラグ
+  const mediumKeywords = ['介助', '移乗', '体位変換', '2名', '２名', '2人', '２人', 'ダブルチェック'];
+  if (
+    task.requiresAssist ||
+    task.requires_assist ||
+    mediumKeywords.some(kw => text.includes(kw))
+  ) {
+    return 'medium';
+  }
+
+  // 🔵 Low: バイタル、清拭、体温、血圧などの単独実施可能なルーチン業務（その他デフォルト）
+  return 'low';
+};
+
+/**
+ * タスクの表示時間（display_period 等）を時系列比較用の仮想「分（0〜1440+）」に変換する
+ */
+export const getTaskTimeMinutes = (timeStr?: string): number => {
+  if (!timeStr) return 1450;
+  const trimmed = String(timeStr).trim();
+
+  if (trimmed.includes('午前')) return 450;  // 07:30 相当
+  if (trimmed.includes('早出')) return 420;  // 07:00 相当
+  if (trimmed.includes('日勤')) return 480;  // 08:00 相当
+  if (trimmed.includes('午後')) return 750;  // 12:30 相当
+  if (trimmed.includes('遅出')) return 660;  // 11:00 相当
+  if (trimmed.includes('夕方')) return 960;  // 16:00 相当
+  if (trimmed.includes('夜勤')) return 1020; // 17:00 相当
+  if (trimmed.includes('就寝前')) return 1260; // 21:00 相当
+  if (trimmed.includes('随時')) return 1440; // 24:00 相当（最下部）
+
+  const match = trimmed.match(/(\d{1,2}):(\d{2})/);
+  if (match) {
+    const h = parseInt(match[1], 10);
+    const m = parseInt(match[2], 10);
+    return h * 60 + m;
+  }
+
+  return 1445;
+};
+
+/**
+ * タスク配列を時系列（朝〜夜・随時）の昇順に並び替える
+ */
+export const sortTasksChronologically = <T extends { display_period?: string; time?: string }>(tasks: T[]): T[] => {
+  return [...tasks].sort((a, b) => {
+    const timeA = getTaskTimeMinutes(a.display_period || (a as any).time);
+    const timeB = getTaskTimeMinutes(b.display_period || (b as any).time);
+    return timeA - timeB;
+  });
 };

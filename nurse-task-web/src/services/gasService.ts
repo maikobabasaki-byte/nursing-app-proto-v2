@@ -1,6 +1,7 @@
 import type { ExtendedTask } from '../types/types';
 
 const GAS_API_URL = import.meta.env.VITE_GAS_API_URL;
+console.log("【確認用】現在のGAS_API_URL:", GAS_API_URL);
 
 export interface GASTaskPayload {
   emr_order_id: string;
@@ -98,13 +99,14 @@ export const fetchGASData = async (): Promise<GASFetchResult> => {
     try {
       const response = await fetch(GAS_API_URL, {
         method: 'GET',
-        headers: {
-          'Accept': 'application/json',
-        },
+        redirect: 'follow',
       });
 
       if (!response.ok) {
-        throw new Error(`GAS APIからの取得に失敗しました: ${response.statusText}`);
+        if (response.status === 404) {
+          console.error("⚠️ [GAS API 404 Error] GAS WebアプリのデプロイURLが無効か、再デプロイが必要です。GASエディタの「デプロイの管理」から最新URLを確認して .env の VITE_GAS_API_URL を更新してください。");
+        }
+        throw new Error(`GAS APIからの取得に失敗しました: Status ${response.status} ${response.statusText}`);
       }
 
       const data = await response.json();
@@ -138,13 +140,8 @@ export const fetchGASData = async (): Promise<GASFetchResult> => {
     } catch (error) {
       console.error("GASデータ取得エラー:", error);
       // エラー時も直前のキャッシュがあればそれをフォールバックとして返す
-      if (cacheData) {
-        console.warn("⚠️ 通信エラーが発生したため、古いキャッシュデータを返します");
-        return cacheData;
-      }
       return { tasks: [], patients: [], rooms: [], facilities: [], nurses: [] };
     } finally {
-      // 処理が終わったら進行中フラグをクリア
       ongoingFetchPromise = null;
     }
   })();

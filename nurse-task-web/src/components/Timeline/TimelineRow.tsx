@@ -20,11 +20,26 @@ interface TimelineRowProps {
   setRowRef: (time: string, el: HTMLDivElement | null) => void;
   timeMemos: Memo[];
   isPastTime: (targetTime: string) => boolean;
+  isSortMode?: boolean;
+  activeId?: string | null;
+  timelineMode?: number;
 }
+
+const isMemoInSlot = (memoTimeStr?: string, slotTimeStr?: string, modeMinutes: number = 30) => {
+  if (!memoTimeStr || !slotTimeStr) return false;
+  const memoMatch = String(memoTimeStr).match(/(\d{1,2}):(\d{2})/);
+  const slotMatch = String(slotTimeStr).match(/(\d{1,2}):(\d{2})/);
+  if (!memoMatch || !slotMatch) return memoTimeStr === slotTimeStr;
+
+  const memoMins = parseInt(memoMatch[1], 10) * 60 + parseInt(memoMatch[2], 10);
+  const slotMins = parseInt(slotMatch[1], 10) * 60 + parseInt(slotMatch[2], 10);
+
+  return memoMins >= slotMins && memoMins < slotMins + modeMinutes;
+};
 
 export function TimelineRow({ 
   id, time, isCurrentRow, rowTasks, placeholders, expandedGroups, toggleGroup,
-  setRowRef, timeMemos, isPastTime,
+  setRowRef, timeMemos, isPastTime, isSortMode, activeId, timelineMode = 30,
 }: TimelineRowProps) {
   
   // 🎯 ストアからアクションや状態を一本釣り
@@ -33,7 +48,9 @@ export function TimelineRow({
 
   const { setNodeRef: setRowNodeRef, isOver } = useDroppable({ id: id });
   const { setNodeRef: setMemoDropRef, isOver: isMemoOver } = useDroppable({ id: `memo-drop-${time}` });
-  
+
+  const isDraggingActive = Boolean(activeId);
+
   return (
     <div
       ref={(el) => {
@@ -41,18 +58,22 @@ export function TimelineRow({
         setRowRef(time, el); 
       }}
       className={`
-        flex !border-b border-gray-200 transition-all duration-300 ease-in-out
-        ${isCurrentRow ? 'bg-amber-50/50' : ''}
-        ${isOver ? 'h-[120px] bg-blue-50 border-blue-300' : 'min-h-[60px]'}
+        grid grid-cols-12 min-h-[60px] !border-b border-gray-200
+        ${isOver 
+          ? 'bg-amber-100/90 border-2 border-amber-500 shadow-md ring-2 ring-amber-300/80' 
+          : isDraggingActive 
+            ? 'bg-sky-50/40 border-dashed border-sky-300/80' 
+            : (isCurrentRow ? 'bg-amber-50/50' : '')
+        }
       `}
     >
-      {/* 左端の時間軸ラベル */}
-      <div className="w-16 text-center py-4 font-bold text-gray-500 bg-gray-50 border-r border-gray-100 select-none">
+      {/* 左端の時間軸ラベル (1/12) */}
+      <div className="col-span-1 border-r border-gray-100 flex items-center justify-center font-bold text-gray-500 bg-gray-50 text-xs sm:text-sm select-none py-2">
         {time}
       </div>
 
-      {/* 中央：タスクカード配置エリア */}
-      <div className="p-2 min-h-[60px] relative flex flex-wrap flex-1 gap-2">
+      {/* 中央：タスクカード配置エリア (8/12 - 横幅完全固定) */}
+      <div className="col-span-8 p-2 min-h-[60px] flex flex-wrap gap-1 items-start content-start min-w-0">
         {placeholders.map(task => {
           const isProgressing = task.status === 'progressing';
           const isRecordStart = task.status === 'record_start';
@@ -81,7 +102,7 @@ export function TimelineRow({
               key={`placeholder-${task.task_id}`} 
               id={task.task_id === 'demo-task-tutorial' ? 'dummy-task-inprogress-pool' : undefined}
               onClick={() => setActivePopupTaskId(task.task_id)}
-              className={`w-64 border-2 border-dashed ${borderBgStyle} p-2.5 rounded shadow-sm flex flex-col justify-between font-bold text-xs min-h-[80px] cursor-pointer hover:shadow-md transition-all select-none`}
+              className={`w-64 border-2 border-dashed ${borderBgStyle} p-2.5 rounded shadow-sm flex flex-col justify-between font-bold text-xs min-h-[80px] cursor-pointer hover:shadow-md select-none`}
             >
               <div className="flex justify-between items-center w-full text-[10px]">
                 <span className="font-extrabold flex items-center gap-1">
@@ -96,17 +117,19 @@ export function TimelineRow({
           );
         })}
         
+        {/* 中央：タスク専用エリア */}
         {rowTasks.map(task => {
           const { cardColorClass, borderStyle } = getTaskStyles(task, isPastTime);
 
           return (
-            <div key={task.task_id} className="relative">
+            <div key={task.task_id} className="relative flex-shrink-0">
               {task.isGroup ? (
                 // 💡 引数がスッキリ！
                 <GroupParentCard 
                   task={task}
                   isExpanded={!!expandedGroups[task.task_id]}
                   onClick={() => toggleGroup(task.task_id)}
+                  isSortMode={isSortMode}
                 />
               ) : (
                 // 💡 中継Propsをすべて排除。詳細表示は直接ストアを叩く
@@ -117,6 +140,7 @@ export function TimelineRow({
                   originalTime={task.initial_period}
                   onEdit={() => setActivePopupTaskId(task.task_id)} // ⚡ストア直結
                   onClick={() => handleCardClick(task)}
+                  isSortMode={isSortMode}
                 />
               )}
 
@@ -135,28 +159,34 @@ export function TimelineRow({
         })}
       </div>
 
-      {/* 右端：メモ配置エリア */}
+      {/* 右端：メモ配置エリア (3/12 - 横幅完全固定) */}
       <div 
         ref={setMemoDropRef}
-        className={`w-48 border-l !border-gray-200 p-1 group relative cursor-pointer min-h-[60px] transition-colors ${
+        className={`col-span-3 border-l !border-gray-200 p-1 group relative min-h-[60px] flex flex-col gap-1 ${
           isMemoOver ? 'bg-yellow-100/50 border-yellow-400' : '!bg-yellow-50/10'
         }`}
-        onClick={() => setActiveMemoTime(time)} // ⚡クリックで新規メモ作成ステートをストアに直撃
+        onClick={() => {
+          // ⚡ タブレット・モバイル表示（768px未満）の時は、行クリックによるメモ追加ポップアップ起動を無効化
+          if (typeof window !== 'undefined' && window.innerWidth < 768) {
+            return;
+          }
+          setActiveMemoTime(time);
+        }}
       >
-        {/* 💡 あらかじめこの時間軸に一致するメモを抽出（変数化でエコに） */}
+        {/* 💡 あらかじめこの時間軸に一致するメモを抽出 */}
         {(() => {
-          const currentMemos = timeMemos.filter(m => m.time === time);
+          const currentMemos = timeMemos.filter(m => isMemoInSlot(m.time, time, timelineMode));
           
           if (currentMemos.length === 0) {
             return (
-              <span className="!bg-yellow-100 text-xs text-yellow-700 font-bold opacity-0 group-hover:opacity-100 absolute inset-0 flex items-center justify-center pointer-events-none">
+              <span className="hidden md:flex !bg-yellow-100 text-xs text-yellow-700 font-bold opacity-0 group-hover:opacity-100 absolute inset-0 items-center justify-center pointer-events-none">
                   + メモを追加
               </span>
             );
           }
 
           return currentMemos.map(memo => (
-            <MemoCell key={memo.id} memo={memo} />
+            <MemoCell key={memo.id} memo={memo} isSortMode={isSortMode} />
           ));
         })()}
       </div>
