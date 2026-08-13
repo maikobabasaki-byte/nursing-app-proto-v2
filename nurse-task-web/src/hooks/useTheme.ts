@@ -1,4 +1,5 @@
-import { useState, useEffect } from 'react';
+import { useEffect } from 'react';
+import { create } from 'zustand';
 
 export type AppTheme = 'vital' | 'serene' | 'dark';
 
@@ -20,10 +21,10 @@ export const THEME_CONFIGS: Record<AppTheme, ThemeConfig> = {
     id: 'vital',
     name: 'Vital & Focus',
     subtitle: '集中型 / 急性期・ICU向け',
-    description: 'ディープネイビーとシアンブルーによる視認性の高さで、緊迫した現場での迅速な意思決定と高い集中力をサポートします。',
+    description: '爽やかな薄い水色とディープネイビーによる清潔感と高い視認性で、臨床現場での迅速な意思決定と高い集中力をサポートします。',
     targetUnit: '急性期病棟 / ICU / HCU / 救急外来',
-    mainColor: '#1A365D',
-    accentColor: '#00B4D8',
+    mainColor: '#BAE6FD',
+    accentColor: '#1A365D',
     bgColor: '#F0F4F8',
     cardBg: '#FFFFFF',
     textColor: '#0F172A',
@@ -35,7 +36,7 @@ export const THEME_CONFIGS: Record<AppTheme, ThemeConfig> = {
     description: '優しいセージグリーンとサンドベージュで、患者と看護師の双方に安心感とリラックスをもたらし長時間の業務疲労を和らげます。',
     targetUnit: '療養病棟 / リハビリテーション病棟 / 緩和ケア',
     mainColor: '#4A7C59',
-    accentColor: '#D4A373',
+    accentColor: '#FAF3E0',
     bgColor: '#F4F1EA',
     cardBg: '#FAF8F5',
     textColor: '#2C3E2E',
@@ -56,23 +57,39 @@ export const THEME_CONFIGS: Record<AppTheme, ThemeConfig> = {
 
 const STORAGE_KEY = 'nursing_app_theme';
 
-export const useTheme = () => {
-  const [theme, setTheme] = useState<AppTheme>(() => {
+const getInitialTheme = (): AppTheme => {
+  if (typeof window !== 'undefined') {
     const saved = localStorage.getItem(STORAGE_KEY);
     if (saved && (saved === 'vital' || saved === 'serene' || saved === 'dark')) {
       return saved as AppTheme;
     }
-    return 'vital'; // デフォルトは Vital & Focus
-  });
+  }
+  return 'vital';
+};
+
+interface ThemeState {
+  theme: AppTheme;
+  changeTheme: (newTheme: AppTheme) => void;
+}
+
+// 🌐 アプリ全体で唯一のテーマ状態を保持・配信する Zustand ストア
+export const useThemeStore = create<ThemeState>((set) => ({
+  theme: getInitialTheme(),
+  changeTheme: (newTheme: AppTheme) => {
+    localStorage.setItem(STORAGE_KEY, newTheme);
+    document.documentElement.setAttribute('data-theme', newTheme);
+    set({ theme: newTheme });
+  },
+}));
+
+// 🎨 カスタムフック:useTheme (全コンポーネントがリアルタイム同期)
+export const useTheme = () => {
+  const theme = useThemeStore((state) => state.theme);
+  const changeTheme = useThemeStore((state) => state.changeTheme);
 
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEY, theme);
     document.documentElement.setAttribute('data-theme', theme);
   }, [theme]);
-
-  const changeTheme = (newTheme: AppTheme) => {
-    setTheme(newTheme);
-  };
 
   return {
     theme,

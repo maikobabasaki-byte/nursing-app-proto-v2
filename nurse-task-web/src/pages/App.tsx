@@ -6,7 +6,7 @@ import { collection, getDocs, onSnapshot, query, where } from 'firebase/firestor
 import { reconstructGroups } from '../utils/taskLogic';
 import { useTimelineStore } from '../stores/useTimelineStore';
 import type { NurseMaster, NursePin } from '../stores/useTimelineStore';
-import type { ExtendedTask } from '../types/types';
+import type { ExtendedTask, LeaderTodo } from '../types/types';
 import Header from '../components/Header';
 import Footer from '../components/Footer';
 import MainLayout from "../components/MainLayout";
@@ -38,7 +38,10 @@ import { GlobalSosToast } from '../components/GlobalSosToast';
 
 import { fetchGASData } from '../services/gasService';
 
+import { useTheme } from '../hooks/useTheme';
+
 export default function App() {
+  const { currentConfig } = useTheme();
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const setTasks = useTimelineStore((state) => state.setTasks);
@@ -119,12 +122,11 @@ export default function App() {
       } else {
         setUser(null);
         setCurrentScreen('login');
-        // ログアウト時はストレージおよびストアのデータもクリア
+        // ログアウト時はストレージおよびストアの全個人情報・タスク・メモキャッシュを完全消去
         sessionStorage.removeItem('currentScreen');
         sessionStorage.removeItem('selectedPatients');
         setSelectedPatients([]);
-        useTimelineStore.getState().setTasks([]);
-        useTimelineStore.getState().setCurrentUser(null);
+        useTimelineStore.getState().resetStoreData();
       }
       setLoading(false);
     });
@@ -249,16 +251,57 @@ export default function App() {
     return () => unsubscribeNurses();
   }, [user]);
 
+  // 💡 FirestoreのリーダーTODO (leader_todosコレクション) リアルタイム監視と全端末同期
+  useEffect(() => {
+    if (!user) return;
+
+    const unsubscribeLeaderTodos = onSnapshot(
+      collection(db, "leader_todos"), 
+      (snapshot) => {
+        if (snapshot.metadata.hasPendingWrites) {
+          return;
+        }
+
+        const firestoreTodos = snapshot.docs
+          .map((doc) => {
+            const data = doc.data();
+            return {
+              ...data,
+              todo_id: doc.id,
+            } as LeaderTodo;
+          })
+          .filter((todo) => !todo.is_deleted && todo.status !== 'deleted');
+
+        useTimelineStore.getState().setLeaderTodos(firestoreTodos);
+      },
+      (error) => {
+        if (error.code === 'resource-exhausted') {
+          console.warn("⚠️ [LeaderTodos] Firestoreのクォータ上限に到達しました。");
+        } else {
+          console.error("Firestore leader_todos 取得エラー:", error);
+        }
+      }
+    );
+
+    return () => unsubscribeLeaderTodos();
+  }, [user]);
+
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+      <div
+        className="min-h-screen flex items-center justify-center transition-colors duration-300"
+        style={{ backgroundColor: currentConfig.bgColor }}
+      >
         <p>読み込み中...</p>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen flex flex-col bg-gray-50 relative">
+    <div
+      className="min-h-screen flex flex-col relative transition-colors duration-300"
+      style={{ backgroundColor: currentConfig.bgColor }}
+    >
       {/* 💡 全画面共通の看護師SOSグローバル通知トースト */}
       <GlobalSosToast />
 
@@ -266,7 +309,10 @@ export default function App() {
       {currentScreen === 'login' && (
         <>
           <Header currentPage="login" />
-          <main className="flex-1 !flex items-center justify-center bg-gray-50">
+          <main
+            className="flex-1 !flex items-center justify-center transition-colors duration-300"
+            style={{ backgroundColor: currentConfig.bgColor }}
+          >
             <Suspense fallback={<PageLoadingFallback />}>
               <Login />
             </Suspense>
@@ -278,7 +324,10 @@ export default function App() {
       {currentScreen === 'patientSelect' && (
         <>
           <Header currentPage="patientSelect" />
-          <main className="flex-1 !flex items-center justify-center bg-gray-50">
+          <main
+            className="flex-1 !flex items-center justify-center transition-colors duration-300"
+            style={{ backgroundColor: currentConfig.bgColor }}
+          >
             <Suspense fallback={<PageLoadingFallback />}>
               <PatientSelect onSelectComplete={(list) => {
                 setSelectedPatients(list);
@@ -290,31 +339,47 @@ export default function App() {
         </>
       )}
 
-      {/* ─── 【B：ログイン後の世界（MainLayoutを使うグループ）】 ─── */}
+      {/* ─── 【B：保護されたルート（MainLayoutを使うグループ）】 ─── */}
       {(currentScreen === 'patientMaster' || currentScreen === 'timeline' || currentScreen === 'map' || currentScreen === 'leaderTodo' || currentScreen === 'settings') && (
-        <MainLayout currentScreen={currentScreen} onNavigate={(screen) => setCurrentScreen(screen)}>
-          <Suspense fallback={<PageLoadingFallback />}>
-            {currentScreen === 'patientMaster' && (
-              <PatientMasterPage selectedIds={selectedPatients} />
-            )}
+        user ? (
+          <MainLayout currentScreen={currentScreen} onNavigate={(screen) => setCurrentScreen(screen)}>
+            <Suspense fallback={<PageLoadingFallback />}>
+              {currentScreen === 'patientMaster' && (
+                <PatientMasterPage selectedIds={selectedPatients} />
+              )}
 
-            {currentScreen === 'timeline' && (
-              <Timeline selectedPatients={selectedPatients} />
-            )}
+              {currentScreen === 'timeline' && (
+                <Timeline selectedPatients={selectedPatients} />
+              )}
 
-            {currentScreen === 'map' && (
-              <MapContainer selectedPatients={selectedPatients} />
-            )}
+              {currentScreen === 'map' && (
+                <MapContainer selectedPatients={selectedPatients} />
+              )}
 
-            {currentScreen === 'leaderTodo' && (
-              <LeaderTodoPage />
-            )}
+              {currentScreen === 'leaderTodo' && (
+                <LeaderTodoPage />
+              )}
 
-            {currentScreen === 'settings' && (
-              <Settings />
-            )}
-          </Suspense>
-        </MainLayout>
+              {currentScreen === 'settings' && (
+                <Settings />
+              )}
+            </Suspense>
+          </MainLayout>
+        ) : (
+          /* 🛡️ 未ログイン状態での保護ルートアクセスに対するRoute Guard（強制ログインリダイレクト） */
+          <>
+            <Header currentPage="login" />
+            <main
+              className="flex-1 !flex items-center justify-center transition-colors duration-300"
+              style={{ backgroundColor: currentConfig.bgColor }}
+            >
+              <Suspense fallback={<PageLoadingFallback />}>
+                <Login />
+              </Suspense>
+            </main>
+            <Footer />
+          </>
+        )
       )}
 
     </div>

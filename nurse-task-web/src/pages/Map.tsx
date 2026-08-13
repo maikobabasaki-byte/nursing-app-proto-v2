@@ -7,10 +7,27 @@ import { DraggableNursePin } from '../components/Map/DraggableNursePin';
 import { useUserName } from '../hooks/useUserName';
 
 // 💡 左側のSOSパネル（LeftPanel）：タスクSOSおよび看護師SOSをリアルタイム統合表示
-const LeftPanel: React.FC<{ sosTasks: any[]; sosNurses: NursePin[] }> = ({ sosTasks, sosNurses }) => (
-  <div style={{ width: '220px', flexShrink: 0, backgroundColor: '#ffebee', padding: '15px', borderRight: '1px solid #e0e0e0', boxSizing: 'border-box', overflowY: 'auto' }}>
-    <h3 style={{ fontWeight: 'bold', marginBottom: '15px', color: '#c62828', display: 'flex', alignItems: 'center', gap: '5px' }}>
-      🚨 緊急アラート
+const LeftPanel: React.FC<{ sosTasks: any[]; sosNurses: NursePin[]; isFullWidth?: boolean }> = ({ sosTasks, sosNurses, isFullWidth }) => (
+  <div 
+    style={{ 
+      width: isFullWidth ? '100%' : '240px', 
+      flexShrink: 0, 
+      backgroundColor: '#ffebee', 
+      padding: '16px', 
+      borderRight: isFullWidth ? 'none' : '1px solid #e0e0e0', 
+      boxSizing: 'border-box', 
+      overflowY: 'auto',
+      height: '100%'
+    }}
+    className="flex flex-col gap-3 font-sans"
+  >
+    <h3 style={{ fontWeight: 'bold', color: '#c62828', display: 'flex', alignItems: 'center', gap: '6px' }} className="text-sm border-b border-red-200 pb-2">
+      <span>🚨 緊急アラート</span>
+      {(sosTasks.length + sosNurses.length) > 0 && (
+        <span className="bg-red-600 text-white text-xs px-2 py-0.5 rounded-full font-extrabold animate-pulse">
+          {sosTasks.length + sosNurses.length}件
+        </span>
+      )}
     </h3>
     
     {sosTasks.length === 0 && sosNurses.length === 0 ? (
@@ -22,7 +39,7 @@ const LeftPanel: React.FC<{ sosTasks: any[]; sosNurses: NursePin[] }> = ({ sosTa
       <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
         {/* 1. 看護師からの緊急要請 (Nurse SOS) */}
         {sosNurses.map((nurse) => (
-          <div key={`nurse-sos-${nurse.nurse_id}`} style={{ backgroundColor: '#fff', borderLeft: '5px solid #d32f2f', padding: '10px', borderRadius: '4px', boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }}>
+          <div key={`nurse-sos-${nurse.nurse_id}`} style={{ backgroundColor: '#fff', borderLeft: '5px solid #d32f2f', padding: '10px', borderRadius: '6px', boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }}>
             <div style={{ fontWeight: 'bold', color: '#c62828', fontSize: '13px', marginBottom: '4px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
               <span>🩺 看護師要請</span>
               <span style={{ fontSize: '10px', backgroundColor: '#ffebee', color: '#c62828', padding: '2px 5px', borderRadius: '3px', fontWeight: 'bold' }}>緊急</span>
@@ -30,7 +47,7 @@ const LeftPanel: React.FC<{ sosTasks: any[]; sosNurses: NursePin[] }> = ({ sosTa
             <div style={{ fontSize: '12px', fontWeight: 'bold', color: '#333', marginBottom: '4px' }}>
               対象: {nurse.name} さん
             </div>
-            <div style={{ fontSize: '11px', color: '#666', backgroundColor: '#fff5f5', padding: '6px', borderRadius: '2px', lineHeight: '1.4' }}>
+            <div style={{ fontSize: '11px', color: '#666', backgroundColor: '#fff5f5', padding: '6px', borderRadius: '4px', lineHeight: '1.4' }}>
               ⚠️ {nurse.sos_reason || `${nurse.name}さんが緊急応援を要請しています`}
             </div>
           </div>
@@ -38,14 +55,14 @@ const LeftPanel: React.FC<{ sosTasks: any[]; sosNurses: NursePin[] }> = ({ sosTa
 
         {/* 2. 患者タスクからの緊急要請 (Task SOS) */}
         {sosTasks.map((task) => (
-          <div key={task.task_id} style={{ backgroundColor: '#fff', borderLeft: '5px solid #d32f2f', padding: '10px', borderRadius: '4px', boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }}>
+          <div key={task.task_id} style={{ backgroundColor: '#fff', borderLeft: '5px solid #d32f2f', padding: '10px', borderRadius: '6px', boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }}>
             <div style={{ fontWeight: 'bold', color: '#c62828', fontSize: '14px', marginBottom: '4px' }}>
               {task.room_id}号室
             </div>
             <div style={{ fontSize: '12px', fontWeight: 'bold', color: '#333', marginBottom: '4px' }}>
               対象: {task.title}
             </div>
-            <div style={{ fontSize: '11px', color: '#666', backgroundColor: '#f5f5f5', padding: '6px', borderRadius: '2px', lineHeight: '1.4' }}>
+            <div style={{ fontSize: '11px', color: '#666', backgroundColor: '#f5f5f5', padding: '6px', borderRadius: '4px', lineHeight: '1.4' }}>
               ⚠️ {task.sos_reason}
             </div>
           </div>
@@ -55,11 +72,10 @@ const LeftPanel: React.FC<{ sosTasks: any[]; sosNurses: NursePin[] }> = ({ sosTa
   </div>
 );
 
-
 import TeamProgressWidget from '../components/Map/TeamProgressWidget';
 
-const RightPanel: React.FC<{ nurses: NursePin[]; selectedPatients?: string[] }> = ({ nurses, selectedPatients }) => {
-  return <TeamProgressWidget nurses={nurses} selectedPatients={selectedPatients} />;
+const RightPanel: React.FC<{ nurses: NursePin[]; selectedPatients?: string[]; compact?: boolean }> = ({ nurses, selectedPatients, compact }) => {
+  return <TeamProgressWidget nurses={nurses} selectedPatients={selectedPatients} compact={compact} />;
 };
 
 interface MapContainerProps {
@@ -67,7 +83,10 @@ interface MapContainerProps {
 }
 
 export default function MapContainer({ selectedPatients }: MapContainerProps): React.JSX.Element {
-  // 💡 受け持ち患者IDリスト（props または sessionStorage から安全に復元）
+  // 💡 サブタブ状態（タブレット・モバイル版用）
+  const [activeTab, setActiveTab] = useState<'map' | 'alerts' | 'progress'>('map');
+
+  // 💡 受け持ち患者IDリスト
   const activeSelectedPatients = useMemo(() => {
     if (selectedPatients && selectedPatients.length > 0) {
       return selectedPatients;
@@ -83,6 +102,7 @@ export default function MapContainer({ selectedPatients }: MapContainerProps): R
     }
     return [];
   }, [selectedPatients]);
+
   const [patients, setPatients] = useState<Patient[]>([]);
   const [rooms, setRooms] = useState<Room[]>([]);
   const [facilities, setFacilities] = useState<Facility[]>([]);
@@ -100,8 +120,6 @@ export default function MapContainer({ selectedPatients }: MapContainerProps): R
   const toggleTaskSos = useTimelineStore((state) => state.toggleTaskSos);
   const updateNursePosition = useTimelineStore((state) => state.updateNursePosition);
 
-  // 🧠 【100%確実表示＆重複ゼロ保証】ログイン中ユーザーのピンを自他判定しつつ完全1つに統一
-  // 🧠 【完全な重複排除】出勤中（is_logged_in !== false）の看護師のみ一意にフィルタリング
   const displayNurses = useMemo(() => {
     const seenKeys = new Set<string>();
     return nurses.filter((nurse) => {
@@ -158,7 +176,6 @@ export default function MapContainer({ selectedPatients }: MapContainerProps): R
 
     if (!activeNurseObj) return;
 
-    // 🧠 マップ実描画幅・高さ(px)を取得して移動量をパーセンテージに即時換算
     const container = mapContainerRef.current;
     if (container) {
       const rect = container.getBoundingClientRect();
@@ -187,7 +204,6 @@ export default function MapContainer({ selectedPatients }: MapContainerProps): R
     }
   };
 
-  // 💡 マップ上の患者が右クリックされた時のイベント
   const handlePatientRightClick = (taskId: string, patientName: string) => {
     toggleTaskSos(
       taskId,
@@ -203,47 +219,128 @@ export default function MapContainer({ selectedPatients }: MapContainerProps): R
     );
   }
 
-  // 💡 ストアのタスク全体から SOS が true になっているものをフィルター
   const sosTasks = allTasks.filter(task => task.is_sos === true);
-
-  // 💡 ストアの看護師から SOS が true になっているものをフィルター
   const sosNurses = displayNurses.filter(nurse => nurse.is_sos === true);
+  const totalSosCount = sosTasks.length + sosNurses.length;
 
   return (
     <DndContext sensors={sensors} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
-      <div style={{ 
-          display: 'flex', 
-          width: '100vw',               /* 💡 画面の横幅いっぱいに広げる */
-          height: 'calc(100vh - 120px)', /* 💡 画面の高さからヘッダー（約120px分）を引いた高さに固定 */
-          backgroundColor: '#fff', 
-          boxSizing: 'border-box',
-          overflow: 'hidden'            /* 💡 外枠に余計なスクロールバーが出ないようにする */
-        }}>
-        {/* 💡 抽出したSOSタスクおよびSOS看護師を流し込む */}
-        <LeftPanel sosTasks={sosTasks} sosNurses={sosNurses} />
+      <div className="flex flex-col w-full h-[calc(100vh-110px)] bg-white overflow-hidden relative">
         
-        <div style={{ 
-            flexGrow: 1,                /* 💡 左右パネルの残りの隙間をすべてマップエリアに割り当てる */
-            height: '100%',             /* 💡 高さは親（100vh - 120px）に完全に合わせる */
-            display: 'flex', 
-            justifyContent: 'center', 
-            alignItems: 'center',       /* 💡 縦横とも中央に配置 */
-            boxSizing: 'border-box',
-            overflow: 'hidden'          /* 💡 マップがコンテナからはみ出すのを防ぐ */
-          }}>
-          <div ref={mapContainerRef} style={{ width: '100%', height: '100%', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
-            <WardMap 
-              rooms={rooms} 
-              facilities={facilities} 
-              patients={patients} 
-              allTasks={allTasks} 
-              displayNurses={displayNurses}
-              onPatientRightClick={handlePatientRightClick} 
-            />
-          </div>
+        {/* 📱 タブレット・モバイル幅（lg未満）専用サブタブ切り替えバー */}
+        <div className="lg:!hidden !flex !items-center !justify-center !p-2 !bg-slate-100 !border-b !border-slate-200 !gap-2 !shrink-0">
+          <button
+            type="button"
+            onClick={() => setActiveTab('map')}
+            className={`!px-4 !py-1.5 !rounded-xl !font-extrabold !transition-all !cursor-pointer !flex !items-center !gap-1.5 ${
+              activeTab === 'map'
+                ? '!bg-sky-600 !text-white !shadow-md !scale-102'
+                : '!bg-white !text-slate-700 hover:!bg-slate-200 !border !border-slate-300'
+            }`}
+          >
+            <span>マップ</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveTab('alerts')}
+            className={`!px-4 !py-1.5 !rounded-xl !font-extrabold !transition-all !cursor-pointer !flex !items-center !gap-1.5 ${
+              activeTab === 'alerts'
+                ? '!bg-rose-600 !text-white !shadow-md !scale-102'
+                : '!bg-white !text-slate-700 hover:!bg-slate-200 !border !border-slate-300'
+            }`}
+          >
+            <span>アラート</span>
+            {totalSosCount > 0 && (
+              <span className="!bg-red-600 !text-white !text-[10px] !px-1.5 !py-0.2 !rounded-full !font-black !animate-pulse">
+                {totalSosCount}
+              </span>
+            )}
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveTab('progress')}
+            className={`!px-4 !py-1.5 !rounded-xl !font-extrabold !transition-all !cursor-pointer !flex !items-center !gap-1.5 ${
+              activeTab === 'progress'
+                ? '!bg-indigo-600 !text-white !shadow-md !scale-102'
+                : '!bg-white !text-slate-700 hover:!bg-slate-200 !border !border-slate-300'
+            }`}
+          >
+            <span>進捗</span>
+          </button>
         </div>
-        
-        <RightPanel nurses={displayNurses} selectedPatients={activeSelectedPatients} />
+
+        {/* 📱 タブレット・モバイル幅（lg未満）の単一コンポーネント表示領域 */}
+        <div className="lg:hidden flex-1 min-h-0 w-full overflow-hidden relative flex justify-center items-center bg-slate-900/5">
+          {activeTab === 'map' && (
+            <div 
+              ref={mapContainerRef} 
+              style={{
+                width: '100%',
+                height: '100%',
+                display: 'flex',
+                justifyContent: 'center',
+                alignItems: 'center',
+                transform: 'rotate(90deg) scale(1.35)',
+              }}
+            >
+              <WardMap 
+                rooms={rooms} 
+                facilities={facilities} 
+                patients={patients} 
+                allTasks={allTasks} 
+                displayNurses={displayNurses}
+                onPatientRightClick={handlePatientRightClick} 
+              />
+            </div>
+          )}
+
+          {activeTab === 'alerts' && (
+            <div className="w-full h-full overflow-y-auto">
+              <LeftPanel sosTasks={sosTasks} sosNurses={sosNurses} isFullWidth={true} />
+            </div>
+          )}
+
+          {activeTab === 'progress' && (
+            <div className="w-full h-full overflow-y-auto">
+              <RightPanel nurses={displayNurses} selectedPatients={activeSelectedPatients} compact={true} />
+            </div>
+          )}
+        </div>
+
+        {/* 💻 PC幅（lg以上）従来通りの三分割同時表示レイアウト（マップは0度表示） */}
+        <div className="hidden lg:flex w-full h-full overflow-hidden relative">
+          {/* ① 左側：緊急アラート */}
+          <LeftPanel sosTasks={sosTasks} sosNurses={sosNurses} />
+          
+          {/* ② 中央：病棟マップ（0度・回転なし表示） */}
+          <div className="flex-1 h-full flex justify-center items-center overflow-hidden relative">
+            <div 
+              ref={mapContainerRef} 
+              style={{
+                width: '100%',
+                height: '100%',
+                display: 'flex',
+                justifyContent: 'center',
+                alignItems: 'center',
+              }}
+            >
+              <WardMap 
+                rooms={rooms} 
+                facilities={facilities} 
+                patients={patients} 
+                allTasks={allTasks} 
+                displayNurses={displayNurses}
+                onPatientRightClick={handlePatientRightClick} 
+              />
+            </div>
+          </div>
+          
+          {/* ③ 右側：計画進捗 */}
+          <RightPanel nurses={displayNurses} selectedPatients={activeSelectedPatients} />
+        </div>
+
       </div>
 
       <DragOverlay dropAnimation={null}>
@@ -252,3 +349,4 @@ export default function MapContainer({ selectedPatients }: MapContainerProps): R
     </DndContext>
   );
 }
+

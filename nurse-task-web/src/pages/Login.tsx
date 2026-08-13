@@ -1,17 +1,21 @@
 import { useState } from 'react';
-import { signInWithEmailAndPassword, setPersistence, browserSessionPersistence } from 'firebase/auth';
+import { signInWithEmailAndPassword, setPersistence, browserSessionPersistence, browserLocalPersistence } from 'firebase/auth';
 import { auth } from '../lib/firebase';
 
 export default function Login() {
   const [userId, setUserId] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  const [rememberMe, setRememberMe] = useState(false);
 
   const handleLogin = async (e: React.MouseEvent<HTMLButtonElement>) => {
     e.preventDefault();
     try {
-      // 💡 Firebase Authのセッション保持範囲をタブ単位(sessionStorage)に変更し、同一ブラウザでの複数タブ同時ログインを可能にする
-      await setPersistence(auth, browserSessionPersistence);
+      // 💡 チェックボックス選択状態に応じて、セッション保持期間を切り替え
+      // チェックあり（個人のスマホ・タブレット等）: browserLocalPersistence (明示的ログアウトまで保持)
+      // チェックなし（ステーションの共有PC等）: browserSessionPersistence (タブ・ブラウザを閉じたら即座に自動ログアウト)
+      const persistenceType = rememberMe ? browserLocalPersistence : browserSessionPersistence;
+      await setPersistence(auth, persistenceType);
 
       // 既存のID/パスワード入力をFirebase認証用に変換
       const email = `${userId}@nurseflow.local`;
@@ -41,7 +45,7 @@ export default function Login() {
           />
         </div>
 
-        <div className="mb-6 relative">
+        <div className="mb-4 relative">
           <label className="block text-base font-medium text-gray-700 mb-1">
             パスワード
           </label>
@@ -78,10 +82,25 @@ export default function Login() {
           </div>
         </div>
 
+        {/* 🔒 共有PCログアウト忘れ防止 ＆ スマホ保持切り替えチェックボックス */}
+        <div className="mb-5 flex items-start gap-2 select-none cursor-pointer">
+          <input
+            id="remember_me_checkbox"
+            type="checkbox"
+            checked={rememberMe}
+            onChange={(e) => setRememberMe(e.target.checked)}
+            className="mt-0.5 w-4 h-4 text-sky-600 rounded border-gray-300 focus:ring-sky-500 cursor-pointer shrink-0"
+          />
+          <label htmlFor="remember_me_checkbox" className="text-xs font-bold text-gray-700 cursor-pointer leading-tight">
+            この端末にログイン状態を保持する
+            <span className="block text-[10px] text-gray-400 font-normal mt-0.5">（※ナースステーション共有PCではチェックを外してください）</span>
+          </label>
+        </div>
+
         <p id="error_message" style={{ color: 'red' }} className="text-sm mb-4"></p>
         
         <button 
-          className="w-1/2 !block !mx-auto !bg-[#1A365D] !text-white !font-bold !p-2 !rounded !text-center"
+          className="w-1/2 !block !mx-auto !bg-[#1A365D] !text-white !font-bold !p-2 !rounded !text-center cursor-pointer hover:bg-slate-800 transition-colors"
           onClick={handleLogin} 
           type="button"
         >

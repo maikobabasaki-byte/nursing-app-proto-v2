@@ -93,18 +93,18 @@ export default function Timeline({ selectedPatients }: TimelineProps) {
       autoScroll={{ threshold: { x: 0.1, y: 0.15 }, acceleration: 10 }}
     >
       <div 
-        className="flex flex-col md:flex-row flex-1 min-h-0 w-full h-full bg-gray-50 overflow-hidden select-none"
+        className="flex flex-col md:flex-row flex-1 min-h-0 w-full bg-gray-50 overflow-hidden select-none"
       >
         {/* 💻 PC版（!isMobile）でのみ左サイドバーをDOMツリーにマウント（重複Draggableのクラッシュ完全防止） */}
         {!isMobile && (
-          <div className="w-72 flex-shrink-0 bg-white border-r border-gray-200 h-full overflow-hidden">
+          <div className="w-72 flex-shrink-0 bg-white border-r border-gray-200 min-h-0 overflow-hidden">
             <TimelineSidebar 
               selectedPatients={selectedPatients}
             />
           </div>
         )}
 
-        <div className="flex-1 min-w-0 min-h-0 overflow-hidden bg-white flex flex-col h-full">
+        <div className="flex-1 min-w-0 min-h-0 overflow-hidden bg-white flex flex-col">
           <TimelineMain 
             selectedPatients={selectedPatients}
           />

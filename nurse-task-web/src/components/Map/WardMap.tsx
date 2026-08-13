@@ -2,6 +2,7 @@ import React from 'react';
 import { useTimelineStore } from '../../stores/useTimelineStore';
 import { DraggableNursePin } from './DraggableNursePin';
 import { useUserName } from '../../hooks/useUserName';
+import { useIsMobile } from '../../hooks/useIsMobile';
 
 export interface Room { room_id: string; name: string; x: number; y: number; cols: number; rows: number; }
 export interface Facility { room_id: string; name: string; x: number; y: number; w: number; h: number; }
@@ -42,6 +43,7 @@ export default function WardMap({
   const storeMemos = useTimelineStore((state) => state.memos);
   const nurses = displayNurses || storeNurses;
   const currentUserName = useUserName();
+  const isMobile = useIsMobile();
 
   const [menu, setMenu] = React.useState<ContextMenuState>({
     visible: false,
@@ -70,6 +72,88 @@ export default function WardMap({
 
   const menuRef = React.useRef<HTMLDivElement>(null);
   const nurseMenuRef = React.useRef<HTMLDivElement>(null);
+
+  // 💡 ダブルタップSOS判定用タイマー・時刻記録
+  const lastTapTimeRef = React.useRef<Record<string, number>>({});
+  const clickTimerRef = React.useRef<Record<string, NodeJS.Timeout | null>>({});
+
+  // 💡 患者タスク一覧ポップアップを画面（ビューポート）内に完全に収めるクランプ表示関数
+  const openPatientMenu = (patient: Patient, rawX: number, rawY: number) => {
+    const relatedTasks = allTasks.filter(t => t.patient_id === patient.patient_id);
+    
+    // ポップアップの想定サイズ (幅: 約250px, 高さ: タイトル+タスク数に応じた動的高さ)
+    const POPUP_WIDTH = 250;
+    const POPUP_HEIGHT = Math.min(320, 50 + Math.max(1, relatedTasks.length) * 44);
+
+    // 画面端からはみ出さないよう x, y 座標を画面内に安全クランプ
+    const clampedX = Math.max(12, Math.min(rawX, window.innerWidth - POPUP_WIDTH - 12));
+    const clampedY = Math.max(12, Math.min(rawY, window.innerHeight - POPUP_HEIGHT - 12));
+
+    setMenu({
+      visible: true,
+      x: clampedX,
+      y: clampedY,
+      patientId: patient.patient_id,
+      patientName: patient.name,
+      patientTasks: relatedTasks
+    });
+  };
+
+  // 🚨 ベッドカードタップ処理（シングルタップ＝タスク一覧ポップアップ表示、ダブルタップ＝SOS自動補完発信）
+  const handleBedTap = (patient: Patient, e: React.SyntheticEvent) => {
+    e.stopPropagation();
+
+    // イベント座標の保存（タイマー処理のクロージャで保持）
+    const nativeEvent = e.nativeEvent as any;
+    const clientX = (e as any).clientX || (nativeEvent?.touches && nativeEvent.touches[0] ? nativeEvent.touches[0].clientX : 200);
+    const clientY = (e as any).clientY || (nativeEvent?.touches && nativeEvent.touches[0] ? nativeEvent.touches[0].clientY : 200);
+    
+    const now = Date.now();
+    const lastTap = lastTapTimeRef.current[patient.patient_id] || 0;
+    const timeDiff = now - lastTap;
+
+    if (timeDiff > 0 && timeDiff <= 280) {
+      // 🚨 【ダブルタップ確定】1回目のシングルタップタイマーを即座に解除してポップアップ開くのを遮断！
+      if (clickTimerRef.current[patient.patient_id]) {
+        clearTimeout(clickTimerRef.current[patient.patient_id]!);
+        clickTimerRef.current[patient.patient_id] = null;
+      }
+      lastTapTimeRef.current[patient.patient_id] = 0;
+
+      // 🧠 該当患者の現在実施中（progressing / record_start）タスクを自動抽出
+      const relatedTasks = allTasks.filter(t => t.patient_id === patient.patient_id);
+      const activeTask = relatedTasks.find(t => t.status === 'progressing' || t.status === 'record_start' || (t as any).status === 'in_progress');
+
+      let sosReason = `🚨 緊急要請：${patient.name}さん (${patient.room_id ? `${patient.room_id}号室` : ''}) で緊急応援要請`;
+      let targetTaskId = relatedTasks.length > 0 ? relatedTasks[0].task_id : patient.patient_id;
+
+      if (activeTask) {
+        sosReason = `🚨 緊急要請：${patient.name}さん (${patient.room_id ? `${patient.room_id}号室` : ''}) 「${activeTask.title}」実施中に急変・応援要請`;
+        targetTaskId = activeTask.task_id;
+      }
+
+      if (onPatientRightClick && relatedTasks.length > 0) {
+        onPatientRightClick(targetTaskId, patient.name);
+      } else {
+        toggleTaskSos(targetTaskId, sosReason);
+      }
+    } else {
+      // 💡 【1回目のタップ】280msタイマーをセットしてシングルタップ待機
+      lastTapTimeRef.current[patient.patient_id] = now;
+      if (clickTimerRef.current[patient.patient_id]) {
+        clearTimeout(clickTimerRef.current[patient.patient_id]!);
+      }
+
+      clickTimerRef.current[patient.patient_id] = setTimeout(() => {
+        clickTimerRef.current[patient.patient_id] = null;
+        // 📱 タブレット・モバイル表示時のみ、シングルタップでタスク一覧ポップアップを展開！
+        // 💻 PC版は右クリック（onContextMenu）でのみタスク一覧を展開
+        if (isMobile) {
+          openPatientMenu(patient, clientX, clientY);
+        }
+      }, 280);
+    }
+  };
 
   React.useEffect(() => {
     const handleOutsideClick = (e: MouseEvent) => {
@@ -144,7 +228,7 @@ export default function WardMap({
               {roomMemos.length > 0 && (
                 <g>
                   <rect x={room.x + roomW / 8} y={headerY + 6} width={roomW / 3} height={HEADER_H - 12} rx={4} fill="#f59e0b" />
-                  <text x={room.x + roomW / 8 + roomW / 6} y={headerY + HEADER_H / 2} textAnchor="middle" dominantBaseline="central" fontSize="11" fill="#ffffff" fontWeight="bold">
+                  <text x={room.x + roomW / 8 + roomW / 6} y={headerY + HEADER_H / 2} textAnchor="middle" dominantBaseline="central" fontSize={11} fill="#ffffff" fontWeight="bold">
                     📝 メモ{roomMemos.length}件
                   </text>
                 </g>
@@ -165,12 +249,10 @@ export default function WardMap({
 
               {/* 患者の配置 */}
               {roomPatients.map((patient) => {
-                // 💡 1を引いたインデックス（0〜3）をベースに、横(col)と縦(row)の並び順を割り算で計算！
                 const bIdx = patient.bed_number - 1;
                 const bedCol = room.cols === 1 ? 0 : bIdx % room.cols;
                 const bedRow = room.rows === 1 ? 0 : Math.floor(bIdx / room.cols);
 
-                // 割り算を基に、正確なSVG座標を割り出す
                 const bedX = (room.x - roomW / 2) + (bedCol * BED_W);
                 const bedTopY = isTopRow ? topY + HEADER_H + (bedRow * BED_H) : topY + (bedRow * BED_H);
                 
@@ -179,7 +261,6 @@ export default function WardMap({
 
                 const hasSos = allTasks.some(t => t.patient_id === patient.patient_id && t.is_sos === true);
 
-                // 💡 性別・SOSに応じたカード背景・枠線スタイルの定義
                 let cardFill = '#ffffff';
                 let cardStroke = '#cbd5e1';
                 let cardStrokeWidth = 1;
@@ -201,21 +282,12 @@ export default function WardMap({
                 return (
                   <g 
                     key={patient.patient_id}
-                    cursor="context-menu"
+                    onClick={(e) => handleBedTap(patient, e)}
+                    style={{ userSelect: 'none', WebkitUserSelect: 'none', cursor: 'pointer' }}
+                    className="select-none cursor-pointer"
                     onContextMenu={(e) => {
                       e.preventDefault();
-                      
-                      // 💡 この患者に紐づく全タスクをフィルタリングして集める！
-                      const relatedTasks = allTasks.filter(t => t.patient_id === patient.patient_id);
-
-                      setMenu({
-                        visible: true,
-                        x: e.clientX,
-                        y: e.clientY,
-                        patientId: patient.patient_id,
-                        patientName: patient.name,
-                        patientTasks: relatedTasks // 💡 集めたタスクをメニューに引き渡す
-                      });
+                      openPatientMenu(patient, e.clientX, e.clientY);
                     }}
                   >
                     {/* 💡 ベッドカード背景（性別・SOS別色分け） */}
@@ -255,7 +327,7 @@ export default function WardMap({
                       </g>
                     )}
 
-                    {/* 💡 転倒リスク「高」の患者への洗練されたテキスト赤タグ（絵文字なし） */}
+                    {/* 💡 転倒リスク「高」の患者へのテキスト赤タグ */}
                     {(patient.risk_level === '高' || patient.risk_level === 'high') && (
                       <g>
                         <rect
@@ -282,7 +354,7 @@ export default function WardMap({
                       </g>
                     )}
 
-                    {/* 💡 患者名テキスト（性別表記は背景色で表現するため名前のみ） */}
+                    {/* 💡 患者名テキスト */}
                     <text 
                       x={textX} 
                       y={textY + 2} 
@@ -352,7 +424,7 @@ export default function WardMap({
 
       </div>
 
-      {/* 患者右クリックメニュー本体 */}
+      {/* 患者右クリック / シングルタップ タスク一覧メニュー本体 */}
       {menu.visible && (
         <div
           ref={menuRef}
@@ -362,12 +434,16 @@ export default function WardMap({
             top: `${menu.y}px`,
             zIndex: 1000,
             backgroundColor: '#ffffff',
-            border: '1px solid #ccc',
-            borderRadius: '6px',
-            boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
-            padding: '6px 0',
-            minWidth: '200px'
+            border: '1px solid #cbd5e1',
+            borderRadius: '12px',
+            boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.2), 0 8px 10px -6px rgba(0, 0, 0, 0.1)',
+            padding: '8px 0',
+            width: '250px',
+            maxWidth: 'calc(100vw - 24px)',
+            maxHeight: 'calc(100vh - 32px)',
+            overflowY: 'auto'
           }}
+          className="font-sans text-left animate-fade-in"
         >
           <div style={{ padding: '6px 12px', fontSize: '12px', color: '#666', borderBottom: '1px solid #eee', fontWeight: 'bold' }}>
             👤 {menu.patientName} さんのタスク一覧

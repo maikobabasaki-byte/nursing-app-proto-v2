@@ -13,7 +13,7 @@ import { useTimelineStore } from '../../stores/useTimelineStore';
 import { updateTask } from '../../hooks/useTaskUpdate';
 import { useUserName } from '../../hooks/useUserName';
 import { PoolTaskCard } from './PoolTaskCard';
-import { normalizeToHHMM, normalizeTeamName } from '../../utils/taskLogic';
+import { normalizeToHHMM, normalizeTeamName, extractUserProgressingTasks } from '../../utils/taskLogic';
 import { useIsMobile } from '../../hooks/useIsMobile';
 
 export default function TimelineMain({ 
@@ -225,6 +225,24 @@ export default function TimelineMain({
     return list;
   })();
 
+  // 🎈 下部トレイ（実施中・中断中）の表示・段数に応じたメモ追加FABの動的bottom位置算出
+  const progressingTasks = isMobile ? extractUserProgressingTasks(storeAllTasks, userName) : [];
+  const hasProgressing = progressingTasks.length > 0;
+  const hasPending = pendingTasks.length > 0;
+
+  const fabBottomStyle = (() => {
+    if (hasProgressing && hasPending) {
+      // 2段トレイ出現時：トレイの上に十分なマージンを空けて明確に高く退避 (bottom: 18.5rem = 296px)
+      return { bottom: '18.5rem' };
+    }
+    if (hasProgressing || hasPending) {
+      // 1段トレイ出現時：トレイの上に十分なマージンを空けて明確に高く退避 (bottom: 13.5rem = 216px)
+      return { bottom: '13.5rem' };
+    }
+    // トレイ非表示時：下部ナビゲーションの直上 (bottom: 5.5rem = 88px)
+    return { bottom: '5.5rem' };
+  })();
+
   const [unexecutedModalTask, setUnexecutedModalTask] = useState<ExtendedTask | null>(null);
 
   const handleConfirmUnexecuted = (task: ExtendedTask, reason: string) => {
@@ -263,35 +281,46 @@ export default function TimelineMain({
     <div className="flex-1 min-h-0 w-full flex flex-col p-2 md:p-4 select-none overflow-hidden">
       {/* 👑 リーダー参照モードコントロールヘッダー */}
       {isLeader && (
-        <div className="bg-gradient-to-r from-indigo-900 to-indigo-950 text-white p-3 rounded-xl mb-3 flex items-center justify-between shadow-md border border-indigo-700/60 animate-fade-in">
-          <div className="flex items-center gap-2.5">
-            <span className="text-xl">👑</span>
-            <div>
-              <div className="flex items-center gap-2">
-                <span className="font-black text-xs bg-indigo-700 text-indigo-100 px-2.5 py-0.5 rounded-full border border-indigo-500">
-                  リーダー参照モード（自チーム進捗監督）
-                </span>
-                <span className="text-xs font-extrabold text-indigo-200">
-                  所属: {leaderTeam}
-                </span>
-              </div>
-              <p className="text-[11px] text-indigo-300 mt-0.5">
-                自チームメンバーナースのタスク実施・記録・SOS状況をリアルタイム俯瞰中
-              </p>
+        <div className="bg-gradient-to-r from-indigo-900 to-indigo-950 text-white p-2.5 md:p-3 rounded-xl mb-3 flex items-center justify-between shadow-md border border-indigo-700/60 animate-fade-in">
+          {/* 📱 タブレット・モバイル表示時：所属チームと低優先度トグルボタンのみの簡潔表示 */}
+          {isMobile ? (
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-extrabold bg-indigo-800/80 text-indigo-100 px-2.5 py-1 rounded-lg border border-indigo-600 font-mono">
+                所属: {leaderTeam}
+              </span>
             </div>
-          </div>
+          ) : (
+            /* 💻 PC表示時：従来のフル表示（アイコン・タイトル・説明文付き）をそのまま維持 */
+            <div className="flex items-center gap-2.5">
+              <span className="text-xl">👑</span>
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="font-black text-xs bg-indigo-700 text-indigo-100 px-2.5 py-0.5 rounded-full border border-indigo-500">
+                    リーダー参照モード（自チーム進捗監督）
+                  </span>
+                  <span className="text-xs font-extrabold text-indigo-200">
+                    所属: {leaderTeam}
+                  </span>
+                </div>
+                <p className="text-[11px] text-indigo-300 mt-0.5">
+                  自チームメンバーナースのタスク実施・記録・SOS状況をリアルタイム俯瞰中
+                </p>
+              </div>
+            </div>
+          )}
 
+          {/* 低優先度タスク表示切り替えボタン（共通） */}
           <div className="flex items-center gap-3">
             <button
               type="button"
               onClick={toggleShowLowPriority}
-              className={`px-3.5 py-1.5 rounded-lg text-xs font-extrabold flex items-center gap-1.5 transition-all cursor-pointer border ${
+              className={`px-3 py-1 md:px-3.5 md:py-1.5 rounded-lg text-xs font-extrabold flex items-center gap-1.5 transition-all cursor-pointer border ${
                 showLowPriority
-                  ? 'bg-amber-400 text-amber-950 border-amber-500 shadow-md scale-105'
+                  ? 'bg-amber-400 text-amber-950 border-amber-500 shadow-md scale-102'
                   : 'bg-indigo-950/80 text-indigo-200 hover:text-white border-indigo-700'
               }`}
             >
-              <span>{showLowPriority ? '👁️ 低優先度タスク: 表示中' : '🙈 低優先度タスク: 非表示'}</span>
+              <span>{showLowPriority ? '👁️ 低優先度: 表示中' : '🙈 低優先度: 非表示'}</span>
             </button>
           </div>
         </div>
@@ -416,7 +445,7 @@ export default function TimelineMain({
 
       <div 
         ref={containerRef} 
-        className="relative flex-1 min-h-0 overflow-y-auto border border-gray-200 rounded-2xl bg-white shadow-xs"
+        className="relative flex-1 min-h-0 overflow-y-auto border border-gray-200 rounded-2xl bg-white shadow-xs pb-72 scrollbar-thin"
       >
         <LiveCurrentTimeLine timelineMode={timelineMode} containerRef={containerRef} rowRefs={rowRefs} />
 
@@ -496,9 +525,16 @@ export default function TimelineMain({
             </button>
           </div>
         )}
+
+        {/* 🚀 最下部タイムラインが下部ドックおよび逃げたFABボタンの裏に隠れないための十分なボトムスペーサー */}
+        <div className="h-96 shrink-0 pointer-events-none" />
       </div>
 
-      <PendingTray pendingTasks={pendingTasks} onTaskClick={setActivePopupTaskId} />
+      <PendingTray 
+        progressingTasks={isMobile ? extractUserProgressingTasks(storeAllTasks, userName) : []}
+        pendingTasks={pendingTasks} 
+        onTaskClick={setActivePopupTaskId} 
+      />
       
       {/* メモ管理ポップアップ */}
       <MemoManager />
@@ -571,7 +607,8 @@ export default function TimelineMain({
         <button
           type="button"
           onClick={() => setActiveMemoTime(new Date().toTimeString().slice(0, 5))}
-          className="fixed bottom-16 right-4 z-40 md:hidden bg-amber-400 hover:bg-amber-500 text-amber-950 p-3.5 rounded-full shadow-2xl flex items-center justify-center font-black active:scale-95 transition-transform border-2 border-amber-300 cursor-pointer"
+          className="fixed right-4 z-[60] md:hidden bg-amber-400 hover:bg-amber-500 text-amber-950 p-3.5 rounded-full shadow-2xl flex items-center justify-center font-black active:scale-95 transition-all duration-300 ease-in-out border-2 border-amber-300 cursor-pointer"
+          style={fabBottomStyle}
           title="メモを追加"
         >
           <span className="material-symbols-outlined text-2xl">add_notes</span>

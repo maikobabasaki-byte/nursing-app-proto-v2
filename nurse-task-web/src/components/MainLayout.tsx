@@ -2,6 +2,7 @@ import React from "react";
 import GlobalHeader from "./GlobalHeader";
 import GlobalFooter from "./GlobalFooter";
 import BottomNav from "./BottomNav";
+import { useTheme } from "../hooks/useTheme";
 
 interface MainLayoutProps {
   children: React.ReactNode; 
@@ -10,18 +11,26 @@ interface MainLayoutProps {
 }
 
 export default function MainLayout({ children, currentScreen, onNavigate }: MainLayoutProps) {
+  const { currentConfig } = useTheme();
+
   return (
-    <div className="h-screen flex flex-col bg-gray-50 overflow-hidden relative">
+    <div
+      className="h-screen flex flex-col overflow-hidden relative transition-colors duration-300"
+      style={{ backgroundColor: currentConfig.bgColor }}
+    >
       {/* ログイン後の共通ヘッダー */}
       <GlobalHeader currentPage={currentScreen} onNavigate={onNavigate} /> 
       
       {/* メイン中身（モバイル表示時はボトムナビゲーションの高さを考慮した pb-14、PC表示時は pb-0） */}
-      <div className="flex-1 min-h-0 overflow-hidden w-full flex flex-col pb-14 md:pb-0">
+      <div
+        className="flex-1 min-h-0 overflow-hidden w-full flex flex-col pb-14 md:pb-0 transition-colors duration-300"
+        style={{ backgroundColor: currentConfig.bgColor }}
+      >
         {children}
       </div>
       
       {/* 💻 PC版フッター（md以上で表示、モバイルでは非表示） */}
-      <div className="hidden md:block shrink-0">
+      <div className="hidden md:block shrink-0 relative z-30">
         <GlobalFooter onNavigate={onNavigate} />
       </div>
 

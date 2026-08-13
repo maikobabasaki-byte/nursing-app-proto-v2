@@ -1,7 +1,17 @@
 import { initializeApp } from "firebase/app";
 import { getAuth } from "firebase/auth";
 import { getAnalytics } from "firebase/analytics";
-import { getFirestore, doc, updateDoc, setDoc, runTransaction, collection, serverTimestamp } from "firebase/firestore"; 
+import { 
+  getFirestore, 
+  doc, 
+  updateDoc, 
+  setDoc, 
+  runTransaction, 
+  collection, 
+  serverTimestamp,
+  enableMultiTabIndexedDbPersistence,
+  enableIndexedDbPersistence
+} from "firebase/firestore"; 
 import type { TaskStatus, LeaderTodo } from '../types/types';
 
 const firebaseConfig = {
@@ -18,6 +28,19 @@ const app = initializeApp(firebaseConfig);
 const analytics = getAnalytics(app);
 export const auth = getAuth(app); 
 export const db = getFirestore(app);
+
+// 💡 Firestoreのオフラインキャッシュ（IndexedDB永続化）を有効化
+if (typeof window !== 'undefined') {
+  enableMultiTabIndexedDbPersistence(db).catch((err) => {
+    if (err.code === 'failed-precondition') {
+      // 複数タブが開かれている場合、単一タブ用にフォールバック
+      enableIndexedDbPersistence(db).catch(() => {});
+    } else if (err.code === 'unimplemented') {
+      console.warn("⚠️ 現在のブラウザ環境はIndexedDBオフラインキャッシュに対応していません。");
+    }
+  });
+}
+
 export { app, analytics };
 
 export interface RespondSosResult {

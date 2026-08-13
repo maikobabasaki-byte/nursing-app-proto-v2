@@ -102,6 +102,7 @@ interface TimelineStore {
   duplicateTask: (taskId: string, targetPeriod?: string, customNote?: string) => Promise<ExtendedTask | null>;
   deleteTask: (taskId: string) => Promise<void>;
   resetAdditionalTasks: () => Promise<number>;
+  resetStoreData: () => void;
 }
 
 const removeUndefined = (obj: any): any => {
@@ -252,6 +253,20 @@ export const useTimelineStore = create<TimelineStore>((set, get) => ({
   activeMemoTime: null,
   editingMemo: null,
   newMemoText: "",
+
+  resetStoreData: () => set({
+    allTasks: [],
+    memos: [],
+    nurseMaster: [],
+    nurses: [],
+    leaderTodos: [],
+    currentUser: null,
+    selectedPatients: [],
+    activeId: null,
+    activePopupTaskId: null,
+    activeMemoTime: null,
+    editingMemo: null,
+  }),
 
   addDemoTask: () => {
     const demoTask: ExtendedTask = {

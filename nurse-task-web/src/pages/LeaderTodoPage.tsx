@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useTimelineStore } from '../stores/useTimelineStore';
 import type { LeaderTodo, LeaderTodoPriority } from '../types/types';
-import { LeaderTodoModal } from '../components/LeaderTodoModal';
-import { LeaderTodoResultModal } from '../components/LeaderTodoResultModal';
+import { LeaderTodoModal } from '../components/LeaderTodoPage/LeaderTodoModal';
+import { LeaderTodoResultModal } from '../components/LeaderTodoPage/LeaderTodoResultModal';
 import { calculateLeaderTodoProgress } from '../utils/progressCalculator';
 import { collection, onSnapshot } from 'firebase/firestore';
 import { db } from '../lib/firebase';
@@ -30,6 +30,7 @@ export const LeaderTodoPage: React.FC = () => {
   const [resultModalTodo, setResultModalTodo] = useState<LeaderTodo | null>(null);
   const [selectedTodoId, setSelectedTodoId] = useState<string | null>(null);
   const [filterPriority, setFilterPriority] = useState<string>('all'); // all | urgent | high | medium
+  const [activeTodoTab, setActiveTodoTab] = useState<'patients' | 'active' | 'completed'>('active');
 
   // Firestoreの leader_todos コレクションをリアルタイム監視（論理削除済みを除外）
   useEffect(() => {
@@ -191,21 +192,254 @@ export const LeaderTodoPage: React.FC = () => {
     );
   }
 
+  // 💡 各カラムの描画関数（PC・タブレット共通）
+  const renderPatientsColumn = () => (
+    <div className="w-full h-full bg-white rounded-2xl border border-gray-200 shadow-sm flex flex-col overflow-hidden">
+      <div className="bg-gray-50 border-b border-gray-200 p-3.5 flex items-center justify-between">
+        <h2 className="font-extrabold text-sm text-gray-800 flex items-center gap-1.5">
+          <span>🏥 患者リスト</span>
+          <span className="text-xs bg-indigo-100 text-indigo-800 font-black px-2 py-0.5 rounded-full">
+            {patients.length}名
+          </span>
+        </h2>
+        <span className="text-[10px] text-gray-500 font-bold">クリックでTODO作成</span>
+      </div>
+
+      <div className="flex-1 overflow-y-auto p-3 flex flex-col gap-2">
+        {patients.map((patient) => {
+          const patientTodoCount = leaderTodos.filter((t) => {
+            if (t.patient_id !== patient.patient_id || t.is_deleted || t.status === 'deleted') return false;
+            if (!currentUser) return true;
+            if (t.nurse_id || t.user_id) {
+              return t.nurse_id === currentUser.nurse_id || 
+                     t.user_id === currentUser.nurse_id || 
+                     t.nurse_id === currentUser.email || 
+                     t.user_id === currentUser.email;
+            }
+            return t.updated_by === currentUser.name;
+          }).length;
+          return (
+            <div
+              key={patient.patient_id}
+              onClick={() => setSelectedPatientForModal(patient)}
+              className="bg-white hover:bg-indigo-50/60 border border-gray-200 hover:border-indigo-300 rounded-xl p-3 shadow-xs hover:shadow-md transition-all cursor-pointer flex items-center justify-between group"
+            >
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-lg bg-indigo-100 text-indigo-900 font-extrabold text-xs flex items-center justify-center border border-indigo-200 group-hover:bg-indigo-600 group-hover:text-white transition-colors">
+                  {patient.room_id}
+                </div>
+                <div>
+                  <div className="font-extrabold text-sm text-gray-900 group-hover:text-indigo-900 transition-colors">
+                    {patient.name} 様
+                  </div>
+                  <div className="text-[11px] text-gray-500 font-medium">
+                    部屋: {patient.room_id}号室
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2">
+                {patientTodoCount > 0 && (
+                  <span className="bg-indigo-600 text-white text-[10px] font-black px-2 py-0.5 rounded-full shadow-xs">
+                    TODO {patientTodoCount}
+                  </span>
+                )}
+                <span className="text-indigo-600 font-black text-sm group-hover:translate-x-0.5 transition-transform">
+                  ＋
+                </span>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+
+  const renderActiveTodosColumn = () => (
+    <div className="w-full h-full bg-white rounded-2xl border border-gray-200 shadow-sm flex flex-col overflow-hidden">
+      <div className="bg-gray-50 border-b border-gray-200 p-3.5 flex items-center justify-between">
+        <h2 className="font-extrabold text-sm text-gray-800 flex items-center gap-1.5">
+          <span>⏱️ 未対応・対応中TODO</span>
+          <span className="text-xs bg-indigo-100 text-indigo-800 font-black px-2 py-0.5 rounded-full">
+            {activeTodos.length}件
+          </span>
+        </h2>
+        <span className="text-[10px] text-gray-500 font-bold">カードクリックで対応結果入力</span>
+      </div>
+
+      <div className="flex-1 overflow-y-auto p-3 flex flex-col gap-2.5">
+        {activeTodos.length === 0 ? (
+          <div className="flex flex-col items-center justify-center h-64 text-gray-400">
+            <span className="text-4xl mb-2">🎉</span>
+            <p className="text-xs font-bold">現在未対応のリーダーTODOはありません</p>
+            <p className="text-[11px] text-gray-400 mt-1">対応済みのタスクは右側エリアに保存されます</p>
+          </div>
+        ) : (
+          activeTodos.map((todo) => {
+            return (
+              <div
+                key={todo.todo_id}
+                onClick={() => setResultModalTodo(todo)}
+                className="border-2 border-gray-200 hover:border-indigo-400 bg-white hover:bg-indigo-50/40 rounded-xl p-3.5 transition-all cursor-pointer flex flex-col gap-2 relative shadow-xs hover:shadow-md group"
+              >
+                {/* カードヘッダー */}
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className="bg-indigo-900 text-white font-extrabold text-xs px-2.5 py-0.5 rounded-md">
+                      ⏰ {todo.scheduled_at || '随時'}
+                    </span>
+                    <span className="text-xs font-black text-indigo-950 bg-indigo-100 px-2 py-0.5 rounded">
+                      {todo.category}
+                    </span>
+                    {getPriorityBadge(todo.priority)}
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    {getStatusBadge(todo.status)}
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setEditingTodo(todo);
+                      }}
+                      className="!bg-white hover:!bg-gray-100 !text-gray-700 !border !border-gray-300 !text-[11px] !font-extrabold !px-2 !py-0.5 !rounded-md !shadow-sm hover:!shadow !transition-all !cursor-pointer !flex !items-center !gap-1"
+                    >
+                      <span>✏️</span>
+                      <span>編集</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* 患者名 ＆ 部屋番号 */}
+                <div className="flex items-center justify-between pt-1">
+                  <div className="font-extrabold text-sm text-gray-900 flex items-center gap-2">
+                    <span>{todo.patient_name} 様</span>
+                    <span className="text-xs font-bold text-gray-500 bg-gray-100 px-2 py-0.5 rounded border border-gray-200">
+                      {todo.room_id}号室
+                    </span>
+                  </div>
+
+                  {todo.requires_double_check && (
+                    <span className="bg-amber-100 text-amber-900 border border-amber-300 text-[10px] font-black px-2 py-0.5 rounded-full flex items-center gap-1">
+                      ⚠️ ダブルチェック要
+                    </span>
+                  )}
+                </div>
+
+                {/* タイトル本文 */}
+                <div className="text-xs text-gray-800 font-medium leading-relaxed bg-gray-50/80 p-2.5 rounded-lg border border-gray-100">
+                  {todo.title}
+                </div>
+
+                {/* アクション呼び出しフッターボタン */}
+                <div className="pt-1 flex items-center justify-end">
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setResultModalTodo(todo);
+                    }}
+                    className="!bg-indigo-700 group-hover:!bg-indigo-800 !text-white !font-extrabold !text-xs !px-3.5 !py-1.5 !rounded-lg !shadow-sm hover:!shadow !transition-all !cursor-pointer !flex !items-center !gap-1.5"
+                  >
+                    <span>✍️</span>
+                    <span>対応入力・結果記録</span>
+                  </button>
+                </div>
+              </div>
+            );
+          })
+        )}
+      </div>
+    </div>
+  );
+
+  const renderCompletedTodosColumn = () => (
+    <div className="w-full h-full bg-white rounded-2xl border border-gray-200 shadow-sm flex flex-col overflow-hidden">
+      <div className="bg-emerald-800 text-white p-3.5 flex items-center justify-between shadow-xs">
+        <h2 className="font-extrabold text-sm flex items-center gap-1.5">
+          <span>✅ 本日対応済み・完了TODO</span>
+          <span className="text-xs bg-white text-emerald-900 font-black px-2 py-0.5 rounded-full">
+            {completedTodos.length}件
+          </span>
+        </h2>
+        <span className="text-[10px] text-emerald-200 font-bold">対応完了履歴</span>
+      </div>
+
+      <div className="flex-1 overflow-y-auto p-3 flex flex-col gap-3 bg-emerald-50/20">
+        {completedTodos.length === 0 ? (
+          <div className="flex flex-col items-center justify-center h-64 text-gray-400">
+            <span className="text-4xl mb-2">📑</span>
+            <p className="text-xs font-bold">本日対応済みのTODOはまだありません</p>
+            <p className="text-[11px] text-gray-400 mt-1">対応・記録を入力したTODOがここに集約されます</p>
+          </div>
+        ) : (
+          completedTodos.map((todo) => (
+            <div
+              key={todo.todo_id}
+              className="bg-white border border-emerald-200 rounded-xl p-3 shadow-xs flex flex-col gap-2 relative hover:border-emerald-400 transition-all"
+            >
+              <div className="flex items-center justify-between">
+                <span className="bg-emerald-100 text-emerald-950 font-extrabold text-[11px] px-2 py-0.5 rounded">
+                  🟢 実施完了
+                </span>
+                <div className="flex items-center gap-1.5">
+                  <span className="text-[11px] font-black text-gray-600 bg-gray-100 px-2 py-0.5 rounded">
+                    ⏰ {todo.scheduled_at || '随時'}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setResultModalTodo(todo)}
+                    className="!bg-emerald-50 hover:!bg-emerald-100 !text-emerald-800 !border !border-emerald-200 !text-[10px] !font-bold !px-2 !py-0.5 !rounded !cursor-pointer !transition-colors"
+                  >
+                    ✏️ 記録再編集
+                  </button>
+                </div>
+              </div>
+
+              <div className="font-black text-xs text-gray-900 flex items-center justify-between">
+                <span>{todo.patient_name} 様</span>
+                <span className="text-[10px] font-bold text-gray-500">{todo.room_id}号室</span>
+              </div>
+
+              <div className="text-xs font-bold text-gray-700 bg-gray-50 p-2 rounded-lg border border-gray-100">
+                📌 {todo.title}
+              </div>
+
+              {todo.result_outcome && (
+                <div className="text-[11px] font-bold text-emerald-900 bg-emerald-50 p-2 rounded-lg border border-emerald-200/60 flex flex-col gap-0.5">
+                  <span className="text-[10px] font-black text-emerald-700">💡 結果・方針記録:</span>
+                  <span className="leading-relaxed">{todo.result_outcome}</span>
+                </div>
+              )}
+
+              {todo.doctor_instructions && (
+                <div className="text-[11px] font-bold text-indigo-900 bg-indigo-50 p-2 rounded-lg border border-indigo-200/60 flex flex-col gap-0.5">
+                  <span className="text-[10px] font-black text-indigo-700">🩺 医師指示メモ:</span>
+                  <span className="leading-relaxed">{todo.doctor_instructions}</span>
+                </div>
+              )}
+            </div>
+          ))
+        )}
+      </div>
+    </div>
+  );
+
   return (
     <div className="flex-1 bg-gray-100 flex flex-col h-[calc(100vh-64px)] overflow-hidden">
       {/* 画面サブヘッダー */}
-      <div className="bg-indigo-900 text-white px-6 py-3 shadow-md flex items-center justify-between flex-shrink-0">
-        <div className="flex items-center gap-3">
-          <span className="text-2xl">📋</span>
+      <div className="bg-indigo-900 text-white px-3 sm:px-6 py-2.5 sm:py-3 shadow-md flex items-center justify-between flex-shrink-0">
+        <div className="flex items-center gap-2 sm:gap-3">
+          <span className="text-xl sm:text-2xl">📋</span>
           <div>
-            <h1 className="font-black text-lg leading-tight">リーダー用TODO ＆ 申し送り・方向性管理</h1>
-            <p className="text-[11px] text-indigo-200">全優先度（最優先・高・中・低）のリーダーTODOを一括管理・経過結果記録</p>
+            <h1 className="font-black text-sm sm:text-lg leading-tight">リーダー用TODO ＆ 申し送り・方向性管理</h1>
+            <p className="text-[11px] text-indigo-200 hidden sm:block">全優先度（最優先・高・中・低）のリーダーTODOを一括管理・経過結果記録</p>
           </div>
         </div>
 
-        <div className="flex items-center gap-4">
-          {/* 📊 計画進捗率プログレスバー */}
-          <div className="flex items-center gap-3 bg-indigo-950/80 px-3.5 py-1.5 rounded-xl border border-indigo-700/60 shadow-inner">
+        <div className="flex items-center gap-2 sm:gap-4">
+          {/* 📊 計画進捗率プログレスバー (PC・タブレット表示) */}
+          <div className="hidden md:flex items-center gap-3 bg-indigo-950/80 px-3.5 py-1.5 rounded-xl border border-indigo-700/60 shadow-inner">
             <div className="flex flex-col text-right">
               <span className="text-[10px] font-bold text-indigo-300">タイムライン計画進捗</span>
               <span className="text-xs font-black text-emerald-400">
@@ -220,8 +454,22 @@ export const LeaderTodoPage: React.FC = () => {
             </div>
           </div>
 
-          {/* 優先度クイックフィルター */}
-          <div className="flex items-center gap-2 bg-indigo-950/60 p-1.5 rounded-xl border border-indigo-700/50">
+          {/* 優先度クイックフィルター（スマホ幅はドロップダウン、PC幅はボタン並び） */}
+          <div className="sm:hidden">
+            <select
+              value={filterPriority}
+              onChange={(e) => setFilterPriority(e.target.value)}
+              className="bg-indigo-950 text-indigo-100 text-xs font-extrabold px-2.5 py-1 rounded-lg border border-indigo-700 focus:outline-none cursor-pointer"
+            >
+              <option value="all">優先度: すべて</option>
+              <option value="highest">🔴 最優先</option>
+              <option value="high">🟧 高</option>
+              <option value="medium">🟨 中</option>
+              <option value="low">🟦 低</option>
+            </select>
+          </div>
+
+          <div className="hidden sm:flex items-center gap-2 bg-indigo-950/60 p-1.5 rounded-xl border border-indigo-700/50">
             <span className="text-xs font-bold text-indigo-200 px-2">優先度:</span>
             {['all', 'highest', 'high', 'medium', 'low'].map((pKey) => (
               <button
@@ -264,235 +512,62 @@ export const LeaderTodoPage: React.FC = () => {
         </div>
       )}
 
-      {/* 3分割メインコンテンツエリア */}
-      <div className="flex-1 flex overflow-hidden gap-2">
-        {/* ─── 【左カラム: 28%】患者選択 ＆ TODO作成 ─── */}
-        <div className="w-[28%] bg-white rounded-2xl border border-gray-200 shadow-sm flex flex-col overflow-hidden">
-          <div className="bg-gray-50 border-b border-gray-200 p-3.5 flex items-center justify-between">
-            <h2 className="font-extrabold text-sm text-gray-800 flex items-center gap-1.5">
-              <span>🏥 患者リスト</span>
-              <span className="text-xs bg-indigo-100 text-indigo-800 font-black px-2 py-0.5 rounded-full">
-                {patients.length}名
-              </span>
-            </h2>
-            <span className="text-[10px] text-gray-500 font-bold">クリックでTODO作成</span>
-          </div>
+      {/* 📱 タブレット・モバイル幅（lg未満）専用手帳風インデックスタブバー */}
+      <div className="lg:!hidden !flex !items-end !px-3 !pt-2 !bg-slate-200/80 !border-b-2 !border-indigo-600 !gap-1 !shrink-0 !select-none">
+        <button
+          type="button"
+          onClick={() => setActiveTodoTab('patients')}
+          className={`!px-3 !py-2 !rounded-t-xl !transition-all !cursor-pointer !flex !items-center !gap-1 !border-t-2 !border-x-2 ${
+            activeTodoTab === 'patients'
+              ? '!bg-white !text-indigo-950 !font-black !border-indigo-600 !shadow-md !z-10 !-mb-[2px] !pt-2.5 !pb-2'
+              : 'bg-slate-100 text-slate-600 hover:bg-slate-50 font-bold border-slate-300 border-b border-b-indigo-600 py-1.5'
+          }`}
+        >
+          <span>患者選択 ({patients.length})</span>
+        </button>
 
-          <div className="flex-1 overflow-y-auto p-3 flex flex-col gap-2">
-            {patients.map((patient) => {
-              const patientTodoCount = leaderTodos.filter((t) => {
-                if (t.patient_id !== patient.patient_id || t.is_deleted || t.status === 'deleted') return false;
-                if (!currentUser) return true;
-                if (t.nurse_id || t.user_id) {
-                  return t.nurse_id === currentUser.nurse_id || 
-                         t.user_id === currentUser.nurse_id || 
-                         t.nurse_id === currentUser.email || 
-                         t.user_id === currentUser.email;
-                }
-                return t.updated_by === currentUser.name;
-              }).length;
-              return (
-                <div
-                  key={patient.patient_id}
-                  onClick={() => setSelectedPatientForModal(patient)}
-                  className="bg-white hover:bg-indigo-50/60 border border-gray-200 hover:border-indigo-300 rounded-xl p-3 shadow-xs hover:shadow-md transition-all cursor-pointer flex items-center justify-between group"
-                >
-                  <div className="flex items-center gap-3">
-                    <div className="w-9 h-9 rounded-lg bg-indigo-100 text-indigo-900 font-extrabold text-xs flex items-center justify-center border border-indigo-200 group-hover:bg-indigo-600 group-hover:text-white transition-colors">
-                      {patient.room_id}
-                    </div>
-                    <div>
-                      <div className="font-extrabold text-sm text-gray-900 group-hover:text-indigo-900 transition-colors">
-                        {patient.name} 様
-                      </div>
-                      <div className="text-[11px] text-gray-500 font-medium">
-                        部屋: {patient.room_id}号室
-                      </div>
-                    </div>
-                  </div>
+        <button
+          type="button"
+          onClick={() => setActiveTodoTab('active')}
+          className={`!px-3 !py-2 !rounded-t-xl !transition-all !cursor-pointer !flex !items-center !gap-1 !border-t-2 !border-x-2 ${
+            activeTodoTab === 'active'
+              ? '!bg-white !text-indigo-950 !font-black !border-indigo-600 !shadow-md !z-10 !-mb-[2px] !pt-2.5 !pb-2'
+              : '!bg-slate-100 !text-slate-600 hover:!bg-slate-50 !font-bold !border-slate-300 !border-b !py-1.5'
+          }`}
+        >
+          <span> 未対応TODO ({activeTodos.length})</span>
+        </button>
 
-                  <div className="flex items-center gap-2">
-                    {patientTodoCount > 0 && (
-                      <span className="bg-indigo-600 text-white text-[10px] font-black px-2 py-0.5 rounded-full shadow-xs">
-                        TODO {patientTodoCount}
-                      </span>
-                    )}
-                    <span className="text-indigo-600 font-black text-sm group-hover:translate-x-0.5 transition-transform">
-                      ＋
-                    </span>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
+        <button
+          type="button"
+          onClick={() => setActiveTodoTab('completed')}
+          className={`!px-3 !py-2 !rounded-t-xl !transition-all !cursor-pointer !flex !items-center !gap-1 !border-t-2 !border-x-2 ${
+            activeTodoTab === 'completed'
+              ? '!bg-white !text-emerald-950 !font-black !border-emerald-600 !shadow-md !z-10 !-mb-[2px] !pt-2.5 !pb-2'
+              : '!bg-slate-100 !text-slate-600 hover:!bg-slate-50 !font-bold !border-slate-300 !border-b !py-1.5'
+          }`}
+        >
+          <span>完了履歴 ({completedTodos.length})</span>
+        </button>
+      </div>
+
+      {/* 📱 タブレット・モバイル幅（lg未満）の単一セクション表示領域 */}
+      <div className="lg:!hidden !flex-1 !min-h-0 !w-full !overflow-hidden !p-2.5 !bg-slate-100">
+        {activeTodoTab === 'patients' && renderPatientsColumn()}
+        {activeTodoTab === 'active' && renderActiveTodosColumn()}
+        {activeTodoTab === 'completed' && renderCompletedTodosColumn()}
+      </div>
+
+      {/* 💻 PC幅（lg以上）従来通りの三分割（3カラム） simultaneous 表示レイアウト */}
+      <div className="hidden lg:flex flex-1 min-h-0 overflow-hidden gap-1">
+        <div className="w-[28%] h-full">
+          {renderPatientsColumn()}
         </div>
-
-        {/* ─── 【中央カラム: 44%】未対応・対応中TODOタイムライン ─── */}
-        <div className="w-[44%] bg-white rounded-2xl border border-gray-200 shadow-sm flex flex-col overflow-hidden">
-          <div className="bg-gray-50 border-b border-gray-200 p-3.5 flex items-center justify-between">
-            <h2 className="font-extrabold text-sm text-gray-800 flex items-center gap-1.5">
-              <span>⏱️ 未対応・対応中TODO</span>
-              <span className="text-xs bg-indigo-100 text-indigo-800 font-black px-2 py-0.5 rounded-full">
-                {activeTodos.length}件
-              </span>
-            </h2>
-            <span className="text-[10px] text-gray-500 font-bold">カードクリックで対応結果入力</span>
-          </div>
-
-          <div className="flex-1 overflow-y-auto p-3 flex flex-col gap-2.5">
-            {activeTodos.length === 0 ? (
-              <div className="flex flex-col items-center justify-center h-64 text-gray-400">
-                <span className="text-4xl mb-2">🎉</span>
-                <p className="text-xs font-bold">現在未対応のリーダーTODOはありません</p>
-                <p className="text-[11px] text-gray-400 mt-1">対応済みのタスクは右側エリアに保存されます</p>
-              </div>
-            ) : (
-              activeTodos.map((todo) => {
-                return (
-                  <div
-                    key={todo.todo_id}
-                    onClick={() => setResultModalTodo(todo)}
-                    className="border-2 border-gray-200 hover:border-indigo-400 bg-white hover:bg-indigo-50/40 rounded-xl p-3.5 transition-all cursor-pointer flex flex-col gap-2 relative shadow-xs hover:shadow-md group"
-                  >
-                    {/* カードヘッダー */}
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <span className="bg-indigo-900 text-white font-extrabold text-xs px-2.5 py-0.5 rounded-md">
-                          ⏰ {todo.scheduled_at || '随時'}
-                        </span>
-                        <span className="text-xs font-black text-indigo-950 bg-indigo-100 px-2 py-0.5 rounded">
-                          {todo.category}
-                        </span>
-                        {getPriorityBadge(todo.priority)}
-                      </div>
-
-                      <div className="flex items-center gap-2">
-                        {getStatusBadge(todo.status)}
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setEditingTodo(todo);
-                          }}
-                          className="!bg-white hover:!bg-gray-100 !text-gray-700 !border !border-gray-300 !text-[11px] !font-extrabold !px-2 !py-0.5 !rounded-md !shadow-sm hover:!shadow !transition-all !cursor-pointer !flex !items-center !gap-1"
-                        >
-                          <span>✏️</span>
-                          <span>編集</span>
-                        </button>
-                      </div>
-                    </div>
-
-                    {/* 患者名 ＆ 部屋番号 */}
-                    <div className="flex items-center justify-between pt-1">
-                      <div className="font-extrabold text-sm text-gray-900 flex items-center gap-2">
-                        <span>{todo.patient_name} 様</span>
-                        <span className="text-xs font-bold text-gray-500 bg-gray-100 px-2 py-0.5 rounded border border-gray-200">
-                          {todo.room_id}号室
-                        </span>
-                      </div>
-
-                      {todo.requires_double_check && (
-                        <span className="bg-amber-100 text-amber-900 border border-amber-300 text-[10px] font-black px-2 py-0.5 rounded-full flex items-center gap-1">
-                          ⚠️ ダブルチェック要
-                        </span>
-                      )}
-                    </div>
-
-                    {/* タイトル本文 */}
-                    <div className="text-xs text-gray-800 font-medium leading-relaxed bg-gray-50/80 p-2.5 rounded-lg border border-gray-100">
-                      {todo.title}
-                    </div>
-
-                    {/* アクション呼び出しフッターボタン */}
-                    <div className="pt-1 flex items-center justify-end">
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setResultModalTodo(todo);
-                        }}
-                        className="!bg-indigo-700 group-hover:!bg-indigo-800 !text-white !font-extrabold !text-xs !px-3.5 !py-1.5 !rounded-lg !shadow-sm hover:!shadow !transition-all !cursor-pointer !flex !items-center !gap-1.5"
-                      >
-                        <span>✍️</span>
-                        <span>対応入力・結果記録</span>
-                      </button>
-                    </div>
-                  </div>
-                );
-              })
-            )}
-          </div>
+        <div className="w-[44%] h-full">
+          {renderActiveTodosColumn()}
         </div>
-
-        {/* ─── 【右カラム: 28%】本日対応済み・完了TODO集約エリア ─── */}
-        <div className="w-[28%] bg-white rounded-2xl border border-gray-200 shadow-sm flex flex-col overflow-hidden">
-          <div className="bg-emerald-800 text-white p-3.5 flex items-center justify-between shadow-xs">
-            <h2 className="font-extrabold text-sm flex items-center gap-1.5">
-              <span>✅ 本日対応済み・完了TODO</span>
-              <span className="text-xs bg-white text-emerald-900 font-black px-2 py-0.5 rounded-full">
-                {completedTodos.length}件
-              </span>
-            </h2>
-            <span className="text-[10px] text-emerald-200 font-bold">対応完了履歴</span>
-          </div>
-
-          <div className="flex-1 overflow-y-auto p-3 flex flex-col gap-3 bg-emerald-50/20">
-            {completedTodos.length === 0 ? (
-              <div className="flex flex-col items-center justify-center h-64 text-gray-400">
-                <span className="text-4xl mb-2">📑</span>
-                <p className="text-xs font-bold">本日対応済みのTODOはまだありません</p>
-                <p className="text-[11px] text-gray-400 mt-1">対応・記録を入力したTODOがここに集約されます</p>
-              </div>
-            ) : (
-              completedTodos.map((todo) => (
-                <div
-                  key={todo.todo_id}
-                  className="bg-white border border-emerald-200 rounded-xl p-3 shadow-xs flex flex-col gap-2 relative hover:border-emerald-400 transition-all"
-                >
-                  <div className="flex items-center justify-between">
-                    <span className="bg-emerald-100 text-emerald-950 font-extrabold text-[11px] px-2 py-0.5 rounded">
-                      🟢 実施完了
-                    </span>
-                    <div className="flex items-center gap-1.5">
-                      <span className="text-[11px] font-black text-gray-600 bg-gray-100 px-2 py-0.5 rounded">
-                        ⏰ {todo.scheduled_at || '随時'}
-                      </span>
-                      <button
-                        type="button"
-                        onClick={() => setResultModalTodo(todo)}
-                        className="!bg-emerald-50 hover:!bg-emerald-100 !text-emerald-800 !border !border-emerald-200 !text-[10px] !font-bold !px-2 !py-0.5 !rounded !cursor-pointer !transition-colors"
-                      >
-                        ✏️ 記録再編集
-                      </button>
-                    </div>
-                  </div>
-
-                  <div className="font-black text-xs text-gray-900 flex items-center justify-between">
-                    <span>{todo.patient_name} 様</span>
-                    <span className="text-[10px] font-bold text-gray-500">{todo.room_id}号室</span>
-                  </div>
-
-                  <div className="text-xs font-bold text-gray-700 bg-gray-50 p-2 rounded-lg border border-gray-100">
-                    📌 {todo.title}
-                  </div>
-
-                  {todo.result_outcome && (
-                    <div className="text-[11px] font-bold text-emerald-900 bg-emerald-50 p-2 rounded-lg border border-emerald-200/60 flex flex-col gap-0.5">
-                      <span className="text-[10px] font-black text-emerald-700">💡 結果・方針記録:</span>
-                      <span className="leading-relaxed">{todo.result_outcome}</span>
-                    </div>
-                  )}
-
-                  {todo.doctor_instructions && (
-                    <div className="text-[11px] font-bold text-indigo-900 bg-indigo-50 p-2 rounded-lg border border-indigo-200/60 flex flex-col gap-0.5">
-                      <span className="text-[10px] font-black text-indigo-700">🩺 医師指示メモ:</span>
-                      <span className="leading-relaxed">{todo.doctor_instructions}</span>
-                    </div>
-                  )}
-                </div>
-              ))
-            )}
-          </div>
+        <div className="w-[28%] h-full">
+          {renderCompletedTodosColumn()}
         </div>
       </div>
 
@@ -501,6 +576,11 @@ export const LeaderTodoPage: React.FC = () => {
         <LeaderTodoModal
           patient={selectedPatientForModal}
           onClose={() => setSelectedPatientForModal(null)}
+          onSuccess={() => {
+            setActiveTodoTab('active'); // 🎯 新規TODO作成完了時：「未対応TODO」タブへ自動切替！
+            setSaveSuccessNotice('✨ 【登録完了】 新規リーダーTODOを作成しました！未対応TODOタブへ移動しました');
+            setTimeout(() => setSaveSuccessNotice(null), 3500);
+          }}
         />
       )}
 
@@ -509,6 +589,11 @@ export const LeaderTodoPage: React.FC = () => {
         <LeaderTodoModal
           todoToEdit={editingTodo}
           onClose={() => setEditingTodo(null)}
+          onSuccess={() => {
+            setActiveTodoTab('active'); // 🎯 TODO編集完了時：「未対応TODO」タブへ自動切替
+            setSaveSuccessNotice('✨ 【更新完了】 リーダーTODOの変更内容を保存しました！');
+            setTimeout(() => setSaveSuccessNotice(null), 3500);
+          }}
           onDeleteSuccess={() => {
             setSelectedTodoId(null);
             setSaveSuccessNotice('✨ 【削除完了】 リーダーTODOを削除（画面から非表示）しました！');
@@ -523,7 +608,8 @@ export const LeaderTodoPage: React.FC = () => {
           todo={resultModalTodo}
           onClose={() => setResultModalTodo(null)}
           onSuccess={() => {
-            setSaveSuccessNotice('✨ 【対応結果保存】 TODOの対応結果・方針を記録しました！');
+            setActiveTodoTab('completed'); // 🎯 対応結果・完了記録時：「完了履歴」タブへ自動切替！
+            setSaveSuccessNotice('✨ 【対応結果保存】 TODOの対応結果・方針を記録しました！完了履歴タブへ移動しました');
             setTimeout(() => setSaveSuccessNotice(null), 3500);
           }}
         />
