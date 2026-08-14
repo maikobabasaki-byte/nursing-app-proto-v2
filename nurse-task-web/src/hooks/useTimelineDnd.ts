@@ -4,6 +4,7 @@ import { useSensors, useSensor, MouseSensor, TouchSensor } from '@dnd-kit/core';
 import { useDndCollision } from './useDndCollision';
 import type { ExtendedTask } from '../types/types';
 import { useTimelineStore } from '../stores/useTimelineStore';
+import { validateTaskGrouping } from '../utils/validateTaskGrouping';
 
 interface UseTimelineDndProps {
   selectedPatients: string[];
@@ -76,24 +77,13 @@ export function useTimelineDnd({ selectedPatients }: UseTimelineDndProps) {
     const targetTask = findTaskRecursive(allTasks, overId);
     const originalTask = draggedTaskRef.current;
 
-    if (originalTask && targetTask && groupingMode !== null) {
-      if (overId !== groupingMode) {
-        alert("選択中のグループ以外のタスクにはまとめられません。");
-        return;
-      }
-
-      // バリデーション：患者チェック
-      if (targetTask.groupType === 'patient' && originalTask.patient_id !== targetTask.patient_id) {
-        alert("異なる患者のタスクをまとめることはできません。");
-        return;
-      }
-
-      // バリデーション：時間帯（AM/PM）チェック
-      const getCat = (p?: string) => (p === '午前' ? 'AM' : p === '午後' ? 'PM' : 'ANY');
-      if (getCat(originalTask.display_period) !== 'ANY' && 
-          getCat(targetTask.display_period) !== 'ANY' && 
-          getCat(originalTask.display_period) !== getCat(targetTask.display_period)) {
-        alert(`区分が異なるタスク（${originalTask.display_period} と ${targetTask.display_period}）をグループ化できません。`);
+    if (originalTask && targetTask) {
+      const validation = validateTaskGrouping(originalTask, targetTask, groupingMode);
+      if (!validation.canGroup) {
+        if (validation.reason) {
+          alert(validation.reason);
+        }
+        draggedTaskRef.current = null;
         return;
       }
 

@@ -87,6 +87,7 @@ export interface TaskDocument {
   unexecuted_reason?: string;
   updated_by?: string;
   category?: string;
+  target_date?: string;
 }
 
 export interface Patient {

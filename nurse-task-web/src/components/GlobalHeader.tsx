@@ -55,6 +55,11 @@ export default function GlobalHeader({ currentPage, onNavigate}: GlobalHeaderPro
   const isLeader = currentUser?.is_leader === true;
   const { theme, currentConfig } = useTheme();
 
+  const selectedDate = useTimelineStore((state) => state.selectedDate);
+  const activeDates = useTimelineStore((state) => state.activeDates || []);
+  const isReadOnly = useTimelineStore((state) => state.isReadOnly);
+  const setSelectedDate = useTimelineStore((state) => state.setSelectedDate);
+
   const isMasterActive = currentPage === 'patientMaster' || currentPage === 'patientSelect';
   const inactiveIcons = INACTIVE_NAV_ICONS[theme] || INACTIVE_NAV_ICONS.vital;
   const logoutIconSrc = LOGOUT_ICONS[theme] || LOGOUT_ICONS.vital;
@@ -67,23 +72,96 @@ export default function GlobalHeader({ currentPage, onNavigate}: GlobalHeaderPro
     }
   };
 
+  const formatOptionDateLabel = (dateStr: string) => {
+    const parts = dateStr.split('-');
+    const month = parts[1];
+    const day = parts[2];
+    const formatted = `${parseInt(month || '0', 10)}月${parseInt(day || '0', 10)}日`;
+    if (dateStr === new Date().toISOString().split('T')[0]) {
+      return `📅 ${formatted} の記録 (本日)`;
+    }
+    return `📜 ${formatted} の記録 (過去閲覧)`;
+  };
+
   return (
     <header
-      className="flex justify-between items-center p-2 border-b w-full shadow-md transition-colors duration-300 shrink-0"
+      className="flex justify-between items-center p-2 border-b w-full shadow-md transition-colors duration-300 shrink-0 tutorial-header"
       style={{ backgroundColor: currentConfig.mainColor }}
     >
-      <h1 className="cursor-pointer flex items-center" onClick={handleLogoClick}>
-        <img src="/icon_b/local_hospital_48dp.png" alt="NurseFlow Dashboard" className="w-8 h-8 inline mr-2" />
-        <span className="font-bold text-lg transition-colors duration-300" style={{ color: currentConfig.accentColor }}>
-          NurseFlowApp
-        </span>
-      </h1>
+      <div className="flex flex-col lg:flex-row items-start lg:items-center gap-1.5 lg:gap-2">
+        <h1 className="cursor-pointer flex items-center" onClick={handleLogoClick}>
+          <img src="/icon_b/local_hospital_48dp.png" alt="NurseFlow Dashboard" className="w-8 h-8 inline mr-2" />
+          <span className="font-bold text-lg transition-colors duration-300" style={{ color: currentConfig.accentColor }}>
+            NurseFlowApp
+          </span>
+        </h1>
+
+        {/* 📅 タブレット・スマホ対応：日付選択とナースコール対応の縦並び配置エリア */}
+        <div className="flex flex-col lg:flex-row items-start lg:items-center gap-1">
+          <div className="flex items-center gap-1 flex-wrap">
+            <select
+              value={selectedDate}
+              onChange={(e) => setSelectedDate(e.target.value)}
+              className="!bg-white !text-slate-800 !font-extrabold !text-xs !px-2 !py-0.5 !rounded-lg !border !border-slate-300 !shadow-sm !cursor-pointer hover:!bg-slate-50 focus:outline-none focus:ring-2 focus:ring-sky-500"
+              title="表示する記録の日付を選択"
+            >
+              {activeDates.map((d) => (
+                <option key={d} value={d}>
+                  {formatOptionDateLabel(d)}
+                </option>
+              ))}
+            </select>
+
+            {/* 🔒 過去履歴の閲覧専用（ReadOnly）警告バッジ */}
+            {isReadOnly && (
+              <span className="bg-amber-100 text-amber-900 border border-amber-300 font-black text-[11px] px-1.5 py-0.5 rounded-md flex items-center gap-1 animate-pulse">
+                🔒 過去履歴閲覧モード (編集不可)
+              </span>
+            )}
+
+            {/* 👤 ゲスト体験モードバッジ ＆ チュートリアル再表示ボタン */}
+            {(currentUser?.nurse_id?.startsWith('GUEST-') || currentUser?.email?.includes('guest') || currentUser?.name?.includes('ゲスト')) && (
+              <div id="header-guest-badge" className="flex items-center gap-1 bg-slate-900/90 text-white text-[11px] font-black px-2 py-0.5 rounded-lg border border-sky-400/40 shadow-sm animate-fade-in tutorial-header">
+                <span>{isLeader ? '👑 Aチームリーダー体験中 (申し送り・回診同行)' : '🩺 メンバー体験中 (202号室・203号室担当)'}</span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    window.dispatchEvent(new CustomEvent('nurseflow_open_tutorial'));
+                  }}
+                  className="!bg-sky-600 hover:!bg-sky-700 !text-white !font-black !text-[10px] !px-1.5 !py-0.5 !rounded-md !transition-all !cursor-pointer border-none ml-1 flex items-center gap-0.5 shadow-2xs"
+                  title="操作チュートリアル・ガイドを再呼び出し"
+                >
+                  <span>❓ 体験ガイド</span>
+                </button>
+              </div>
+            )}
+          </div>
+
+          {/* 📞 タブレット・スマホ等で日付選択の下に縦並び表示されるナースコール対応ボタン */}
+          {!isReadOnly && (
+            <button
+              id="header-nurse-call-btn"
+              type="button"
+              onClick={async () => {
+                const { triggerNurseCallInterruption } = await import('../hooks/useTaskUpdate');
+                triggerNurseCallInterruption({
+                  sosReason: 'ナースコール緊急割り込み対応',
+                });
+              }}
+              className="!bg-rose-600 hover:!bg-rose-700 !text-white !font-black !text-xs !px-2.5 !py-0.5 !rounded-full !shadow-md !transition-all !cursor-pointer !flex !items-center !gap-1 !border-2 !border-rose-300 !whitespace-nowrap tutorial-nurse-call"
+              title="実施中タスクを自動中断し、現在時刻でナースコール割り込み対応実績を作成します"
+            >
+              <span>ナースコール対応</span>
+            </button>
+          )}
+        </div>
+      </div>
       
       {/* 💻 デスクトップ版ヘッダーナビゲーション */}
       <nav className={`hidden md:flex ${isLeader ? "w-96" : "w-72"}`}>
         <ul className="flex justify-between items-center text-center text-xs w-full">
           {/* 👥 患者マスター */}
-          <li className="cursor-pointer flex flex-col items-center justify-center" onClick={() => onNavigate('patientMaster')}>
+          <li id="nav-item-patient-master" className="cursor-pointer flex flex-col items-center justify-center" onClick={() => onNavigate('patientMaster')}>
             <img 
               src={isMasterActive ? ACTIVE_NAV_ICONS.account_circle : inactiveIcons.account_circle} 
               alt="患者マスター" 
@@ -98,7 +176,7 @@ export default function GlobalHeader({ currentPage, onNavigate}: GlobalHeaderPro
           </li>
           
           {/* 🗓️ タイムライン */}
-          <li className="cursor-pointer flex flex-col items-center justify-center" onClick={() => onNavigate('timeline')}>
+          <li id="nav-item-timeline" className="cursor-pointer flex flex-col items-center justify-center" onClick={() => onNavigate('timeline')}>
             <img 
               src={currentPage === 'timeline' ? ACTIVE_NAV_ICONS.event_note : inactiveIcons.event_note} 
               alt="タイムライン" 
@@ -113,7 +191,7 @@ export default function GlobalHeader({ currentPage, onNavigate}: GlobalHeaderPro
           </li>
 
           {/* 📍 マップ */}
-          <li className="cursor-pointer flex flex-col items-center justify-center" onClick={() => onNavigate('map')}>
+          <li id="nav-item-map" className="cursor-pointer flex flex-col items-center justify-center" onClick={() => onNavigate('map')}>
             <img 
               src={currentPage === 'map' ? ACTIVE_NAV_ICONS.pin_drop : inactiveIcons.pin_drop} 
               alt="マップ" 
@@ -146,28 +224,32 @@ export default function GlobalHeader({ currentPage, onNavigate}: GlobalHeaderPro
         </ul>
       </nav>
 
-      {/* ユーザー情報・ログアウト */}
-      <div className="w-50 text-sm flex items-center space-x-4 transition-colors duration-300" style={{ color: currentConfig.accentColor }}>
-        <div>
-          <p className="font-medium">現在時刻：<span id="header-time" className="font-bold">{time}</span></p>
-          <p className="font-medium">ログイン者：<span className="font-bold">{userName}</span></p>
-        </div>
+      {/* 右側：ユーザー情報・ログアウト */}
+      <div className="flex items-center gap-3">
 
-        <div 
-          className="logout cursor-pointer text-center text-xs hover:opacity-80 transition-opacity" 
-          id="logout-btn"
-          onClick={logout}
-          style={{ color: currentConfig.accentColor }}
-        >
-          <img
-            src={logoutIconSrc}
-            alt="ログアウト"
-            className="mx-auto w-6 h-6 object-contain transition-all duration-300"
-            onError={(e) => {
-              (e.target as HTMLImageElement).src = "/icon_b/logout_48dp.png";
-            }}
-          />
-          <p className="font-bold mt-0.5">ログアウト</p>
+        {/* ユーザー情報・ログアウト */}
+        <div className="w-50 text-sm flex items-center space-x-4 transition-colors duration-300" style={{ color: currentConfig.accentColor }}>
+          <div>
+            <p className="font-medium">現在時刻：<span id="header-time" className="font-bold">{time}</span></p>
+            <p className="font-medium">ログイン者：<span className="font-bold">{userName}</span></p>
+          </div>
+
+          <div 
+            className="logout cursor-pointer text-center text-xs hover:opacity-80 transition-opacity" 
+            id="logout-btn"
+            onClick={logout}
+            style={{ color: currentConfig.accentColor }}
+          >
+            <img
+              src={logoutIconSrc}
+              alt="ログアウト"
+              className="mx-auto w-6 h-6 object-contain transition-all duration-300"
+              onError={(e) => {
+                (e.target as HTMLImageElement).src = "/icon_b/logout_48dp.png";
+              }}
+            />
+            <p className="font-bold mt-0.5">ログアウト</p>
+          </div>
         </div>
       </div>
     </header>

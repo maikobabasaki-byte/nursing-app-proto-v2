@@ -1,9 +1,10 @@
 import { collection, getDocs, doc, writeBatch } from 'firebase/firestore';
-import { db } from '../lib/firebase';
+import { db, registerActiveDateInFirestore } from '../lib/firebase';
 import { fetchGASData, type GASTaskResponse, type GASPatientResponse } from './gasService';
 import { getJSTDateString } from '../utils/dateUtils';
 import type { ExtendedTask } from '../types/types';
 import { assignDefaultPriority } from '../utils/taskLogic';
+import { useTimelineStore } from '../stores/useTimelineStore';
 
 /**
  * スプレッドシート (GAS) の生データをアプリ用の ExtendedTask 配列に変換する。
@@ -94,6 +95,7 @@ export const mapGASTaskToExtendedTask = (
     parent_id: null,
     is_sos: false,
     sos_reason: "",
+    target_date: todayJST,
   };
 };
 
@@ -117,9 +119,7 @@ let ongoingSyncPromise: Promise<ExtendedTask[]> | null = null;
 
 /**
  * スプレッドシート (GAS) から全タスク・全患者データを取得し、
- * Firestore に保存・展開する。
- * 🧠 Smart Merge: ユーザーがアプリ上で行ったグループ化 (parent_id) やステータス変更を保護・引き継ぐ。
- * ※ 同時並行で呼び出された場合、リクエストを一本化して429エラーを防ぎます。
+ * Firestore および Zustand を正のデータで完全リセット・同期する。
  */
 export const ensureTodayTasksSynced = async (userName?: string): Promise<ExtendedTask[]> => {
   if (ongoingSyncPromise) {
@@ -130,7 +130,7 @@ export const ensureTodayTasksSynced = async (userName?: string): Promise<Extende
   ongoingSyncPromise = (async (): Promise<ExtendedTask[]> => {
     try {
       const todayJST = getJSTDateString();
-      console.log(`スプレッドシート (GAS) から全タスク・患者データを取得中...`);
+      console.log(`🚀 スプレッドシート (GAS) から正のデータを取得中...`);
       const { tasks: gasTasks, patients: gasPatients } = await fetchGASData();
 
       if (!gasTasks || gasTasks.length === 0) {
@@ -138,65 +138,53 @@ export const ensureTodayTasksSynced = async (userName?: string): Promise<Extende
         return [];
       }
 
-      // 💡 既存の Firestore ドキュメントを全件読み込み（クォータオーバー時も安全にフォールバック）
-      let existingTasksMap = new Map<string, any>();
+      // ① スプレッドシートの正データをアプリ用型に変換
+      const canonicalTasks: ExtendedTask[] = gasTasks.map((item, index) =>
+        cleanUndefinedFields(mapGASTaskToExtendedTask(item, index, todayJST, userName, gasPatients))
+      );
+
+      // ② Firestore 上の既存タスクを全件一括削除（過去の重複・不要データを一掃）
       try {
         const existingSnapshot = await getDocs(collection(db, 'tasks'));
-        existingSnapshot.docs.forEach(docSnap => {
-          existingTasksMap.set(docSnap.id, docSnap.data());
-        });
+        if (!existingSnapshot.empty) {
+          const deleteBatch = writeBatch(db);
+          existingSnapshot.docs.forEach(docSnap => {
+            const id = docSnap.id;
+            if (!id.startsWith('system-') && !id.startsWith('patient-sos-')) {
+              deleteBatch.delete(docSnap.ref);
+            }
+          });
+          await deleteBatch.commit();
+          console.log(`🧹 Firestore内の旧タスクを安全に一括整理完了しました。`);
+        }
       } catch (e) {
-        console.warn("Firestoreからの既存タスク読み込みに失敗しました（クォータ超過等）。GASデータを優先適用します:", e);
+        console.warn("Firestoreからの既存タスククリア中の警告:", e);
       }
 
-      const batch = writeBatch(db);
-      const mappedTasks: ExtendedTask[] = [];
-
-      gasTasks.forEach((item, index) => {
-        const gasMappedTask = mapGASTaskToExtendedTask(item, index, todayJST, userName, gasPatients);
-        const existingTask = existingTasksMap.get(gasMappedTask.task_id);
-
-        const mergedTaskDoc: ExtendedTask = {
-          ...gasMappedTask,
-          parent_id: existingTask?.parent_id !== undefined ? existingTask.parent_id : gasMappedTask.parent_id,
-          status: existingTask?.status !== undefined ? existingTask.status : gasMappedTask.status,
-          display_period: existingTask?.display_period !== undefined ? existingTask.display_period : gasMappedTask.display_period,
-          completed_at: existingTask?.completed_at !== undefined ? existingTask.completed_at : gasMappedTask.completed_at,
-          unexecuted_reason: existingTask?.unexecuted_reason !== undefined ? existingTask.unexecuted_reason : gasMappedTask.unexecuted_reason,
-          is_sos: existingTask?.is_sos !== undefined ? existingTask.is_sos : gasMappedTask.is_sos,
-          sos_reason: existingTask?.sos_reason !== undefined ? existingTask.sos_reason : gasMappedTask.sos_reason,
-          instruction_type: existingTask?.instruction_type || gasMappedTask.instruction_type || '医師指示',
-          placement_type: existingTask?.placement_type || gasMappedTask.placement_type || '',
-          nurse_id: existingTask?.nurse_id || existingTask?.staff_id || existingTask?.assigned_nurse_id || gasMappedTask.nurse_id || "",
-          staff_id: existingTask?.staff_id || existingTask?.assigned_nurse_id || existingTask?.nurse_id || gasMappedTask.staff_id || "",
-          assigned_nurse_id: existingTask?.assigned_nurse_id || existingTask?.staff_id || existingTask?.nurse_id || gasMappedTask.assigned_nurse_id || "",
-          nurse_name: existingTask?.nurse_name || gasMappedTask.nurse_name || "",
-          team: existingTask?.team || gasMappedTask.team || "",
-        };
-
-        const cleanedDoc = cleanUndefinedFields(mergedTaskDoc);
-        mappedTasks.push(cleanedDoc);
-
-        const docRef = doc(db, 'tasks', cleanedDoc.task_id);
-        batch.set(docRef, cleanedDoc, { merge: true });
+      // ③ 正のタスクデータのみを Firestore に一括保存
+      const writeBatchRef = writeBatch(db);
+      canonicalTasks.forEach(task => {
+        const docRef = doc(db, 'tasks', task.task_id);
+        writeBatchRef.set(docRef, task);
       });
 
-      try {
-        await batch.commit();
-        console.log(`スプレッドシートから取得した ${gasTasks.length} 件のタスクをスマートマージで Firestore に同期完了しました。`);
-      } catch (e) {
-        console.warn("Firestoreへの同期コミットエラー（クォータ等）:", e);
-      }
+      await writeBatchRef.commit();
+      await registerActiveDateInFirestore(todayJST);
+      console.log(`✅ 正のタスク ${canonicalTasks.length} 件を Firestore に一括同期完了しました。`);
 
-      return mappedTasks;
+      // ④ Zustand ストアのタスクデータもスプレッドシートの正データで一括入れ替え
+      useTimelineStore.getState().setTasks(canonicalTasks);
+
+      return canonicalTasks;
     } catch (error) {
       console.error("スプレッドシートタスクの同期処理エラー:", error);
       return [];
     } finally {
-      // 処理が終わったらロックを解除
       ongoingSyncPromise = null;
     }
   })();
 
   return ongoingSyncPromise;
 };
+
+export const resetAndSyncFromSpreadsheet = ensureTodayTasksSynced;

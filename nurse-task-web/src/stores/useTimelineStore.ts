@@ -1,9 +1,11 @@
 import { create } from 'zustand';
 import type { ExtendedTask, Memo, ExtendedTaskStatus, LeaderTodo } from '../types/types';
+import { reconstructGroups, flattenTasks } from '../utils/taskLogic';
 import { addSingleTaskToGAS, resetAdditionalTasksInGAS } from '../services/gasService';
 import { updateTask } from '../hooks/useTaskUpdate';
 import { doc, setDoc, deleteDoc } from "firebase/firestore";
-import { db, updateNurseSos, updateNurseAssignedPatients, toggleTaskSosInFirestore, saveLeaderTodoInFirestore, updateLeaderTodoInFirestore, deleteLeaderTodoInFirestore } from "../lib/firebase";
+import { getJSTDateString } from '../utils/dateUtils';
+import { db, updateNurseSos, updateNurseAssignedPatients, toggleTaskSosInFirestore, togglePatientSosInFirestore, saveLeaderTodoInFirestore, updateLeaderTodoInFirestore, deleteLeaderTodoInFirestore } from "../lib/firebase";
 
 export interface NurseMaster {
   nurse_id: string;
@@ -38,6 +40,16 @@ export interface CurrentUser {
   assigned_patients?: string[];
 }
 
+export interface PatientSos {
+  patient_id: string;
+  patient_name: string;
+  room_id?: string;
+  reason: string;
+  requested_by_id?: string;
+  requested_by_name?: string;
+  created_at: string;
+}
+
 interface TimelineStore {
   allTasks: ExtendedTask[];
   memos: Memo[];
@@ -45,8 +57,14 @@ interface TimelineStore {
   nurses: NursePin[];
   nurseAssignments: Record<string, string[]>;
   leaderTodos: LeaderTodo[];
+  patientSosList: PatientSos[];
   currentUser: CurrentUser | null;
   selectedPatients: string[];
+  selectedDate: string;
+  activeDates: string[];
+  isReadOnly: boolean;
+  setSelectedDate: (date: string) => void;
+  setActiveDates: (dates: string[]) => void;
   showLowPriority: boolean;
   loading: boolean;
   groupingMode: string | null;
@@ -63,6 +81,7 @@ interface TimelineStore {
 
   addDemoTask: () => void;
   removeDemoTask: () => void;
+  addTask: (task: ExtendedTask) => void;
   setTasks: (tasks: ExtendedTask[]) => void;
   setMemos: (memos: Memo[]) => void;
   setNurseMaster: (masters: NurseMaster[]) => void;
@@ -92,6 +111,9 @@ interface TimelineStore {
   handleUngroupTask: (childId: string) => Promise<void>;
   
   toggleTaskSos: (taskId: string, reason?: string) => void;
+  togglePatientSos: (patientId: string, patientName: string, roomId?: string) => void;
+  respondToPatientSos: (patientId: string, responderName?: string) => void;
+  setPatientSosList: (list: PatientSos[]) => void;
   respondToTaskSos: (taskId: string, responderName: string) => void;
   toggleNurseSos: (nurseId: string, reason?: string) => void;
   respondToNurseSos: (nurseId: string, responderName: string) => void;
@@ -240,6 +262,25 @@ export const useTimelineStore = create<TimelineStore>((set, get) => ({
     return [];
   })(),
   nurseAssignments: {},
+  patientSosList: [],
+  selectedDate: getJSTDateString(),
+  activeDates: [getJSTDateString()],
+  isReadOnly: false,
+
+  setSelectedDate: (date) => set(() => {
+    const today = getJSTDateString();
+    return {
+      selectedDate: date,
+      isReadOnly: date !== today,
+    };
+  }),
+
+  setActiveDates: (dates) => set(() => {
+    const today = getJSTDateString();
+    const unique = Array.from(new Set([...dates, today])).sort((a, b) => b.localeCompare(a));
+    return { activeDates: unique };
+  }),
+
   showLowPriority: false,
   loading: false,
   groupingMode: null,
@@ -294,6 +335,17 @@ export const useTimelineStore = create<TimelineStore>((set, get) => ({
       allTasks: state.allTasks.filter(t => t.task_id !== 'demo-task-tutorial')
     }));
   },
+  addTask: (task) => set((state) => {
+    const exists = state.allTasks.some(t => t.task_id === task.task_id);
+    if (exists) {
+      return {
+        allTasks: state.allTasks.map(t => t.task_id === task.task_id ? { ...t, ...task } : t)
+      };
+    }
+    return {
+      allTasks: [task, ...state.allTasks]
+    };
+  }),
   setTasks: (tasks) => set({ allTasks: tasks }),
   setMemos: (memos) => set({ memos }),
   setCurrentUser: (user) => set({ currentUser: user }),
@@ -493,25 +545,47 @@ export const useTimelineStore = create<TimelineStore>((set, get) => ({
 
   handleUpdateTaskPeriod: (taskId, period) => {
     const { allTasks } = get();
-    const task = allTasks.find(t => t.task_id === taskId);
+
+    const findTask = (list: ExtendedTask[]): ExtendedTask | null => {
+      for (const t of list) {
+        if (t.task_id === taskId) return t;
+        if (t.children && t.children.length > 0) {
+          const found = findTask(t.children);
+          if (found) return found;
+        }
+      }
+      return null;
+    };
+
+    const task = findTask(allTasks);
 
     if (task) {
       const initialPeriodToSave = task.initial_period || task.display_period;
 
+      // 🧠 バックグラウンド通信：Firestore上のparent_idをクリア（独立化）し、時間を更新
       updateTask(taskId, { 
         display_period: period, 
-        initial_period: initialPeriodToSave 
+        initial_period: initialPeriodToSave,
+        parent_id: null,
       });
 
-      set((state) => ({
-        allTasks: state.allTasks.map(t => 
-          t.task_id === taskId ? { 
-            ...t, 
-            display_period: period,
-            initial_period: initialPeriodToSave 
-          } : t
-        )
-      }));
+      // 🧠 即時UI反映：既存グループから抽出し、独立したエンティティとしてその時間枠に再配置
+      set((state) => {
+        const cleanedTasks = removeTaskRecursive(state.allTasks, [taskId]);
+        const updatedTask: ExtendedTask = {
+          ...task,
+          display_period: period,
+          initial_period: initialPeriodToSave,
+          parent_id: null,
+          isChild: false,
+          isGroup: false,
+          children: undefined,
+        };
+
+        return {
+          allTasks: reconstructGroups([...cleanedTasks, updatedTask]),
+        };
+      });
     }
   },
 
@@ -568,54 +642,81 @@ export const useTimelineStore = create<TimelineStore>((set, get) => ({
       return;
     }
 
-    const targetPeriod = targetTask.display_period || "09:00";
-    const groupTitle = targetTask.title;
+    if (draggedTask.priority === 'high' || targetTask.priority === 'high') {
+      alert("優先順位「高」のタスクは誤認防止のため、単独で管理する必要があります");
+      return;
+    }
 
-    const existingGroup = allTasks.find(
-      (t) => t.isGroup && t.title === groupTitle && t.display_period === targetPeriod
-    );
+    const targetPeriod = targetTask.display_period || "09:00";
+
+    // ターゲットが親グループならそのID、子タスクなら親ID、単独なら null
+    const targetGroupId = targetTask.isGroup ? targetTask.task_id : (targetTask.parent_id || null);
+
+    const removeAndClean = (tasks: ExtendedTask[], targetIdsToRemove: string[]): ExtendedTask[] => {
+      const flat = flattenTasks(tasks).filter(t => !targetIdsToRemove.includes(t.task_id));
+      return reconstructGroups(flat);
+    };
 
     try {
-      if (existingGroup) {
+      if (targetGroupId) {
+        // =========================================================
+        // 【パターンA】ターゲットが「既存のグループ」の場合
+        // ドロップ先の groupId にタスクを追加（マージ）する
+        // =========================================================
+        const existingGroup = allTasks.find(
+          (t) => t.isGroup && t.task_id === targetGroupId
+        ) || (targetTask.isGroup ? targetTask : undefined);
+
+        if (!existingGroup) return;
+
+        const isAlreadyInside = existingGroup.children?.some(c => c.task_id === draggedId);
+        if (isAlreadyInside) return;
+
         const newChild: ExtendedTask = {
           ...draggedTask,
           isChild: true,
-          parent_id: existingGroup.task_id,
+          parent_id: targetGroupId,
           display_period: targetPeriod,
+          isGroup: false,
           children: undefined,
         };
 
-        const isAlreadyInside = existingGroup.children?.some(c => c.task_id === draggedId);
-        const updatedChildren = isAlreadyInside 
-          ? existingGroup.children 
-          : [...(existingGroup.children || []), newChild];
-
+        const updatedChildren = [...(existingGroup.children || []).filter(c => c.task_id !== draggedId), newChild];
         const updatedGroup: ExtendedTask = {
           ...existingGroup,
+          display_period: targetPeriod,
           children: updatedChildren,
         };
 
         // 🧠 1. 即座にUIを更新（グループ化完了）
         set((state) => {
-          const cleaned = removeTaskRecursive(state.allTasks, [draggedId]);
+          const cleaned = removeAndClean(state.allTasks, [draggedId]);
           const finalTasks = cleaned.map((t) => 
-            t.task_id === existingGroup.task_id ? updatedGroup : t
+            t.task_id === targetGroupId ? updatedGroup : t
           );
+          if (!finalTasks.some(t => t.task_id === targetGroupId)) {
+            finalTasks.push(updatedGroup);
+          }
           return { allTasks: finalTasks };
         });
 
         // 🧠 2. バックグラウンド通信
-        await updateTask(draggedId, { parent_id: existingGroup.task_id, display_period: targetPeriod });
+        await updateTask(draggedId, { parent_id: targetGroupId, display_period: targetPeriod });
 
       } else {
-        const newGroupId = `group-${Date.now()}`;
-        const currentGroupType = targetTask.title === draggedTask.title ? 'task' : 'patient';
+        // =========================================================
+        // 【パターンB】ターゲットが「別の単独タスク」の場合
+        // 同時間帯に他グループが存在しても干渉せず、新しくユニークな groupId を発行
+        // =========================================================
+        const newGroupId = `group-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
+        const currentGroupType = targetTask.groupType || (targetTask.title === draggedTask.title ? 'task' : 'patient');
 
         const childTarget: ExtendedTask = { 
           ...targetTask, 
           isChild: true, 
           parent_id: newGroupId,
           display_period: targetPeriod,
+          isGroup: false,
           children: undefined 
         };
         const childDragged: ExtendedTask = { 
@@ -623,8 +724,11 @@ export const useTimelineStore = create<TimelineStore>((set, get) => ({
           isChild: true, 
           parent_id: newGroupId,
           display_period: targetPeriod,
+          isGroup: false,
           children: undefined 
         };
+
+        const groupTitle = targetTask.title === draggedTask.title ? targetTask.title : (currentGroupType === 'patient' ? targetTask.patient_name : targetTask.title);
 
         const groupNode: ExtendedTask = {
           ...targetTask,
@@ -640,7 +744,7 @@ export const useTimelineStore = create<TimelineStore>((set, get) => ({
 
         // 🧠 1. 即座にUIを更新（新規グループ作成）
         set((state) => {
-          const cleaned = removeTaskRecursive(state.allTasks, [draggedId, targetId]);
+          const cleaned = removeAndClean(state.allTasks, [draggedId, targetId]);
           return { allTasks: [...cleaned, groupNode] };
         });
 
@@ -649,6 +753,8 @@ export const useTimelineStore = create<TimelineStore>((set, get) => ({
         await updateTask(draggedId, { parent_id: newGroupId, display_period: targetPeriod });
         await updateTask(targetId, { parent_id: newGroupId, display_period: targetPeriod });
       }
+
+      set({ groupingMode: null });
     } catch (error) {
       console.error("❌ グループ化処理に失敗しました:", error);
     }
@@ -777,6 +883,54 @@ export const useTimelineStore = create<TimelineStore>((set, get) => ({
       return { allTasks: updatedTasks };
     }
     return {};
+  }),
+
+  setPatientSosList: (list) => set({ patientSosList: list }),
+
+  togglePatientSos: (patientId, patientName, roomId) => set((state) => {
+    const list = state.patientSosList || [];
+    const existingIndex = list.findIndex(p => p.patient_id === patientId);
+    const isCurrentlySos = existingIndex >= 0;
+
+    const currentUserId = state.currentUser?.nurse_id || sessionStorage.getItem('nurse_id') || '';
+    const currentUserName = state.currentUser?.name || sessionStorage.getItem('nurse_name') || '';
+
+    // 📡 Firestoreにリアルタイム同期書き込み（全看護師端末に秒速ブロードキャスト通知）
+    togglePatientSosInFirestore(
+      patientId,
+      patientName,
+      roomId,
+      !isCurrentlySos,
+      currentUserId,
+      currentUserName
+    );
+
+    let updatedList: PatientSos[] = [];
+    if (isCurrentlySos) {
+      updatedList = list.filter(p => p.patient_id !== patientId);
+    } else {
+      const sosReason = `🚨 緊急要請：${patientName}さん (${roomId ? `${roomId}号室` : ''}) で緊急応援要請`;
+
+      const newEntry: PatientSos = {
+        patient_id: patientId,
+        patient_name: patientName,
+        room_id: roomId,
+        reason: sosReason,
+        requested_by_id: currentUserId,
+        requested_by_name: currentUserName,
+        created_at: new Date().toISOString(),
+      };
+      updatedList = [newEntry, ...list];
+    }
+
+    return { patientSosList: updatedList };
+  }),
+
+  respondToPatientSos: (patientId) => set((state) => {
+    togglePatientSosInFirestore(patientId, '', '', false);
+    return {
+      patientSosList: (state.patientSosList || []).filter(p => p.patient_id !== patientId)
+    };
   }),
 
   respondToTaskSos: (taskId, responderName) => set((state) => {

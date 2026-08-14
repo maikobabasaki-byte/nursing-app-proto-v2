@@ -15,6 +15,21 @@ export const normalizeToHHMM = (timeStr?: string): string => {
 };
 
 /**
+ * タスクの指定時刻 (例: "10:04") が、タイムラインの目盛りスロット (例: "10:00") の範囲内に含まれるか判定する
+ */
+export const isTimeInSlot = (timeStr?: string, slotTimeStr?: string, modeMinutes: number = 30): boolean => {
+  if (!timeStr || !slotTimeStr) return false;
+  const timeMatch = String(timeStr).match(/(\d{1,2}):(\d{2})/);
+  const slotMatch = String(slotTimeStr).match(/(\d{1,2}):(\d{2})/);
+  if (!timeMatch || !slotMatch) return timeStr.trim() === slotTimeStr.trim();
+
+  const taskMins = parseInt(timeMatch[1], 10) * 60 + parseInt(timeMatch[2], 10);
+  const slotMins = parseInt(slotMatch[1], 10) * 60 + parseInt(slotMatch[2], 10);
+
+  return taskMins >= slotMins && taskMins < slotMins + modeMinutes;
+};
+
+/**
  * チーム名の表記揺れ ("A", "Aチーム", "A-team", "teamA") を統一比較用の文字列に正規化する
  */
 export const normalizeTeamName = (teamName?: string): string => {
@@ -47,12 +62,22 @@ const getCat = (period: string) => {
  * 2つのタスクをグループ化（既存の親グループへの相乗り、または新規親IDの発行）
  */
 export const groupTasks = (prevTasks: ExtendedTask[], draggedId: string, targetId: string): ExtendedTask[] => {
-  const draggedTask = prevTasks.find((t) => String(t.task_id) === String(draggedId));
-  const targetTask = prevTasks.find((t) => String(t.task_id) === String(targetId));
-  
-  if (!draggedTask || !targetTask) return prevTasks;
+  const findTaskById = (list: ExtendedTask[], id: string): ExtendedTask | null => {
+    for (const t of list) {
+      if (String(t.task_id) === String(id)) return t;
+      if (t.children) {
+        const found = findTaskById(t.children, id);
+        if (found) return found;
+      }
+    }
+    return null;
+  };
 
-  // 1. 時間帯カテゴリが一致しているかチェック（異なる時間帯やずらせない時間同士の混ざりを防ぐ）
+  const draggedTask = findTaskById(prevTasks, draggedId);
+  const targetTask = findTaskById(prevTasks, targetId);
+  
+  if (!draggedTask || !targetTask || draggedId === targetId) return prevTasks;
+
   const draggedCat = getCat(draggedTask.display_period);
   const targetCat = getCat(targetTask.display_period);
 
@@ -63,69 +88,68 @@ export const groupTasks = (prevTasks: ExtendedTask[], draggedId: string, targetI
 
   const targetPeriod = targetTask.display_period;
 
-  // 2. ターゲットがすでにグループ親ならそのID、子ならその親ID、どちらでもなければターゲットのIDを基準にする
-  const parentId = targetTask.isGroup ? targetTask.task_id : (targetTask.parent_id || targetTask.task_id);
+  // ターゲットが親グループならそのID、子タスクなら親ID、単独なら null
+  const targetGroupId = targetTask.isGroup ? targetTask.task_id : (targetTask.parent_id || null);
 
-  // 3. すでにその親IDを持つグループが配列内に存在するか探す
-  const existingGroup = prevTasks.find((t) => String(t.task_id) === String(parentId) && t.isGroup);
+  const flat = flattenTasks(prevTasks).filter(t => String(t.task_id) !== String(draggedId) && String(t.task_id) !== String(targetId));
 
-  if (existingGroup) {
-    // =========================================================
-    // 【パターンA】すでに親グループが存在する場合：新規作成せず、その children に追加する
-    // =========================================================
-    const isAlreadyInside = existingGroup.children?.some(c => String(c.task_id) === String(draggedId));
-    if (isAlreadyInside) return prevTasks;
+  if (targetGroupId) {
+    const existingGroup = prevTasks.find((t) => String(t.task_id) === String(targetGroupId) && t.isGroup);
 
-    const newChild: ExtendedTask = {
-      ...draggedTask,
-      display_period: targetPeriod,
-      isChild: true,
-      parent_id: parentId,
-    };
+    if (existingGroup) {
+      const newChild: ExtendedTask = {
+        ...draggedTask,
+        display_period: targetPeriod,
+        isChild: true,
+        parent_id: targetGroupId,
+        isGroup: false,
+      };
 
-    const updatedGroup: ExtendedTask = {
-      ...existingGroup,
-      children: [...(existingGroup.children || []), newChild],
-    };
+      const updatedGroup: ExtendedTask = {
+        ...existingGroup,
+        display_period: targetPeriod,
+        children: [...(existingGroup.children || []).filter(c => String(c.task_id) !== String(draggedId)), newChild],
+      };
 
-    return prevTasks
-      .filter((t) => String(t.task_id) !== String(draggedId))
-      .map((t) => (String(t.task_id) === String(parentId) ? updatedGroup : t));
-
-  } else {
-    // =========================================================
-    // 【パターンB】まだ親グループが存在しない場合：新しく1つだけグループを作る
-    // =========================================================
-    const newGroupId = `group-${Date.now()}`;
-    const currentGroupType = targetTask.groupType || (targetTask.title === draggedTask.title ? 'task' : 'patient');
-
-    const childTarget: ExtendedTask = { 
-      ...targetTask, 
-      isChild: true, 
-      parent_id: newGroupId,
-      display_period: targetPeriod,
-    };
-    const childDragged: ExtendedTask = { 
-      ...draggedTask, 
-      display_period: targetPeriod, 
-      isChild: true, 
-      parent_id: newGroupId 
-    };
-
-    const groupNode: ExtendedTask = {
-      ...targetTask,
-      task_id: newGroupId,
-      isGroup: true,
-      isChild: false,
-      display_period: targetPeriod,
-      groupType: currentGroupType,
-      children: [childTarget, childDragged],
-    };
-
-    return prevTasks
-      .filter((t) => String(t.task_id) !== String(draggedId) && String(t.task_id) !== String(targetId))
-      .concat(groupNode);
+      const cleaned = reconstructGroups(flat);
+      return cleaned.map((t) => (String(t.task_id) === String(targetGroupId) ? updatedGroup : t));
+    }
   }
+
+  // 単独タスク同士のドロップ：新規のユニークグループを作成
+  const newGroupId = `group-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
+  const currentGroupType = targetTask.groupType || (targetTask.title === draggedTask.title ? 'task' : 'patient');
+  const groupTitle = targetTask.title === draggedTask.title ? targetTask.title : (currentGroupType === 'patient' ? targetTask.patient_name : targetTask.title);
+
+  const childTarget: ExtendedTask = { 
+    ...targetTask, 
+    isChild: true, 
+    parent_id: newGroupId,
+    display_period: targetPeriod,
+    isGroup: false,
+  };
+  const childDragged: ExtendedTask = { 
+    ...draggedTask, 
+    display_period: targetPeriod, 
+    isChild: true, 
+    parent_id: newGroupId,
+    isGroup: false,
+  };
+
+  const groupNode: ExtendedTask = {
+    ...targetTask,
+    task_id: newGroupId,
+    title: groupTitle,
+    isGroup: true,
+    isChild: false,
+    parent_id: null,
+    display_period: targetPeriod,
+    groupType: currentGroupType,
+    children: [childTarget, childDragged],
+  };
+
+  const cleaned = reconstructGroups(flat);
+  return [...cleaned, groupNode];
 };
 
 /**
@@ -142,12 +166,24 @@ export const reconstructGroups = (flatTasks: ExtendedTask[]): ExtendedTask[] => 
     if (task.isGroup) {
       // 💡 Firestore上に独立して存在する親グループドキュメント
       existingGroupNodes[task.task_id] = task;
+      if (task.children && task.children.length > 0) {
+        if (!groupsMap[task.task_id]) {
+          groupsMap[task.task_id] = [];
+        }
+        task.children.forEach(child => {
+          if (!groupsMap[task.task_id].some(c => String(c.task_id) === String(child.task_id))) {
+            groupsMap[task.task_id].push({ ...child, isChild: true, parent_id: task.task_id });
+          }
+        });
+      }
     } else if (task.parent_id) {
       // 💡 子タスク
       if (!groupsMap[task.parent_id]) {
         groupsMap[task.parent_id] = [];
       }
-      groupsMap[task.parent_id].push({ ...task, isChild: true });
+      if (!groupsMap[task.parent_id].some(c => String(c.task_id) === String(task.task_id))) {
+        groupsMap[task.parent_id].push({ ...task, isChild: true });
+      }
     } else {
       // 💡 親でも子でもない単体タスク
       ungroupedTasks.push(task);
@@ -190,7 +226,14 @@ export const reconstructGroups = (flatTasks: ExtendedTask[]): ExtendedTask[] => 
     result.push(groupNode);
   });
 
-  return result;
+  const uniqueResultMap = new Map<string, ExtendedTask>();
+  result.forEach(t => {
+    if (t && t.task_id && !uniqueResultMap.has(t.task_id)) {
+      uniqueResultMap.set(t.task_id, t);
+    }
+  });
+
+  return Array.from(uniqueResultMap.values());
 };
 
 /**

@@ -79,11 +79,21 @@ export function TimelineRow({
           const isRecordStart = task.status === 'record_start';
           const isRecordPending = task.status === 'record_pending';
 
+          const isInterruptTask = Boolean(
+            task.title?.includes('ナースコール') || 
+            task.title?.includes('SOS') || 
+            task.task_id?.startsWith('CALL_INTERRUPT_')
+          );
+
           let borderBgStyle = "border-gray-300 bg-gray-50 text-gray-500";
           let statusBadge = "【中断・保留中】";
           let statusIcon = "🟠";
 
-          if (isProgressing) {
+          if (isInterruptTask) {
+            borderBgStyle = "border-rose-500 bg-rose-50/95 text-rose-950 ring-2 ring-rose-300 shadow-md";
+            statusBadge = "【⚡ 突発コール対応中】";
+            statusIcon = "📞";
+          } else if (isProgressing) {
             borderBgStyle = "border-sky-400 bg-sky-50/80 text-sky-900";
             statusBadge = "【実施中】";
             statusIcon = "🔵";
@@ -109,9 +119,11 @@ export function TimelineRow({
                   <span>{statusIcon}</span>
                   <span>{statusBadge}</span>
                 </span>
-                <span className="opacity-75">{task.room_id ? `${task.room_id}号室` : ''}</span>
+                <span className="opacity-75">{task.room_id && task.room_id.trim() !== '' ? `${task.room_id}号室` : ''}</span>
               </div>
-              <div className="text-xs truncate text-left font-black">{task.patient_name ? `${task.patient_name}様` : '患者名未設定'}</div>
+              <div className="text-xs truncate text-left font-black">
+                {task.patient_name && task.patient_name.trim() !== '' ? `${task.patient_name}様` : isInterruptTask ? '📞 ナースコール対応' : ''}
+              </div>
               <div className="text-[11px] truncate text-left opacity-90">{task.title}</div>
             </div>
           );
@@ -166,6 +178,7 @@ export function TimelineRow({
           isMemoOver ? 'bg-yellow-100/50 border-yellow-400' : '!bg-yellow-50/10'
         }`}
         onClick={() => {
+          if (useTimelineStore.getState().isReadOnly) return;
           // ⚡ タブレット・モバイル表示（768px未満）の時は、行クリックによるメモ追加ポップアップ起動を無効化
           if (typeof window !== 'undefined' && window.innerWidth < 768) {
             return;
@@ -176,8 +189,10 @@ export function TimelineRow({
         {/* 💡 あらかじめこの時間軸に一致するメモを抽出 */}
         {(() => {
           const currentMemos = timeMemos.filter(m => isMemoInSlot(m.time, time, timelineMode));
+          const isReadOnly = useTimelineStore.getState().isReadOnly;
           
           if (currentMemos.length === 0) {
+            if (isReadOnly) return null;
             return (
               <span className="hidden md:flex !bg-yellow-100 text-xs text-yellow-700 font-bold opacity-0 group-hover:opacity-100 absolute inset-0 items-center justify-center pointer-events-none">
                   + メモを追加

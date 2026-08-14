@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useMemo } from 'react';
 import type { ExtendedTaskStatus, ExtendedTask, TimelineMainProps } from '../../types/types';
 import { TimelineControls } from './TimelineControls';
 import { TimelineRow } from './TimelineRow';
@@ -13,7 +13,7 @@ import { useTimelineStore } from '../../stores/useTimelineStore';
 import { updateTask } from '../../hooks/useTaskUpdate';
 import { useUserName } from '../../hooks/useUserName';
 import { PoolTaskCard } from './PoolTaskCard';
-import { normalizeToHHMM, normalizeTeamName, extractUserProgressingTasks } from '../../utils/taskLogic';
+import { normalizeToHHMM, normalizeTeamName, extractUserProgressingTasks, isTimeInSlot } from '../../utils/taskLogic';
 import { useIsMobile } from '../../hooks/useIsMobile';
 
 export default function TimelineMain({ 
@@ -53,11 +53,47 @@ export default function TimelineMain({
     return effectiveSelectedPatients.includes(patientId);
   };
 
+  const isTaskForSelectedPatient = (task: ExtendedTask) => {
+    // ⚡ 突発割り込み・ナースコール対応・臨時追加は患者選択フィルタをバイパスしてタイムラインに常時表示
+    const isInterrupt = Boolean(
+      task.title?.includes('ナースコール') || 
+      task.title?.includes('SOS') || 
+      task.task_id?.startsWith('CALL_INTERRUPT_') ||
+      task.is_additional
+    );
+    if (isInterrupt) return true;
+
+    if (isPatientSelected(task.patient_id)) return true;
+    if (task.isGroup && task.children && task.children.some(c => isPatientSelected(c.patient_id))) {
+      return true;
+    }
+    return false;
+  };
+
+  const isGuestUser = Boolean(
+    currentUser?.nurse_id?.startsWith('GUEST-') || 
+    currentUser?.email?.includes('guest') || 
+    currentUser?.name?.includes('ゲスト')
+  );
+
   // モバイル用未配置タスクプール算出
   const poolTasks = storeAllTasks.filter(task => {
     if (!task || task.status === 'deleted' || task.display_period?.includes(':')) {
       return false;
     }
+
+    if (isGuestUser) {
+      const isGuestTask = task.task_id?.startsWith('GUEST-') || task.nurse_id === currentUser?.nurse_id || task.assigned_nurse_id === currentUser?.nurse_id;
+      if (!isGuestTask) return false;
+
+      if (!isLeader) {
+        const room = (task.room_id || '').trim();
+        const is202or203 = room === '202' || room === '203' || room.includes('202') || room.includes('203');
+        const isSelected = effectiveSelectedPatients && effectiveSelectedPatients.length > 0 ? effectiveSelectedPatients.includes(task.patient_id) : false;
+        if (!is202or203 && !isSelected) return false;
+      }
+    }
+
     if (isLeader) {
       const isHighPriority = task.priority === 'high';
       if (!isHighPriority && !showLowPriority && task.priority === 'low') {
@@ -65,13 +101,37 @@ export default function TimelineMain({
       }
       return true;
     }
-    return isPatientSelected(task.patient_id);
+    return isTaskForSelectedPatient(task);
   });
 
   // 🎯 【Single Source of Truth】ストアの全タスクから評価
   const extendedTasks = storeAllTasks.filter((task) => {
     if (!task || task.status === 'deleted' || !task.display_period?.includes(':')) {
       return false;
+    }
+
+    // 🛡️ ゲストログイン時の全件一瞬ちらつき（Flicker）を完全防止
+    if (isGuestUser) {
+      const isGuestTask = task.task_id?.startsWith('GUEST-') || task.nurse_id === currentUser?.nurse_id || task.assigned_nurse_id === currentUser?.nurse_id;
+      if (!isGuestTask) {
+        return false;
+      }
+
+      if (!isLeader) {
+        const room = (task.room_id || '').trim();
+        const is202or203 = room === '202' || room === '203' || room.includes('202') || room.includes('203');
+        const isSelected = effectiveSelectedPatients && effectiveSelectedPatients.length > 0 ? effectiveSelectedPatients.includes(task.patient_id) : false;
+        const isInterrupt = Boolean(
+          task.title?.includes('ナースコール') || 
+          task.title?.includes('SOS') || 
+          task.task_id?.startsWith('CALL_INTERRUPT_') ||
+          task.is_additional
+        );
+
+        if (!is202or203 && !isSelected && !isInterrupt) {
+          return false;
+        }
+      }
     }
 
     // 💡 リーダー参照モード (isLeader === true) の場合
@@ -113,8 +173,20 @@ export default function TimelineMain({
     }
 
     // 💡 通常の受け持ち選択モード：受け持ち指定なし（0件）の場合は全患者タスクを表示
-    return isPatientSelected(task.patient_id);
+    return isTaskForSelectedPatient(task);
   });
+
+  // 🛡️ 二重表示・重複の完全防止デデュープ
+  const deduplicatedExtendedTasks = useMemo(() => {
+    const map = new Map<string, ExtendedTask>();
+    extendedTasks.forEach((t: ExtendedTask) => {
+      const key = `${t.patient_id}_${t.title}_${t.display_period}`;
+      if (!map.has(key)) {
+        map.set(key, t);
+      }
+    });
+    return Array.from(map.values());
+  }, [extendedTasks]);
 
   const storeMemos = useTimelineStore((state) => state.memos);
   const activePopupTaskId = useTimelineStore((state) => state.activePopupTaskId);
@@ -185,7 +257,7 @@ export default function TimelineMain({
     return slots;
   })();
 
-  const outOfBoundsBeforeTasks = extendedTasks.filter((t) => {
+  const outOfBoundsBeforeTasks = deduplicatedExtendedTasks.filter((t: ExtendedTask) => {
     const tMins = parseTimeToMinutes(t.display_period);
     if (tMins < 0) return false;
     if (!isCrossDay) {
@@ -195,7 +267,7 @@ export default function TimelineMain({
     }
   });
 
-  const outOfBoundsAfterTasks = extendedTasks.filter((t) => {
+  const outOfBoundsAfterTasks = deduplicatedExtendedTasks.filter((t: ExtendedTask) => {
     const tMins = parseTimeToMinutes(t.display_period);
     if (tMins < 0) return false;
     if (!isCrossDay) {
@@ -207,12 +279,12 @@ export default function TimelineMain({
 
   const pendingTasks = (() => {
     const list: ExtendedTask[] = [];
-    extendedTasks.forEach(task => {
+    deduplicatedExtendedTasks.forEach((task: ExtendedTask) => {
       if (task.status === 'pending' || task.status === 'record_pending') {
         list.push(task);
       }
       if (task.isGroup && task.children && Array.isArray(task.children)) {
-        task.children.forEach(child => {
+        task.children.forEach((child: ExtendedTask) => {
           if (child.status === 'pending' || child.status === 'record_pending') {
             list.push({
               ...child,
@@ -446,8 +518,9 @@ export default function TimelineMain({
       </div>
 
       <div 
+        id="timeline-main-container"
         ref={containerRef} 
-        className="relative flex-1 min-h-0 overflow-y-auto border border-gray-200 rounded-2xl bg-white shadow-xs pb-72 scrollbar-thin"
+        className="relative flex-1 min-h-0 overflow-y-auto border border-gray-200 rounded-2xl bg-white shadow-xs pb-72 scrollbar-thin tutorial-timeline"
       >
         <LiveCurrentTimeLine timelineMode={timelineMode} containerRef={containerRef} rowRefs={rowRefs} />
 
@@ -481,12 +554,11 @@ export default function TimelineMain({
         )}
 
         {timeSlots.map((time) => {
-          const currentRows = extendedTasks.filter(t => {
+          const currentRows = deduplicatedExtendedTasks.filter((t: ExtendedTask) => {
             if (!t.display_period || !t.display_period.includes(':')) {
               return false;
             }
-            const periodTime = normalizeToHHMM(t.display_period);
-            return periodTime === time;
+            return isTimeInSlot(t.display_period, time, timelineMode);
           });
 
           const isPlaceholderStatus = (status: string) => 
@@ -589,7 +661,7 @@ export default function TimelineMain({
                   }
                 }
 
-                const messages: Record<ExtendedTaskStatus, string> = {
+                const messages: Record<string, string> = {
                   progressing: '実施を開始しました（前タスクは自動で中断・保留へ移動）',
                   pending: '中断・保留しました',
                   completed: '実施を完了しました',
@@ -605,7 +677,7 @@ export default function TimelineMain({
                 setActivePopupTaskId(null); 
                 
                 setToast({ 
-                  message: messages[s] || 'ステータスを更新しました', 
+                  message: messages[s as string] || 'ステータスを更新しました', 
                   visible: true, 
                   status: s 
                 });

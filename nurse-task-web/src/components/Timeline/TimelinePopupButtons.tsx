@@ -1,5 +1,6 @@
 import React from 'react';
 import type { ExtendedTask, ExtendedTaskStatus } from '../../types/types';
+import { useTimelineStore } from '../../stores/useTimelineStore';
 
 interface TimelinePopupButtonsProps {
   task: ExtendedTask;
@@ -8,6 +9,15 @@ interface TimelinePopupButtonsProps {
 
 export const TimelinePopupButtons: React.FC<TimelinePopupButtonsProps> = ({ task, onStatusChange }) => {
   const currentStatus = task.status;
+  const isReadOnly = useTimelineStore((state) => state.isReadOnly);
+
+  if (isReadOnly) {
+    return (
+      <div className="p-3 bg-amber-50 text-amber-900 border border-amber-300 rounded-xl text-xs font-extrabold text-center shadow-xs">
+        🔒 過去履歴閲覧モード（編集・操作はロックされています）
+      </div>
+    );
+  }
 
   // ボタンの共通スタイルを定数化
   const btnBase = "w-full flex justify-center !py-2.5 !font-bold !rounded-lg !text-lg !shadow cursor-pointer transition-colors";

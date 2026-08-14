@@ -21,7 +21,7 @@ export const PendingTray: React.FC<PendingTrayProps> = ({
   const recordPendingTasks = pendingTasks.filter(t => t.status === 'record_pending');
 
   return (
-    <div className="fixed bottom-14 md:bottom-[50px] left-0 right-0 bg-slate-900/90 backdrop-blur-md border-t-2 border-sky-400 p-2 md:p-3 shadow-[0_-4px_16px_rgba(0,0,0,0.3)] z-40 animate-slide-up text-white flex flex-col gap-2.5">
+    <div className="fixed bottom-14 md:bottom-[50px] left-0 right-0 bg-slate-900/90 backdrop-blur-md border-t-2 border-sky-400 p-2 md:p-3 shadow-[0_-4px_16px_rgba(0,0,0,0.3)] z-40 animate-slide-up text-white flex flex-col gap-2.5 tutorial-task-pool">
       <div className="max-w-7xl mx-auto w-full flex flex-col gap-2">
 
         {/* ─── 1. 上段：PC版デザイン・仕様そのままの「実施・記録中」タスクエリア ─── */}

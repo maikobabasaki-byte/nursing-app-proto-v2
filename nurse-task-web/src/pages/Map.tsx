@@ -6,8 +6,8 @@ import { DndContext, DragOverlay, useSensor, useSensors, PointerSensor, type Dra
 import { DraggableNursePin } from '../components/Map/DraggableNursePin';
 import { useUserName } from '../hooks/useUserName';
 
-// 💡 左側のSOSパネル（LeftPanel）：タスクSOSおよび看護師SOSをリアルタイム統合表示
-const LeftPanel: React.FC<{ sosTasks: any[]; sosNurses: NursePin[]; isFullWidth?: boolean }> = ({ sosTasks, sosNurses, isFullWidth }) => (
+// 💡 左側のSOSパネル（LeftPanel）：タスクSOS、看護師SOS、患者SOSをリアルタイム統合表示
+const LeftPanel: React.FC<{ sosTasks: any[]; sosNurses: NursePin[]; patientSosList?: any[]; isFullWidth?: boolean }> = ({ sosTasks, sosNurses, patientSosList = [], isFullWidth }) => (
   <div 
     style={{ 
       width: isFullWidth ? '100%' : '240px', 
@@ -23,21 +23,37 @@ const LeftPanel: React.FC<{ sosTasks: any[]; sosNurses: NursePin[]; isFullWidth?
   >
     <h3 style={{ fontWeight: 'bold', color: '#c62828', display: 'flex', alignItems: 'center', gap: '6px' }} className="text-sm border-b border-red-200 pb-2">
       <span>🚨 緊急アラート</span>
-      {(sosTasks.length + sosNurses.length) > 0 && (
+      {(sosTasks.length + sosNurses.length + patientSosList.length) > 0 && (
         <span className="bg-red-600 text-white text-xs px-2 py-0.5 rounded-full font-extrabold animate-pulse">
-          {sosTasks.length + sosNurses.length}件
+          {sosTasks.length + sosNurses.length + patientSosList.length}件
         </span>
       )}
     </h3>
     
-    {sosTasks.length === 0 && sosNurses.length === 0 ? (
+    {sosTasks.length === 0 && sosNurses.length === 0 && patientSosList.length === 0 ? (
       <p style={{ color: '#666', fontSize: '13px', textAlign: 'center', marginTop: '20px', lineHeight: '1.5' }}>
         現在、SOSはありません。<br/>
-        <span style={{ fontSize: '11px', color: '#999' }}>（自分のピン右クリックでSOS可能）</span>
+        <span style={{ fontSize: '11px', color: '#999' }}>（自分のピン右クリックまたはマップダブルクリックでSOS可能）</span>
       </p>
     ) : (
       <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-        {/* 1. 看護師からの緊急要請 (Nurse SOS) */}
+        {/* 1. 患者単体からの緊急要請 (Patient SOS) */}
+        {patientSosList.map((p) => (
+          <div key={`patient-sos-${p.patient_id}`} style={{ backgroundColor: '#fff', borderLeft: '5px solid #d32f2f', padding: '10px', borderRadius: '6px', boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }}>
+            <div style={{ fontWeight: 'bold', color: '#c62828', fontSize: '13px', marginBottom: '4px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <span>🚨 患者SOS ({p.room_id ? `${p.room_id}号室` : ''})</span>
+              <span style={{ fontSize: '10px', backgroundColor: '#ffebee', color: '#c62828', padding: '2px 5px', borderRadius: '3px', fontWeight: 'bold' }}>緊急</span>
+            </div>
+            <div style={{ fontSize: '12px', fontWeight: 'bold', color: '#333', marginBottom: '4px' }}>
+              対象: {p.patient_name} 様
+            </div>
+            <div style={{ fontSize: '11px', color: '#666', backgroundColor: '#fff5f5', padding: '6px', borderRadius: '4px', lineHeight: '1.4' }}>
+              ⚠️ {p.reason}
+            </div>
+          </div>
+        ))}
+
+        {/* 2. 看護師からの緊急要請 (Nurse SOS) */}
         {sosNurses.map((nurse) => (
           <div key={`nurse-sos-${nurse.nurse_id}`} style={{ backgroundColor: '#fff', borderLeft: '5px solid #d32f2f', padding: '10px', borderRadius: '6px', boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }}>
             <div style={{ fontWeight: 'bold', color: '#c62828', fontSize: '13px', marginBottom: '4px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
@@ -53,7 +69,7 @@ const LeftPanel: React.FC<{ sosTasks: any[]; sosNurses: NursePin[]; isFullWidth?
           </div>
         ))}
 
-        {/* 2. 患者タスクからの緊急要請 (Task SOS) */}
+        {/* 3. 患者タスクからの緊急要請 (Task SOS) */}
         {sosTasks.map((task) => (
           <div key={task.task_id} style={{ backgroundColor: '#fff', borderLeft: '5px solid #d32f2f', padding: '10px', borderRadius: '6px', boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }}>
             <div style={{ fontWeight: 'bold', color: '#c62828', fontSize: '14px', marginBottom: '4px' }}>
@@ -119,6 +135,7 @@ export default function MapContainer({ selectedPatients }: MapContainerProps): R
   const setNurses = useTimelineStore((state) => state.setNurses);
   const toggleTaskSos = useTimelineStore((state) => state.toggleTaskSos);
   const updateNursePosition = useTimelineStore((state) => state.updateNursePosition);
+  const patientSosList = useTimelineStore((state) => state.patientSosList || []);
 
   const displayNurses = useMemo(() => {
     const seenKeys = new Set<string>();
@@ -221,7 +238,7 @@ export default function MapContainer({ selectedPatients }: MapContainerProps): R
 
   const sosTasks = allTasks.filter(task => task.is_sos === true);
   const sosNurses = displayNurses.filter(nurse => nurse.is_sos === true);
-  const totalSosCount = sosTasks.length + sosNurses.length;
+  const totalSosCount = sosTasks.length + sosNurses.length + patientSosList.length;
 
   return (
     <DndContext sensors={sensors} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
@@ -298,7 +315,7 @@ export default function MapContainer({ selectedPatients }: MapContainerProps): R
 
           {activeTab === 'alerts' && (
             <div className="w-full h-full overflow-y-auto">
-              <LeftPanel sosTasks={sosTasks} sosNurses={sosNurses} isFullWidth={true} />
+              <LeftPanel sosTasks={sosTasks} sosNurses={sosNurses} patientSosList={patientSosList} isFullWidth={true} />
             </div>
           )}
 
@@ -312,7 +329,7 @@ export default function MapContainer({ selectedPatients }: MapContainerProps): R
         {/* 💻 PC幅（lg以上）従来通りの三分割同時表示レイアウト（マップは0度表示） */}
         <div className="hidden lg:flex w-full h-full overflow-hidden relative">
           {/* ① 左側：緊急アラート */}
-          <LeftPanel sosTasks={sosTasks} sosNurses={sosNurses} />
+          <LeftPanel sosTasks={sosTasks} sosNurses={sosNurses} patientSosList={patientSosList} />
           
           {/* ② 中央：病棟マップ（0度・回転なし表示） */}
           <div className="flex-1 h-full flex justify-center items-center overflow-hidden relative">

@@ -1,6 +1,7 @@
 import type { TaskCardPropsInner } from "../../types/types";
 import { useDraggable, useDroppable } from '@dnd-kit/core';
 import { GroupingButton } from "./GroupingButton";
+import { useTimelineStore } from "../../stores/useTimelineStore";
 
 export const TaskCard = (props: TaskCardPropsInner) => {
   // ここでデフォルト値を設定すれば、プロパティが渡されなくても絶対にエラーにならない
@@ -13,15 +14,17 @@ export const TaskCard = (props: TaskCardPropsInner) => {
     borderStyle = 'border-solid',
     className = '',
   } = props;
-  // 3. ドラッグの設定（isOverlayがtrueの時はフック登録を完全無効化し2重登録を防止）
+  const isReadOnly = useTimelineStore((state) => state.isReadOnly);
+
+  // 3. ドラッグの設定（isOverlayがtrueまたはisReadOnlyがtrueの時はフック登録を完全無効化）
   const { attributes, listeners, setNodeRef: setDraggableRef, isDragging } = useDraggable({
     id: task.task_id,
-    disabled: Boolean(props.isOverlay),
+    disabled: Boolean(props.isOverlay || isReadOnly),
   });
 
   const { setNodeRef: setDroppableRef} = useDroppable({
     id: task.task_id, // 自分のIDをドロップ先IDとして登録
-    disabled: Boolean(props.isOverlay),
+    disabled: Boolean(props.isOverlay || isReadOnly),
   });
 
   const setCombinedRef = (node: HTMLElement | null) => {
@@ -70,8 +73,8 @@ export const TaskCard = (props: TaskCardPropsInner) => {
       {/* 💡 左端エリア：ドラッグハンドルとステータスアイコンを綺麗に縦並びにする */}
       <div className="flex flex-col items-center gap-1 flex-shrink-0 w-5 select-none pt-0.5">
         
-        {/* 1. ドラッグハンドル（上段: PC表示時かつ通常モード時のみ表示） */}
-        {!isCardDrag && (
+        {/* 1. ドラッグハンドル（上段: PC表示時かつ通常モード・可読可能時のみ表示） */}
+        {!isCardDrag && !isReadOnly && (
           <div 
             {...listeners} 
             {...attributes} 
@@ -110,7 +113,7 @@ export const TaskCard = (props: TaskCardPropsInner) => {
               {task.display_period || task.scheduled_at || ''}
             </span>
             {isInterruptTask ? (
-              <span className="bg-rose-600 text-white text-[10px] px-1.5 py-0.5 rounded font-bold whitespace-nowrap shadow-sm flex items-center gap-0.5 animate-pulse">
+              <span className="bg-rose-600 text-white text-[10px] px-1.5 py-0.5 rounded font-bold whitespace-nowrap shadow-sm flex items-center gap-0.5">
                 ⚡ 突発割り込み
               </span>
             ) : task.is_additional ? (
@@ -122,11 +125,11 @@ export const TaskCard = (props: TaskCardPropsInner) => {
               <span className="bg-emerald-600 text-white text-[10px] px-1.5 py-0.5 rounded font-bold whitespace-nowrap shadow-sm flex items-center gap-0.5">
                 看護指示
               </span>
-            ) : (
+            ) : task.instruction_type === '医師指示' && !isInterruptTask ? (
               <span className="bg-indigo-100 text-indigo-800 border border-indigo-200 text-[10px] px-1.5 py-0.5 rounded font-semibold whitespace-nowrap flex items-center gap-0.5 opacity-90">
                 医師指示
               </span>
-            )}
+            ) : null}
             {originalTime &&
              originalTime !== task.display_period &&
              originalTime !== task.scheduled_at &&
@@ -139,22 +142,48 @@ export const TaskCard = (props: TaskCardPropsInner) => {
           <GroupingButton task={task} />
         </div>
         
-        <div className="grid grid-cols-3 gap-1 mb-1 text-sm">
-          <span>{task.room_id ? `${task.room_id}号室` : ''}</span>
-          <span className='col-span-2 text-left'>{task.patient_name ? `${task.patient_name}様` : '患者名未設定'}</span>
-        </div>
-        
-        <div className="text-sm text-left">{task.title}</div>
-        
-        {task.details &&
-         task.details.trim() !== '' &&
-         task.details.trim() !== '無題タスク' &&
-         task.details.trim() !== '詳細なし' &&
-         task.details.trim() !== 'なし' && (
-          <div className="text-[11px] font-normal mt-0.5 border-t border-dashed border-current/20 pt-0.5 opacity-80 text-left">
-            {task.details}
-          </div>
-        )}
+        {(() => {
+          const hasRoom = Boolean(task.room_id && String(task.room_id).trim() !== '');
+          const hasPatient = Boolean(task.patient_name && String(task.patient_name).trim() !== '');
+
+          if (isInterruptTask && !hasRoom && !hasPatient) {
+            return (
+              <div className="py-1 flex flex-col items-center justify-center text-center">
+                <div className="text-xs font-black text-rose-950 flex items-center gap-1.5 bg-rose-600/10 border border-rose-300 px-3 py-1 rounded-full shadow-2xs">
+                  <span>ナースコール対応</span>
+                </div>
+                {task.details && (
+                  <div className="text-[11px] font-normal text-rose-900/80 mt-1 text-left truncate max-w-full">
+                    {task.details}
+                  </div>
+                )}
+              </div>
+            );
+          }
+
+          return (
+            <>
+              {(hasRoom || hasPatient) && (
+                <div className="grid grid-cols-3 gap-1 mb-1 text-sm">
+                  <span>{hasRoom ? `${task.room_id}号室` : ''}</span>
+                  <span className="col-span-2 text-left">{hasPatient ? `${task.patient_name}様` : ''}</span>
+                </div>
+              )}
+
+              <div className="text-sm text-left">{task.title}</div>
+
+              {task.details &&
+               task.details.trim() !== '' &&
+               task.details.trim() !== '無題タスク' &&
+               task.details.trim() !== '詳細なし' &&
+               task.details.trim() !== 'なし' && (
+                <div className="text-[11px] font-normal mt-0.5 border-t border-dashed border-current/20 pt-0.5 opacity-80 text-left">
+                  {task.details}
+                </div>
+              )}
+            </>
+          );
+        })()}
       </div>
     </div>
   );

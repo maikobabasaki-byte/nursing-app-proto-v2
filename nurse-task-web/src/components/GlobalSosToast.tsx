@@ -12,8 +12,10 @@ const sosBroadcastChannel = typeof window !== 'undefined' && 'BroadcastChannel' 
 export const GlobalSosToast: React.FC = () => {
   const nurses = useTimelineStore((state) => state.nurses);
   const allTasks = useTimelineStore((state) => state.allTasks);
+  const patientSosList = useTimelineStore((state) => state.patientSosList || []);
   const respondToNurseSos = useTimelineStore((state) => state.respondToNurseSos);
   const respondToTaskSos = useTimelineStore((state) => state.respondToTaskSos);
+  const respondToPatientSos = useTimelineStore((state) => state.respondToPatientSos);
   const currentUser = useTimelineStore((state) => state.currentUser);
   const currentUserName = useUserName();
   const [dismissedIds, setDismissedIds] = useState<string[]>([]);
@@ -49,6 +51,9 @@ export const GlobalSosToast: React.FC = () => {
       } else if (data.type === 'TASK_SOS_RESPONDED' && data.taskId) {
         respondToTaskSos(data.taskId, data.responderName || '他スタッフ');
         setDismissedIds((prev) => [...prev, String(data.taskId)]);
+      } else if (data.type === 'PATIENT_SOS_RESPONDED' && data.patientId) {
+        respondToPatientSos(data.patientId, data.responderName || '他スタッフ');
+        setDismissedIds((prev) => [...prev, String(data.patientId)]);
       }
     };
 
@@ -56,7 +61,7 @@ export const GlobalSosToast: React.FC = () => {
     return () => {
       sosBroadcastChannel.removeEventListener('message', handleMessage);
     };
-  }, [respondToNurseSos, respondToTaskSos]);
+  }, [respondToNurseSos, respondToTaskSos, respondToPatientSos]);
 
   // 💡 FirestoreのSOS状態クリア（is_sos === false）を検知して dismissedIds を自動クリーンアップ
   useEffect(() => {
@@ -104,9 +109,7 @@ export const GlobalSosToast: React.FC = () => {
       const targetNurse = nurses.find((n) => n.nurse_id === nurseId);
       const { triggerNurseCallInterruption } = await import('../hooks/useTaskUpdate');
       triggerNurseCallInterruption({
-        patientId: 'P-GUEST-102',
-        patientName: '佐藤 花子 (B様)',
-        roomId: '202',
+        patientName: targetNurse?.name ? `${targetNurse.name}の応援対応` : '緊急SOS対応',
         sosReason: targetNurse?.sos_reason || `${targetNurse?.name || '他スタッフ'}からの緊急SOS対応要請`,
       });
     } catch (e) {}
@@ -140,12 +143,14 @@ export const GlobalSosToast: React.FC = () => {
   const handleRespondTask = async (taskId: string) => {
     // 0. 既存実施中タスクの自動中断 ＆ 現在時刻でのナースコール・SOS割り込みタスクの動的生成
     try {
+      const { flattenTasks } = await import('../utils/taskLogic');
+      const targetTask = flattenTasks(allTasks).find((t) => t.task_id === taskId);
       const { triggerNurseCallInterruption } = await import('../hooks/useTaskUpdate');
       triggerNurseCallInterruption({
-        patientId: 'P-GUEST-102',
-        patientName: '佐藤 花子 (B様)',
-        roomId: '202',
-        sosReason: 'タスク支援要請への応援対応',
+        patientId: targetTask?.patient_id,
+        patientName: targetTask?.patient_name,
+        roomId: targetTask?.room_id,
+        sosReason: targetTask ? `「${targetTask.title}」支援応援対応` : 'タスク支援要請への応援対応',
       });
     } catch (e) {}
 
@@ -175,7 +180,49 @@ export const GlobalSosToast: React.FC = () => {
     }
   };
 
-  if (activeSosNurses.length === 0 && activeSosTasks.length === 0 && !conflictNotice) {
+  const handleRespondPatient = async (patientId: string, patientName: string, roomId?: string, reason?: string) => {
+    // 0. 応じた看護師のタイムラインにナースコール同様の応援要請対応割り込みタスクを動的追加
+    try {
+      const { triggerNurseCallInterruption } = await import('../hooks/useTaskUpdate');
+      await triggerNurseCallInterruption({
+        patientId: patientId,
+        patientName: patientName,
+        roomId: roomId || '病室',
+        sosReason: reason || `${patientName}様 (${roomId ? `${roomId}号室` : ''}) への緊急応援要請`,
+        title: `🤝 緊急応援要請対応 (${patientName}様)`,
+      });
+    } catch (e) {
+      console.error("患者SOS対応割り込み作成エラー:", e);
+    }
+
+    // 1. 即座にローカルストアおよびFirestoreの患者SOSをクリア（0秒で反応）
+    respondToPatientSos(patientId, responderName);
+    setDismissedIds((prev) => [...prev, patientId]);
+
+    // 2. 近接端末・他タブへ0秒即時ブロードキャスト送信
+    if (sosBroadcastChannel) {
+      sosBroadcastChannel.postMessage({
+        type: 'PATIENT_SOS_RESPONDED',
+        patientId,
+        responderName,
+      });
+    }
+  };
+
+  const activeSosPatients = patientSosList.filter((p) => {
+    if (dismissedIds.includes(p.patient_id)) return false;
+
+    const reqId = String(p.requested_by_id || '').trim();
+    const reqName = String(p.requested_by_name || '').trim().replace(/[\s　]+/g, '');
+
+    // 💡 本人（自分）が発信したSOSの場合はToastポップアップ表示を除外
+    if (myId !== '' && reqId === myId) return false;
+    if (myName !== '' && reqName === myName) return false;
+
+    return true;
+  });
+
+  if (activeSosNurses.length === 0 && activeSosTasks.length === 0 && activeSosPatients.length === 0 && !conflictNotice) {
     return null;
   }
 
@@ -193,6 +240,50 @@ export const GlobalSosToast: React.FC = () => {
           </button>
         </div>
       )}
+
+      {/* 患者SOS要請トースト一覧 */}
+      {activeSosPatients.map((p) => (
+        <div
+          key={`toast-patient-${p.patient_id}`}
+          className="bg-white border-2 border-red-600 rounded-xl p-4 shadow-2xl ring-4 ring-red-100 flex flex-col gap-2 transition-all duration-300 relative"
+        >
+          <button
+            onClick={() => setDismissedIds((prev) => [...prev, p.patient_id])}
+            className="absolute top-2 right-2 text-gray-400 hover:text-gray-700 hover:bg-gray-100 w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold transition-colors cursor-pointer"
+            title="通知を閉じる"
+          >
+            ✕
+          </button>
+
+          <div className="flex items-center justify-between border-b border-red-100 pb-2 pr-6">
+            <div className="flex items-center gap-1.5 font-bold text-red-600 text-sm">
+              <span className="animate-ping w-2 h-2 rounded-full bg-red-600" />
+              <span>🚨 緊急応援要請 (患者SOS)</span>
+            </div>
+            <span className="text-[10px] bg-red-100 text-red-700 font-extrabold px-2 py-0.5 rounded-full">
+              要対応
+            </span>
+          </div>
+
+          <div className="text-xs text-gray-800 font-medium leading-relaxed">
+            <span className="font-bold text-gray-900 text-sm">{p.patient_name} 様 ({p.room_id ? `${p.room_id}号室` : ''})</span>
+            {p.reason && (
+              <div className="mt-1 text-[11px] text-gray-600 bg-red-50 p-2 rounded border border-red-100">
+                💬 {p.reason}
+              </div>
+            )}
+          </div>
+
+          <div className="pt-1 flex items-center justify-end">
+            <button
+              onClick={() => handleRespondPatient(p.patient_id, p.patient_name, p.room_id, p.reason)}
+              className="!bg-red-600 hover:!bg-red-700 !text-white !font-bold !text-xs !px-4 !py-2 !rounded-lg !shadow-md hover:!shadow-lg !transition-all !transform active:!scale-95 !flex !items-center !gap-1.5 !cursor-pointer"
+            >
+              <span>🤝 要請に応じる</span>
+            </button>
+          </div>
+        </div>
+      ))}
 
       {/* 看護師SOS要請トースト一覧 */}
       {activeSosNurses.map((nurse) => (

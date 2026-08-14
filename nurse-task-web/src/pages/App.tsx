@@ -1,7 +1,8 @@
 import { useState, useEffect, lazy, Suspense } from 'react';
 import { onAuthStateChanged } from 'firebase/auth';
 import type { User } from 'firebase/auth';
-import { auth, db } from '../lib/firebase';
+import { getJSTDateString } from '../utils/dateUtils';
+import { auth, db, registerActiveDateInFirestore } from '../lib/firebase';
 import { collection, getDocs, onSnapshot, query, where, doc, getDoc } from 'firebase/firestore';
 import { reconstructGroups } from '../utils/taskLogic';
 import { useTimelineStore } from '../stores/useTimelineStore';
@@ -10,6 +11,7 @@ import type { ExtendedTask, LeaderTodo } from '../types/types';
 import Header from '../components/Header';
 import Footer from '../components/Footer';
 import MainLayout from "../components/MainLayout";
+import { TutorialOverlay } from '../components/Tutorial/TutorialOverlay';
 
 // 🚀 コードスプリッティング（遅延ローディング）の設定
 const Login = lazy(() => import('./Login'));
@@ -35,8 +37,6 @@ import { ensureTodayTasksSynced } from '../services/taskSyncService';
 type ScreenType = 'login' | 'patientSelect' | 'timeline' | 'patientMaster' | 'map' | 'leaderTodo' | 'settings';
 
 import { GlobalSosToast } from '../components/GlobalSosToast';
-
-import { fetchGASData } from '../services/gasService';
 
 import { useTheme } from '../hooks/useTheme';
 
@@ -76,33 +76,42 @@ export default function App() {
         setUser(currentUser);
         const id = currentUser.email ? currentUser.email.split('@')[0] : currentUser.uid;
 
-        // 🎯 ゲストユーザー（匿名ログイン / guestアカウント）の場合はシードデータを自動生成してダイレクト同期
-        if (currentUser.isAnonymous || id.includes('guest')) {
-          console.log(`👤 [AuthCheck] ゲストユーザーを検出しました! (UID: ${currentUser.uid}, isAnonymous: ${currentUser.isAnonymous})`);
-          const guestPatients = ['P-GUEST-101', 'P-GUEST-102', 'P-GUEST-103', 'P-GUEST-104'];
-          setSelectedPatients(guestPatients);
-          sessionStorage.setItem('selectedPatients', JSON.stringify(guestPatients));
+        // 🎯 ゲストユーザー（匿名ログイン / guest / nurse01 / nurse02アカウント）の場合はシードデータを自動生成してダイレクト同期
+        const isGuest = currentUser.isAnonymous || id.includes('guest') || id.includes('nurse01') || id.includes('nurse02') || Boolean(sessionStorage.getItem('nurseflow_guest_role'));
+        if (isGuest) {
+          const guestRole = (sessionStorage.getItem('nurseflow_guest_role') as 'leader' | 'member') || 'leader';
+          const isLeader = guestRole === 'leader';
+          const guestName = isLeader ? 'ゲストリーダー (nurse01モデル)' : 'ゲストメンバー (nurse02モデル)';
+
+          console.log(`👤 [AuthCheck] ゲストユーザー(${guestRole})を検出しました! (UID: ${currentUser.uid}, isAnonymous: ${currentUser.isAnonymous})`);
+          
+          // 💡 ハードコードされた P-GUEST-*** ではなく、コピータスクの患者IDへ動的追従
+          setSelectedPatients([]);
+          sessionStorage.setItem('selectedPatients', JSON.stringify([]));
           sessionStorage.setItem('currentScreen', 'patientMaster');
 
           useTimelineStore.getState().setCurrentUser({
             nurse_id: currentUser.uid,
-            name: 'ゲスト看護師（体験用）',
+            name: guestName,
             email: currentUser.email || 'guest@nurseflow.local',
+            is_leader: isLeader,
+            team: 'Aチーム',
           });
 
-          console.log("🌱 [AuthCheck] ゲスト患者をセット完了。バックグラウンドでシードタスク・TODOを同期します...");
-          import('../services/guestSeedService').then(({ seedGuestData }) => {
-            seedGuestData(currentUser.uid);
-          });
-
+          console.log("🌱 [AuthCheck] ゲストデータを同期中... 100%準備が整うまでローディングを表示します");
           setIsSyncingWithPC(true);
-          setTimeout(() => {
-            console.log("🚀 [AuthCheck] 同期完了! メイン画面(patientMaster)へ遷移します");
+
+          try {
+            const { seedGuestData } = await import('../services/guestSeedService');
+            await seedGuestData(currentUser.uid, guestRole);
+            console.log("🚀 [AuthCheck] GASデータの全コピーおよび同期が100%完了しました!");
+          } catch (syncErr) {
+            console.error("❌ ゲストデータ同期エラー:", syncErr);
+          } finally {
             setIsSyncingWithPC(false);
             setCurrentScreen('patientMaster');
-          }, 1000);
-
-          setLoading(false);
+            setLoading(false);
+          }
           return;
         }
 
@@ -140,7 +149,8 @@ export default function App() {
 
         // 🎯 【本日の初期設定完了チェック＆PC同期引き継ぎ判定】
         try {
-          const todayStr = new Date().toISOString().split('T')[0];
+          const todayStr = getJSTDateString();
+          registerActiveDateInFirestore(todayStr);
           const nurseRef = doc(db, 'nurses', id);
           const nurseSnap = await getDoc(nurseRef);
 
@@ -190,18 +200,63 @@ export default function App() {
     return () => unsubscribe();
   }, []); // currentScreenを依存に含めないことで、画面遷移時にリセットされないようにする
 
+  const selectedDate = useTimelineStore((state) => state.selectedDate);
+
   // Firestoreのリアルタイム監視とZustandストアへの同期
   useEffect(() => {
     if (!user) return;
 
+    const isGuestUser = Boolean(user.isAnonymous || (user.email && user.email.includes('guest')));
+    const todayStr = getJSTDateString();
+
     const unsubscribe = onSnapshot(
       collection(db, "tasks"), 
       (snapshot) => {
-        // 💡 重複タスクの完全排除（task_id単位 ＆ 患者ID_タスク名_時間単位でのデデュープ）
+        // 💡 重複タスクの排除（taskId固有ID単位でデデュープ）
         const uniqueTaskMap = new Map<string, ExtendedTask>();
+        const extractedPatientSosList: any[] = [];
+
         snapshot.docs.forEach((docItem) => {
           const data = docItem.data();
           const taskId = docItem.id;
+
+          // 📅 稼働日一覧専用ドキュメントの抽出と同期（権限エラー回避のため tasks 内で一括管理）
+          if (taskId === 'system-active-dates' || data.is_active_dates === true) {
+            if (Array.isArray(data.active_dates)) {
+              useTimelineStore.getState().setActiveDates(data.active_dates);
+            }
+            return;
+          }
+
+          // 🚨 患者SOS専用ドキュメントの抽出と除外（タイムラインの通常タスクとは分離）
+          if (taskId.startsWith('patient-sos-') || data.is_patient_sos === true) {
+            if (data.is_sos !== false) {
+              extractedPatientSosList.push({
+                patient_id: data.patient_id || taskId.replace('patient-sos-', ''),
+                patient_name: data.patient_name || '',
+                room_id: data.room_id || '',
+                reason: data.reason || data.sos_reason || '',
+                requested_by_id: data.requested_by_id || '',
+                requested_by_name: data.requested_by_name || '',
+                created_at: data.updatedAt?.toDate?.()?.toISOString() || new Date().toISOString(),
+              });
+            }
+            return;
+          }
+
+          // 📅 日付によるパーティショニングフィルタ（選択中の日付のタスクのみ読み込み）
+          const taskTargetDate = data.target_date || todayStr;
+          if (taskTargetDate !== selectedDate) {
+            return;
+          }
+
+          // 🛡️ 通常メンバーログイン時は、一時ゲスト作成タスクのみを除外
+          if (!isGuestUser) {
+            if (taskId.startsWith('GUEST-TASK-') || data.is_guest === true) {
+              return;
+            }
+          }
+
           const period = (data.display_period === "undefined" || !data.display_period) ? "" : data.display_period;
           const taskObj = {
             ...data,
@@ -209,24 +264,21 @@ export default function App() {
             display_period: period,
           } as ExtendedTask;
 
-          const contentKey = `${taskObj.patient_id}_${taskObj.title}_${taskObj.display_period}`;
-          if (!uniqueTaskMap.has(taskId) && !uniqueTaskMap.has(contentKey)) {
+          if (!uniqueTaskMap.has(taskId)) {
             uniqueTaskMap.set(taskId, taskObj);
-            uniqueTaskMap.set(contentKey, taskObj);
           }
         });
 
-        const firestoreTasks = Array.from(new Set(uniqueTaskMap.values()));
+        // 📡 全端末で患者SOSリストを同期
+        useTimelineStore.getState().setPatientSosList(extractedPatientSosList);
+
+        const firestoreTasks = Array.from(uniqueTaskMap.values());
 
         if (snapshot.metadata.hasPendingWrites) {
           return;
         }
 
         const currentLocalTasks = useTimelineStore.getState().allTasks;
-
-        if (firestoreTasks.length === 0 && currentLocalTasks.length > 0) {
-          return;
-        }
 
         const mergedTasks = firestoreTasks.map((ft) => {
           const localMatch = currentLocalTasks.find(lt => lt.task_id === ft.task_id) ||
@@ -252,26 +304,37 @@ export default function App() {
     );
 
     return () => unsubscribe();
-  }, [user, setTasks]);
+  }, [user, setTasks, selectedDate]);
 
   // 💡 Firestoreの看護師マスターデータ (nurse_masterコレクション) リアルタイム監視
   useEffect(() => {
     if (!user) return;
+    const isGuestUser = Boolean(user.isAnonymous || (user.email && user.email.includes('guest')));
 
     const unsubscribeNurseMaster = onSnapshot(
       collection(db, "nurse_master"), 
       (snapshot) => {
-        const masters = snapshot.docs.map((doc) => {
-          const data = doc.data();
-          return {
-            nurse_id: doc.id,
-            name: data.name || '',
-            gender: data.gender || '',
-            team: data.team || '',
-            email: data.email || '',
-            is_leader: Boolean(data.is_leader),
-          } as NurseMaster;
-        });
+        const masters = snapshot.docs
+          .map((doc) => {
+            const data = doc.data();
+            return {
+              nurse_id: doc.id,
+              name: data.name || '',
+              gender: data.gender || '',
+              team: data.team || '',
+              email: data.email || '',
+              is_leader: Boolean(data.is_leader),
+            } as NurseMaster;
+          })
+          .filter((m) => {
+            if (!isGuestUser) {
+              const emailStr = m.email || '';
+              if (m.nurse_id.includes('guest') || m.name.includes('ゲスト') || emailStr.includes('guest')) {
+                return false;
+              }
+            }
+            return true;
+          });
 
         if (masters.length > 0) {
           useTimelineStore.getState().setNurseMaster(masters);
@@ -292,6 +355,7 @@ export default function App() {
   // 💡 Firestoreの看護師SOS状態 (nursesコレクション) リアルタイム監視と全端末同期
   useEffect(() => {
     if (!user) return;
+    const isGuestUser = Boolean(user.isAnonymous || (user.email && user.email.includes('guest')));
 
     const unsubscribeNurses = onSnapshot(
       collection(db, "nurses"), 
@@ -300,13 +364,22 @@ export default function App() {
           return;
         }
 
-        const firestoreNurses = snapshot.docs.map((doc) => {
-          const data = doc.data();
-          return {
-            nurse_id: doc.id,
-            ...data,
-          } as NursePin;
-        });
+        const firestoreNurses = snapshot.docs
+          .map((doc) => {
+            const data = doc.data();
+            return {
+              nurse_id: doc.id,
+              ...data,
+            } as NursePin;
+          })
+          .filter((n) => {
+            if (!isGuestUser) {
+              if (n.nurse_id.includes('guest') || (n.name && n.name.includes('ゲスト'))) {
+                return false;
+              }
+            }
+            return true;
+          });
 
         if (firestoreNurses.length > 0) {
           useTimelineStore.getState().setNurses(firestoreNurses);
@@ -327,6 +400,7 @@ export default function App() {
   // 💡 FirestoreのリーダーTODO (leader_todosコレクション) リアルタイム監視と全端末同期
   useEffect(() => {
     if (!user) return;
+    const isGuestUser = Boolean(user.isAnonymous || (user.email && user.email.includes('guest')));
 
     const unsubscribeLeaderTodos = onSnapshot(
       collection(db, "leader_todos"), 
@@ -343,7 +417,15 @@ export default function App() {
               todo_id: doc.id,
             } as LeaderTodo;
           })
-          .filter((todo) => !todo.is_deleted && todo.status !== 'deleted');
+          .filter((todo) => {
+            if (todo.is_deleted || todo.status === 'deleted') return false;
+            if (!isGuestUser) {
+              if (todo.todo_id.startsWith('GUEST-TODO') || (todo.patient_id && todo.patient_id.startsWith('P-GUEST'))) {
+                return false;
+              }
+            }
+            return true;
+          });
 
         useTimelineStore.getState().setLeaderTodos(firestoreTodos);
       },
@@ -473,6 +555,7 @@ export default function App() {
                 <Settings />
               )}
             </Suspense>
+            <TutorialOverlay />
           </MainLayout>
         ) : (
           /* 🛡️ 未ログイン状態での保護ルートアクセスに対するRoute Guard（強制ログインリダイレクト） */

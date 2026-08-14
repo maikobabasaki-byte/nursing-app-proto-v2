@@ -41,6 +41,7 @@ export default function WardMap({
   const storeNurses = useTimelineStore((state) => state.nurses);
   const toggleNurseSos = useTimelineStore((state) => state.toggleNurseSos);
   const storeMemos = useTimelineStore((state) => state.memos);
+  const patientSosList = useTimelineStore((state) => state.patientSosList);
   const nurses = displayNurses || storeNurses;
   const currentUserName = useUserName();
   const isMobile = useIsMobile();
@@ -75,7 +76,7 @@ export default function WardMap({
 
   // 💡 ダブルタップSOS判定用タイマー・時刻記録
   const lastTapTimeRef = React.useRef<Record<string, number>>({});
-  const clickTimerRef = React.useRef<Record<string, NodeJS.Timeout | null>>({});
+  const clickTimerRef = React.useRef<Record<string, ReturnType<typeof setTimeout> | null>>({});
 
   // 💡 患者タスク一覧ポップアップを画面（ビューポート）内に完全に収めるクランプ表示関数
   const openPatientMenu = (patient: Patient, rawX: number, rawY: number) => {
@@ -99,7 +100,17 @@ export default function WardMap({
     });
   };
 
-  // 🚨 ベッドカードタップ処理（シングルタップ＝タスク一覧ポップアップ表示、ダブルタップ＝SOS自動補完発信）
+  // 🚨 特定タスクを紐付けず、患者単体の「緊急応援要請」としてSOSを発信・解除
+  const triggerPatientSos = (patient: Patient) => {
+    if (useTimelineStore.getState().isReadOnly) return;
+    useTimelineStore.getState().togglePatientSos(
+      patient.patient_id,
+      patient.name,
+      patient.room_id
+    );
+  };
+
+  // 🚨 ベッドカードタップ処理（シングルタップ＝タスク一覧ポップアップ表示、ダブルタップ＝SOS発信）
   const handleBedTap = (patient: Patient, e: React.SyntheticEvent) => {
     e.stopPropagation();
 
@@ -112,7 +123,7 @@ export default function WardMap({
     const lastTap = lastTapTimeRef.current[patient.patient_id] || 0;
     const timeDiff = now - lastTap;
 
-    if (timeDiff > 0 && timeDiff <= 280) {
+    if (timeDiff > 0 && timeDiff <= 200) {
       // 🚨 【ダブルタップ確定】1回目のシングルタップタイマーを即座に解除してポップアップ開くのを遮断！
       if (clickTimerRef.current[patient.patient_id]) {
         clearTimeout(clickTimerRef.current[patient.patient_id]!);
@@ -120,25 +131,9 @@ export default function WardMap({
       }
       lastTapTimeRef.current[patient.patient_id] = 0;
 
-      // 🧠 該当患者の現在実施中（progressing / record_start）タスクを自動抽出
-      const relatedTasks = allTasks.filter(t => t.patient_id === patient.patient_id);
-      const activeTask = relatedTasks.find(t => t.status === 'progressing' || t.status === 'record_start' || (t as any).status === 'in_progress');
-
-      let sosReason = `🚨 緊急要請：${patient.name}さん (${patient.room_id ? `${patient.room_id}号室` : ''}) で緊急応援要請`;
-      let targetTaskId = relatedTasks.length > 0 ? relatedTasks[0].task_id : patient.patient_id;
-
-      if (activeTask) {
-        sosReason = `🚨 緊急要請：${patient.name}さん (${patient.room_id ? `${patient.room_id}号室` : ''}) 「${activeTask.title}」実施中に急変・応援要請`;
-        targetTaskId = activeTask.task_id;
-      }
-
-      if (onPatientRightClick && relatedTasks.length > 0) {
-        onPatientRightClick(targetTaskId, patient.name);
-      } else {
-        toggleTaskSos(targetTaskId, sosReason);
-      }
+      triggerPatientSos(patient);
     } else {
-      // 💡 【1回目のタップ】280msタイマーをセットしてシングルタップ待機
+      // 💡 【1回目のタップ】200msタイマーをセットしてシングルタップ待機
       lastTapTimeRef.current[patient.patient_id] = now;
       if (clickTimerRef.current[patient.patient_id]) {
         clearTimeout(clickTimerRef.current[patient.patient_id]!);
@@ -151,7 +146,7 @@ export default function WardMap({
         if (isMobile) {
           openPatientMenu(patient, clientX, clientY);
         }
-      }, 280);
+      }, 200);
     }
   };
 
@@ -259,7 +254,8 @@ export default function WardMap({
                 const textX = bedX + BED_W / 2;
                 const textY = bedTopY + BED_H / 2;
 
-                const hasSos = allTasks.some(t => t.patient_id === patient.patient_id && t.is_sos === true);
+                const hasSos = (patientSosList && patientSosList.some(p => p.patient_id === patient.patient_id)) ||
+                               allTasks.some(t => t.patient_id === patient.patient_id && t.is_sos === true);
 
                 let cardFill = '#ffffff';
                 let cardStroke = '#cbd5e1';
@@ -283,6 +279,15 @@ export default function WardMap({
                   <g 
                     key={patient.patient_id}
                     onClick={(e) => handleBedTap(patient, e)}
+                    onDoubleClick={(e) => {
+                      e.stopPropagation();
+                      e.preventDefault();
+                      if (clickTimerRef.current[patient.patient_id]) {
+                        clearTimeout(clickTimerRef.current[patient.patient_id]!);
+                        clickTimerRef.current[patient.patient_id] = null;
+                      }
+                      triggerPatientSos(patient);
+                    }}
                     style={{ userSelect: 'none', WebkitUserSelect: 'none', cursor: 'pointer' }}
                     className="select-none cursor-pointer"
                     onContextMenu={(e) => {

@@ -22,14 +22,11 @@ export function validateTaskGrouping(
     return { canGroup: false, reason: "選択中のグループ以外のタスクにはまとめられません。" };
   }
 
-  // ② グループ同士（すでに親である、あるいは子タスクである）のグループ化禁止
-  const isDraggedGroup = !!(draggedTask.children && draggedTask.children.length > 0) || !!draggedTask.parent_id;
-  const isTargetGroup = !!(targetTask.children && targetTask.children.length > 0) || !!targetTask.parent_id;
-
-  if (isDraggedGroup || isTargetGroup) {
+  // ② グループ親ノード同士の直接結合禁止
+  if (draggedTask.isGroup && targetTask.isGroup) {
     return { 
       canGroup: false, 
-      reason: "すでにグループ化されているタスク同士や、子タスクをさらにまとめ直すことはできません。" 
+      reason: "グループ同士を直接まとめることはできません。" 
     };
   }
 

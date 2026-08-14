@@ -21,6 +21,7 @@ export const TimelinePopup: React.FC<TimelinePopupProps> = ({ task, onClose, ren
   const duplicateTask = useTimelineStore((state) => state.duplicateTask);
   const deleteTask = useTimelineStore((state) => state.deleteTask);
   const handleUpdatePriority = useTimelineStore((state) => state.handleUpdatePriority);
+  const isReadOnly = useTimelineStore((state) => state.isReadOnly);
   const [showDuplicateModal, setShowDuplicateModal] = useState(false);
   const [duplicatePeriod, setDuplicatePeriod] = useState(
     TIME_OPTIONS.includes(task.display_period || '') ? task.display_period : '14:00'
@@ -120,20 +121,31 @@ export const TimelinePopup: React.FC<TimelinePopupProps> = ({ task, onClose, ren
           &times;
         </button>
         <div className="pr-6">
-          <div className="text-xs font-bold opacity-70 mb-0.5">{task.room_id}号室</div>
-          <div className="text-xl font-black mb-2">{task.patient_name} 様</div>
-          <div className="flex items-center gap-2 mb-2 flex-wrap">
-            <div className="text-sm font-bold opacity-80">指示時間: {task.display_period}</div>
-            {task.instruction_type === '看護指示' ? (
-              <span className="bg-emerald-600 text-white text-xs px-2.5 py-0.5 rounded-full font-bold shadow-sm">
-                看護指示
-              </span>
-            ) : (
-              <span className="bg-indigo-100 text-indigo-800 border border-indigo-200 text-xs px-2.5 py-0.5 rounded-full font-bold opacity-90">
-                医師指示
-              </span>
-            )}
-          </div>
+          {(() => {
+            const isInterruptTask = Boolean(task.title?.includes('ナースコール') || task.title?.includes('SOS') || task.task_id?.startsWith('CALL_INTERRUPT_'));
+            return (
+              <>
+                {task.room_id && task.room_id.trim() !== '' && (
+                  <div className="text-xs font-bold opacity-70 mb-0.5">{task.room_id}号室</div>
+                )}
+                {task.patient_name && task.patient_name.trim() !== '' && (
+                  <div className="text-xl font-black mb-2">{task.patient_name} 様</div>
+                )}
+                <div className="flex items-center gap-2 mb-2 flex-wrap">
+                  <div className="text-sm font-bold opacity-80">指示時間: {task.display_period}</div>
+                  {task.instruction_type === '看護指示' ? (
+                    <span className="bg-emerald-600 text-white text-xs px-2.5 py-0.5 rounded-full font-bold shadow-sm">
+                      看護指示
+                    </span>
+                  ) : task.instruction_type === '医師指示' && !isInterruptTask ? (
+                    <span className="bg-indigo-100 text-indigo-800 border border-indigo-200 text-xs px-2.5 py-0.5 rounded-full font-bold opacity-90">
+                      医師指示
+                    </span>
+                  ) : null}
+                </div>
+              </>
+            );
+          })()}
           <div className="text-base font-black mb-1">{task.title}</div>
           <div className="text-xs opacity-80 mb-3 min-h-[40px] whitespace-pre-wrap text-left">{task.details || '詳細はありません'}</div>
           
@@ -195,25 +207,29 @@ export const TimelinePopup: React.FC<TimelinePopupProps> = ({ task, onClose, ren
               <span>⚙️ 看護判断・タスク管理</span>
             </div>
 
-            {/* 看護判断によるケア追加・再実施（タスク複製）ボタン */}
-            <button
-              type="button"
-              onClick={() => setShowDuplicateModal(true)}
-              className="w-full flex items-center justify-center gap-1.5 !py-2 !px-3 !bg-emerald-50 hover:!bg-emerald-100 !text-emerald-800 border border-emerald-400 !font-bold !text-xs !rounded-lg shadow-xs cursor-pointer transition-all active:scale-98"
-            >
-              <span>看護判断で追加・再実施（複製生成）</span>
-            </button>
+            {/* 🩺 看護判断複製追加ボタン (ReadOnlyモード時は非表示) */}
+            {!isReadOnly && (
+              <>
+                <button
+                  type="button"
+                  onClick={() => setShowDuplicateModal(true)}
+                  className="w-full flex items-center justify-center gap-1.5 !py-2 !px-3 !bg-emerald-50 hover:!bg-emerald-100 !text-emerald-800 border border-emerald-400 !font-bold !text-xs !rounded-lg shadow-xs cursor-pointer transition-all active:scale-98"
+                >
+                  <span>看護判断で追加・再実施（複製生成）</span>
+                </button>
 
-            {/* 臨時追加・手動追加タスク削除ボタン */}
-            {(Boolean(task.is_additional) || String(task.task_id).startsWith('dup-task-') || String(task.task_id).startsWith('copied-')) && (
-              <button
-                type="button"
-                onClick={handleDeleteTask}
-                disabled={isDeleting}
-                className="w-full flex items-center justify-center gap-1.5 !py-2 !px-3 !bg-rose-50 hover:!bg-rose-100 !text-rose-700 border border-rose-300 !font-bold !text-xs !rounded-lg shadow-xs cursor-pointer transition-all disabled:opacity-50 active:scale-98"
-              >
-                <span>この追加タスクを削除</span>
-              </button>
+                {/* 臨時追加・手動追加タスク削除ボタン */}
+                {(Boolean(task.is_additional) || String(task.task_id).startsWith('dup-task-') || String(task.task_id).startsWith('copied-')) && (
+                  <button
+                    type="button"
+                    onClick={handleDeleteTask}
+                    disabled={isDeleting}
+                    className="w-full flex items-center justify-center gap-1.5 !py-2 !px-3 !bg-rose-50 hover:!bg-rose-100 !text-rose-700 border border-rose-300 !font-bold !text-xs !rounded-lg shadow-xs cursor-pointer transition-all disabled:opacity-50 active:scale-98"
+                  >
+                    <span>この追加タスクを削除</span>
+                  </button>
+                )}
+              </>
             )}
           </div>
         </div>
@@ -234,7 +250,7 @@ export const TimelinePopup: React.FC<TimelinePopupProps> = ({ task, onClose, ren
               <div>
                 <label className="font-extrabold block mb-1 text-gray-700">対象患者 / ケア</label>
                 <div className="bg-gray-100 p-2.5 rounded-xl text-xs font-bold text-gray-800 border border-gray-200">
-                  {task.patient_name} 様（{task.room_id}号室） / {task.title}
+                  {task.patient_name ? `${task.patient_name} 様` : ''}{task.room_id ? `（${task.room_id}号室）` : ''}{task.patient_name || task.room_id ? ' / ' : ''}{task.title}
                 </div>
               </div>
 

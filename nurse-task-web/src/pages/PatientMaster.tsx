@@ -29,42 +29,12 @@ interface DashboardProps {
   selectedIds: string[];
 }
 
-const GUEST_PATIENTS_MOCK: Patient[] = [
-  {
-    patient_id: 'P-GUEST-101',
-    name: '山田 太郎 (A様)',
-    gender: '男',
-    adl: '全介助',
-    risk_level: '高',
-    allergy: 'NSAIDs',
-    room_id: '201',
-    bed_number: 1,
-  },
-  {
-    patient_id: 'P-GUEST-102',
-    name: '佐藤 花子 (B様)',
-    gender: '女',
-    adl: '一部介助',
-    risk_level: '高',
-    allergy: 'アルコール綿',
-    room_id: '202',
-    bed_number: 1,
-  },
-  {
-    patient_id: 'P-GUEST-103',
-    name: '鈴木 一郎 (C様)',
-    gender: '男',
-    adl: '全介助',
-    risk_level: '高',
-    allergy: 'なし',
-    room_id: '203',
-    bed_number: 1,
-  },
-];
+
 
 export default function PatientMasterPage({ selectedIds }: DashboardProps) {
   const [rawPatients, setRawPatients] = useState<Patient[]>([]);
   const allTasks = useTimelineStore((state) => state.allTasks);
+  const currentUser = useTimelineStore((state) => state.currentUser);
 
   // 検索ワードを管理するStateを追加
   const [searchWord, setSearchWord] = useState('');
@@ -73,6 +43,16 @@ export default function PatientMasterPage({ selectedIds }: DashboardProps) {
   const flatTasks = useMemo(() => {
     return flattenTasks(allTasks);
   }, [allTasks]);
+
+  // 💡 ゲスト判定およびリーダー/メンバー判定（Zustand + sessionStorageハイブリッドで即時確定）
+  const guestRole = sessionStorage.getItem('nurseflow_guest_role');
+  const isGuestUser = Boolean(
+    currentUser?.email?.includes('guest') ||
+    currentUser?.nurse_id?.includes('guest') ||
+    currentUser?.nurse_id?.startsWith('GUEST-') ||
+    guestRole !== null
+  );
+  const isLeader = currentUser ? currentUser.is_leader === true : guestRole === 'leader';
 
   // 1. マウント時に患者マスタの静的データだけを取得
   useEffect(() => {
@@ -88,41 +68,70 @@ export default function PatientMasterPage({ selectedIds }: DashboardProps) {
 
   // 2. リアルタイムのタスクデータと結合し、フィルタリング・ソートを行う
   const patients = useMemo(() => {
-    // 💡 rawPatients と GUEST_PATIENTS_MOCK をマップ構造で結合
+    // 💡 rawPatients をベースとし、flatTasks から動的に患者情報を補完
     const patientMap = new Map<string, Patient>();
     rawPatients.forEach((p) => patientMap.set(p.patient_id, p));
-    GUEST_PATIENTS_MOCK.forEach((gp) => {
-      if (!patientMap.has(gp.patient_id)) {
-        patientMap.set(gp.patient_id, gp);
+
+    // タスクが存在する動的患者情報（GASコピー結果）をマップへ登録
+    flatTasks.forEach((t) => {
+      if (t.patient_id && !patientMap.has(t.patient_id)) {
+        patientMap.set(t.patient_id, {
+          patient_id: t.patient_id,
+          name: t.patient_name || `患者 (${t.patient_id})`,
+          room_id: t.room_id || '',
+          bed_number: 1,
+          adl: '要観察',
+          risk_level: '中',
+          allergy: 'なし',
+        });
       }
     });
 
     const allPatientsList = Array.from(patientMap.values());
     if (allPatientsList.length === 0) return [];
 
-    const mergedPatients = allPatientsList.map(patient => {
+    const mergedPatients = allPatientsList.map((patient) => {
       // 親グループが展開されたフラットなタスク群から該当患者のタスクを紐付け
-      const myTasks = flatTasks.filter(task => task.patient_id === patient.patient_id && task.status !== 'deleted') as any[];
+      const myTasks = flatTasks.filter((task) => task.patient_id === patient.patient_id && task.status !== 'deleted') as any[];
+
+      // 💡 タスクの二重重複表示を防止（複合キー: patient_id + title + display_period で重複除去）
+      const seenTaskKeys = new Set<string>();
+      const deduplicatedMyTasks = myTasks.filter((t) => {
+        const key = `${t.patient_id}_${t.title}_${t.display_period}`;
+        if (seenTaskKeys.has(key)) return false;
+        seenTaskKeys.add(key);
+        return true;
+      });
+
       // 💡 朝から順（時系列昇順）にカスタムソートを適用
-      const sortedTasks = sortTasksChronologically(myTasks);
+      const sortedTasks = sortTasksChronologically(deduplicatedMyTasks);
       return {
         ...patient,
-        tasks: sortedTasks
+        tasks: sortedTasks,
       };
     });
 
+    // 🎯 1 & 3: 厳格なフィルタリング（タスクあり or 選択済み）
+    const validPatients = mergedPatients.filter((p) => {
+      const hasTasks = p.tasks && p.tasks.length > 0;
+      const isSelected = selectedIds && selectedIds.length > 0 ? selectedIds.includes(p.patient_id) : false;
+      return hasTasks || isSelected;
+    });
+
+    // 🎯 ゲストメンバーの場合：タイムライン画面と完全同期し、202号室・203号室の患者のみ表示
+    let finalPatients = validPatients;
+    if (isGuestUser && !isLeader) {
+      finalPatients = validPatients.filter((p) => {
+        return p.room_id === '202' || p.room_id === '203' || p.room_id?.includes('202') || p.room_id?.includes('203');
+      });
+    }
+
     // 部屋番号 ➡️ ベッド番号の順でソート
-    const sortedData = mergedPatients.sort((a, b) => {
+    return finalPatients.sort((a, b) => {
       if (a.room_id !== b.room_id) return a.room_id.localeCompare(b.room_id);
       return a.bed_number - b.bed_number;
     });
-
-    // 選択された受け持ち患者に絞り込み（selectedIdsが指定されていればフィルタリング、無ければ全表示）
-    if (selectedIds && selectedIds.length > 0) {
-      return sortedData.filter((p) => selectedIds.includes(p.patient_id));
-    }
-    return sortedData;
-  }, [rawPatients, flatTasks, selectedIds]);
+  }, [rawPatients, flatTasks, selectedIds, currentUser, isGuestUser, isLeader]);
 
 // 🌟 3. 表示する直前で、検索ワードにヒットする患者だけに絞り込む
   const filteredPatients = patients.filter((patient) => {
@@ -256,7 +265,7 @@ export default function PatientMasterPage({ selectedIds }: DashboardProps) {
             本日の受け持ち患者一覧
           </h3>
           
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          <div id="patient-master-cards-container" className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 tutorial-patient-master">
             {patients.map((patient, index) => (
               <div 
                 key={`normal-${patient.patient_id}`} 

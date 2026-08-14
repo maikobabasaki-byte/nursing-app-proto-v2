@@ -2,15 +2,17 @@ import { initializeApp } from "firebase/app";
 import { getAuth } from "firebase/auth";
 import { getAnalytics } from "firebase/analytics";
 import { 
-  getFirestore, 
+  initializeFirestore,
+  persistentLocalCache,
+  persistentMultipleTabManager,
   doc, 
   updateDoc, 
   setDoc, 
+  deleteDoc,
   runTransaction, 
   collection, 
   serverTimestamp,
-  enableMultiTabIndexedDbPersistence,
-  enableIndexedDbPersistence
+  arrayUnion
 } from "firebase/firestore"; 
 import type { TaskStatus, LeaderTodo } from '../types/types';
 
@@ -27,19 +29,13 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const analytics = getAnalytics(app);
 export const auth = getAuth(app); 
-export const db = getFirestore(app);
 
-// 💡 Firestoreのオフラインキャッシュ（IndexedDB永続化）を有効化
-if (typeof window !== 'undefined') {
-  enableMultiTabIndexedDbPersistence(db).catch((err) => {
-    if (err.code === 'failed-precondition') {
-      // 複数タブが開かれている場合、単一タブ用にフォールバック
-      enableIndexedDbPersistence(db).catch(() => {});
-    } else if (err.code === 'unimplemented') {
-      console.warn("⚠️ 現在のブラウザ環境はIndexedDBオフラインキャッシュに対応していません。");
-    }
-  });
-}
+// 💡 Firebase SDK v10+ 推奨のマルチタブ対応 IndexedDB キャッシュ設定 (Primary Lease 競合エラーを回避)
+export const db = initializeFirestore(app, {
+  localCache: persistentLocalCache({
+    tabManager: persistentMultipleTabManager()
+  })
+});
 
 export { app, analytics };
 
@@ -296,5 +292,65 @@ export const deleteLeaderTodoInFirestore = async (todoId: string): Promise<void>
   } catch (error) {
     console.error('リーダーTODOの論理削除に失敗しました:', error);
     throw error;
+  }
+};
+
+// 💡 患者SOSの状態をFirestore (tasksコレクション内独立ドキュメント) にリアルタイム同期する関数
+export const togglePatientSosInFirestore = async (
+  patientId: string,
+  patientName: string,
+  roomId?: string,
+  isSos: boolean = true,
+  requestedById?: string,
+  requestedByName?: string
+) => {
+  try {
+    const docId = `patient-sos-${patientId}`;
+    const taskRef = doc(db, 'tasks', docId);
+
+    if (!isSos) {
+      await deleteDoc(taskRef);
+    } else {
+      const sosReason = `🚨 緊急要請：${patientName}さん (${roomId ? `${roomId}号室` : ''}) で緊急応援要請`;
+      await setDoc(
+        taskRef,
+        {
+          task_id: docId,
+          patient_id: patientId,
+          patient_name: patientName,
+          room_id: roomId || '',
+          reason: sosReason,
+          sos_reason: sosReason,
+          requested_by_id: requestedById || '',
+          requested_by_name: requestedByName || '',
+          is_sos: true,
+          is_patient_sos: true,
+          updatedAt: serverTimestamp(),
+        },
+        { merge: true }
+      );
+    }
+  } catch (error) {
+    console.error('患者SOSの更新に失敗しました:', error);
+  }
+};
+
+// 💡 データが存在する稼働日（YYYY-MM-DD）をFirestoreの全端末共有ドキュメントに追加保存する関数
+export const registerActiveDateInFirestore = async (dateStr: string): Promise<void> => {
+  if (!dateStr) return;
+  try {
+    const metaRef = doc(db, 'tasks', 'system-active-dates');
+    await setDoc(
+      metaRef,
+      {
+        task_id: 'system-active-dates',
+        is_active_dates: true,
+        active_dates: arrayUnion(dateStr),
+        updatedAt: serverTimestamp(),
+      },
+      { merge: true }
+    );
+  } catch (error) {
+    console.error('稼働日アクティブ日付の追加登録に失敗しました:', error);
   }
 };

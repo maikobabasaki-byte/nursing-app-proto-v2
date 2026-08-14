@@ -1,8 +1,8 @@
-import { doc, getDoc, updateDoc, serverTimestamp } from 'firebase/firestore';
+import { doc, getDoc, setDoc, updateDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import type { ExtendedTaskStatus } from '../types/types';
 import { syncTaskToGAS } from '../services/gasService';
-import { getJSTISOString } from '../utils/dateUtils';
+import { getJSTISOString, getJSTDateString } from '../utils/dateUtils';
 
 /**
  * Firestore上のタスク情報を更新する関数
@@ -142,6 +142,7 @@ export const triggerNurseCallInterruption = async (options?: {
   patientName?: string;
   roomId?: string;
   sosReason?: string;
+  title?: string;
 }) => {
   const now = new Date();
   const hh = String(now.getHours()).padStart(2, '0');
@@ -149,6 +150,7 @@ export const triggerNurseCallInterruption = async (options?: {
   const currentTimeStr = `${hh}:${mm}`;
 
   const { useTimelineStore } = await import('../stores/useTimelineStore');
+  const { flattenTasks } = await import('../utils/taskLogic');
   const store = useTimelineStore.getState();
   const allTasks = store.allTasks;
   const currentUser = store.currentUser;
@@ -156,21 +158,31 @@ export const triggerNurseCallInterruption = async (options?: {
   const nurseId = String(currentUser?.nurse_id || currentUser?.staff_id || 'guest_nurse').trim();
   const nurseName = String(currentUser?.name || '自分').trim();
 
-  // 1. 既存の「実施中 (progressing)」タスクを自動的に「中断中 (pending)」へ切り替え
-  const activeTasks = allTasks.filter((t) => t.status === 'progressing');
+  // 1. 既存の「実施中 (progressing)」および「記録中 (record_start)」タスクを自動的に「中断中」へ一括切り替え
+  const flat = flattenTasks(allTasks);
+  const activeTasks = flat.filter((t) => t.status === 'progressing' || t.status === 'record_start');
+  
   for (const activeTask of activeTasks) {
-    store.handleTaskStatusChange(activeTask.task_id, 'pending');
-    await updateTask(activeTask.task_id, { status: 'pending', nurse_name: nurseName });
+    const nextStatus = activeTask.status === 'record_start' ? 'record_pending' : 'pending';
+    store.handleUpdateStatus(activeTask.task_id, nextStatus);
   }
 
-  // 2. 新規割り込みタスク（実績）の生成
+  // ログイン看護師のアクティブタスク患者情報を優先適用
+  const firstActive = activeTasks[0];
+  const defaultPatientId = options?.patientId || firstActive?.patient_id || '';
+  const defaultPatientName = options?.patientName || firstActive?.patient_name || '';
+  const defaultRoomId = options?.roomId || firstActive?.room_id || '';
+
+  // 2. 新規割り込みタスク（実績ドキュメント）の生成
   const taskId = `CALL_INTERRUPT_${Date.now()}`;
+  const taskTitle = options?.title || '📞 ナースコール対応';
   const newTask: any = {
     task_id: taskId,
-    patient_id: options?.patientId || 'P-GUEST-102',
-    patient_name: options?.patientName || '佐藤 花子 (B様)',
-    room_id: options?.roomId || '202',
-    title: '📞 ナースコール・SOS急変対応',
+    emr_order_id: taskId,
+    patient_id: defaultPatientId,
+    patient_name: defaultPatientName,
+    room_id: defaultRoomId,
+    title: taskTitle,
     details: `【突発割り込み実績】${options?.sosReason || '離床センサー検知・ナースコール緊急対応'} (対応開始: ${currentTimeStr})`,
     status: 'progressing', // 🔵 新規タスクを実施中にセット
     scheduled_at: currentTimeStr,
@@ -178,15 +190,24 @@ export const triggerNurseCallInterruption = async (options?: {
     display_period: currentTimeStr,
     category: '処置',
     priority: 'high',
+    instruction_type: '', // 💡 不要な「医師指示」バッジを付与しない
+    isDoctorOrder: false,
+    isRestricted: false,
+    requiresAssist: false,
     is_additional: true, // 💡 臨時追加割り込みフラグ
     is_sos: false,
     nurse_id: nurseId,
     nurse_name: nurseName,
+    staff_id: nurseId,
+    assigned_nurse_id: nurseId,
     isGroup: false,
     isChild: false,
+    target_date: store.selectedDate || getJSTDateString(),
   };
 
-  // 3. Firestore へ即時保存 ＆ Store へ即時反映
+  // 3. Store へ即時反映 (0秒 UI 反映) ＆ Firestore へ動的書き込み
+  store.addTask(newTask);
+
   try {
     const taskRef = doc(db, 'tasks', taskId);
     await setDoc(taskRef, {
@@ -194,10 +215,9 @@ export const triggerNurseCallInterruption = async (options?: {
       created_at: serverTimestamp(),
       updatedAt: serverTimestamp(),
     });
-    store.addTask(newTask);
     console.log("⚡ ナースコール割り込みタスクを動的追加・実施中に設定しました:", newTask);
   } catch (err) {
-    console.error("ナースコール割り込みタスク追加エラー:", err);
+    console.error("ナースコール割り込みタスクFirestore保存エラー:", err);
   }
 
   return newTask;

@@ -1,7 +1,6 @@
 import { useState } from 'react';
 import { signInWithEmailAndPassword, signInAnonymously, setPersistence, browserSessionPersistence, browserLocalPersistence } from 'firebase/auth';
 import { auth } from '../lib/firebase';
-import { seedGuestData } from '../services/guestSeedService';
 
 export default function Login() {
   const [userId, setUserId] = useState('');
@@ -30,14 +29,19 @@ export default function Login() {
     }
   };
 
-  const handleGuestLogin = async (e: React.MouseEvent<HTMLButtonElement>) => {
-    e.preventDefault();
-    console.log("🚀 [GuestLogin] ゲストログインボタンがクリックされました");
+  const handleGuestLogin = async (role: 'leader' | 'member') => {
+    console.log(`🚀 [GuestLogin] ゲストログイン (${role}) がクリックされました`);
     setIsLoadingGuest(true);
     const errorEl = document.getElementById('error_message');
     if (errorEl) errorEl.innerText = '';
 
     try {
+      // 💡 選択された役割および初期表示画面をセッションストレージに記録
+      sessionStorage.setItem('nurseflow_guest_role', role);
+      sessionStorage.setItem('currentScreen', 'patientMaster');
+      // 💡 新規体験のためチュートリアル完了フラグをクリア
+      localStorage.removeItem('nurseflow_tutorial_completed');
+
       console.log("🔑 [GuestLogin] ログインセッションをローカル保持 (browserLocalPersistence) に設定中...");
       await setPersistence(auth, browserLocalPersistence);
       let userCredential;
@@ -45,24 +49,21 @@ export default function Login() {
       try {
         console.log("🔑 [GuestLogin] Firebase signInAnonymously (匿名認証) を呼び出します...");
         userCredential = await signInAnonymously(auth);
-        console.log("✅ [GuestLogin] signInAnonymously 成功! UID:", userCredential.user?.uid);
+        console.log(`✅ [GuestLogin] signInAnonymously (${role}) 成功! UID:`, userCredential.user?.uid);
       } catch (anonErr: any) {
-        console.warn("⚠️ [GuestLogin] 匿名認証でエラーが発生しました (Firebase Consoleで匿名認証が未有効等の可能性があります):", anonErr);
-        console.log("🔄 [GuestLogin] デモアカウント (guest@nurseflow.local) への全自動フォールバックを試みます...");
-        
+        console.warn("⚠️ [GuestLogin] 匿名認証でエラーが発生しました:", anonErr);
         try {
-          userCredential = await signInWithEmailAndPassword(auth, 'guest@nurseflow.local', 'guest1234');
-          console.log("✅ [GuestLogin] デモアカウントへのログイン成功! UID:", userCredential.user?.uid);
+          const fallbackEmail = role === 'leader' ? 'nurse01@nurseflow.local' : 'nurse02@nurseflow.local';
+          userCredential = await signInWithEmailAndPassword(auth, fallbackEmail, 'guest1234');
         } catch (emailErr: any) {
-          console.log("🆕 [GuestLogin] デモアカウントを新規作成します (createUserWithEmailAndPassword)...");
           const { createUserWithEmailAndPassword } = await import('firebase/auth');
-          userCredential = await createUserWithEmailAndPassword(auth, 'guest@nurseflow.local', 'guest1234');
-          console.log("✅ [GuestLogin] デモアカウント新規作成＆ログイン成功! UID:", userCredential.user?.uid);
+          const fallbackEmail = role === 'leader' ? 'nurse01@nurseflow.local' : 'nurse02@nurseflow.local';
+          userCredential = await createUserWithEmailAndPassword(auth, fallbackEmail, 'guest1234');
         }
       }
       
       if (userCredential && userCredential.user) {
-        console.log("🎉 [GuestLogin] ゲスト認証成功! App.tsx の一元判定フックへ引き渡します (UID:", userCredential.user.uid, ")");
+        console.log(`🎉 [GuestLogin] ゲスト(${role})認証成功! (UID:`, userCredential.user.uid, ")");
       }
     } catch (error: any) {
       if (errorEl) {
@@ -156,18 +157,30 @@ export default function Login() {
         {/* 🚀 ポートフォリオ用：ゲスト体験ボタン区切り */}
         <div className="!relative !my-5 !flex !items-center !justify-center">
           <div className="!border-t !border-gray-200 !w-full"></div>
-          <span className="!bg-white !px-3 !text-xs !text-gray-400 !font-bold !shrink-0">または</span>
+          <span className="!bg-white !px-3 !text-xs !text-gray-400 !font-bold !shrink-0">または（ゲスト体験モード）</span>
         </div>
 
-        <button
-          type="button"
-          onClick={handleGuestLogin}
-          disabled={isLoadingGuest}
-          className="!w-full !bg-gradient-to-r !from-emerald-600 !to-teal-600 hover:!from-emerald-700 hover:!to-teal-700 !text-white !font-extrabold !p-3 !rounded-xl !shadow-md !text-sm !flex !items-center !justify-center !gap-2 !cursor-pointer !transition-all !active:!scale-95 disabled:!opacity-50"
-        >
-          <span className="material-symbols-outlined !text-lg">rocket_launch</span>
-          <span>{isLoadingGuest ? 'ゲスト環境を準備中...' : 'ゲストとして試してみる（1秒体験）'}</span>
-        </button>
+        <div className="flex flex-col gap-2.5">
+          <button
+            type="button"
+            onClick={() => handleGuestLogin('member')}
+            disabled={isLoadingGuest}
+            className="!w-full !bg-gradient-to-r !from-emerald-600 !to-teal-600 hover:!from-emerald-700 hover:!to-teal-700 !text-white !font-extrabold !p-3 !rounded-xl !shadow-md !text-xs !flex !items-center !justify-center !gap-2 !cursor-pointer !transition-all !active:!scale-95 disabled:!opacity-50 border-none"
+          >
+            <span className="text-base">🩺</span>
+            <span>{isLoadingGuest ? 'ゲスト環境を準備中...' : 'ゲストログイン（メンバーとして体験）'}</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => handleGuestLogin('leader')}
+            disabled={isLoadingGuest}
+            className="!w-full !bg-gradient-to-r !from-indigo-600 !to-blue-600 hover:!from-indigo-700 hover:!to-blue-700 !text-white !font-extrabold !p-3 !rounded-xl !shadow-md !text-xs !flex !items-center !justify-center !gap-2 !cursor-pointer !transition-all !active:!scale-95 disabled:!opacity-50 border-none"
+          >
+            <span className="text-base">👑</span>
+            <span>{isLoadingGuest ? 'ゲスト環境を準備中...' : 'ゲストログイン（Aチームリーダーとして体験）'}</span>
+          </button>
+        </div>
       </div>
     </>
   );
