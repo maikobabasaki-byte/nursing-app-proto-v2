@@ -24,7 +24,7 @@ export function useTimelineDnd({ selectedPatients }: UseTimelineDndProps) {
   // Store からステートとアクションを取得
   const { 
     allTasks, memos, loading, groupingMode, 
-    setGroupingMode, setMemos, handleUpdateTaskPeriod, handleGroupTasks 
+    setGroupingMode, setMemos, handleUpdateTaskPeriod, handleGroupTasks, handleReorderTasks 
   } = useTimelineStore();
 
   const [activeId, setActiveId] = useState<string | null>(null);
@@ -44,7 +44,7 @@ export function useTimelineDnd({ selectedPatients }: UseTimelineDndProps) {
 
   const handleDragStart = (event: DragStartEvent) => {
     const activeTargetId = String(event.active.id);
-    const task = findTaskRecursive(allTasks, activeTargetId);
+    const task = (event.active.data.current?.task as ExtendedTask | undefined) || findTaskRecursive(allTasks, activeTargetId);
     if (task) draggedTaskRef.current = task;
     setActiveId(activeTargetId);
   };
@@ -73,11 +73,18 @@ export function useTimelineDnd({ selectedPatients }: UseTimelineDndProps) {
       return;
     }
 
-    // --- C. グループ化バリデーション & 実行 ---
+    // --- C. グループ化 / ソート（順序並び替え） ---
     const targetTask = findTaskRecursive(allTasks, overId);
-    const originalTask = draggedTaskRef.current;
+    const originalTask = (active.data.current?.task as ExtendedTask | undefined) || draggedTaskRef.current || findTaskRecursive(allTasks, draggedId);
 
     if (originalTask && targetTask) {
+      // 💡 グループ化モードが OFF (groupingMode === null) の場合 ➡️ 行内・タスク間での順序並び替え (ソート)
+      if (groupingMode === null) {
+        await handleReorderTasks(draggedId, overId);
+        draggedTaskRef.current = null;
+        return;
+      }
+
       const validation = validateTaskGrouping(originalTask, targetTask, groupingMode);
       if (!validation.canGroup) {
         if (validation.reason) {

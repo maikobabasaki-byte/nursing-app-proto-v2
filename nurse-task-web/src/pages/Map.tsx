@@ -5,6 +5,7 @@ import { useTimelineStore, type NursePin } from '../stores/useTimelineStore';
 import { DndContext, DragOverlay, useSensor, useSensors, PointerSensor, type DragEndEvent, type DragStartEvent } from '@dnd-kit/core';
 import { DraggableNursePin } from '../components/Map/DraggableNursePin';
 import { useUserName } from '../hooks/useUserName';
+import { auth } from '../lib/firebase';
 
 // 💡 左側のSOSパネル（LeftPanel）：タスクSOS、看護師SOS、患者SOSをリアルタイム統合表示
 const LeftPanel: React.FC<{ sosTasks: any[]; sosNurses: NursePin[]; patientSosList?: any[]; isFullWidth?: boolean }> = ({ sosTasks, sosNurses, patientSosList = [], isFullWidth }) => (
@@ -137,10 +138,25 @@ export default function MapContainer({ selectedPatients }: MapContainerProps): R
   const updateNursePosition = useTimelineStore((state) => state.updateNursePosition);
   const patientSosList = useTimelineStore((state) => state.patientSosList || []);
 
+  const currentUser = useTimelineStore((state) => state.currentUser);
+
   const displayNurses = useMemo(() => {
+    const currentUserId = currentUser?.nurse_id || auth.currentUser?.uid;
     const seenKeys = new Set<string>();
     return nurses.filter((nurse) => {
       if (nurse.is_logged_in === false) {
+        return false;
+      }
+      // 💡 自分以外のゲストユーザーをマップ表示から除外
+      const isSelf = nurse.nurse_id === currentUserId;
+      const isGuestNurse = Boolean(
+        nurse.nurse_id?.includes('guest') ||
+        nurse.nurse_id?.startsWith('GUEST-') ||
+        (nurse.email && nurse.email.includes('guest')) ||
+        (nurse.name && nurse.name.includes('ゲスト')) ||
+        (nurse.role && nurse.role.includes('ゲスト'))
+      );
+      if (!isSelf && isGuestNurse) {
         return false;
       }
       const key = nurse.nurse_id || nurse.name.replace(/[\s　]+/g, '');
@@ -150,7 +166,7 @@ export default function MapContainer({ selectedPatients }: MapContainerProps): R
       seenKeys.add(key);
       return true;
     });
-  }, [nurses]);
+  }, [nurses, currentUser]);
 
   useEffect(() => {
     Promise.all([

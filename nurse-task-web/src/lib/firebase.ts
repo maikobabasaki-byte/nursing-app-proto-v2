@@ -2,6 +2,7 @@ import { initializeApp } from "firebase/app";
 import { getAuth } from "firebase/auth";
 import { getAnalytics } from "firebase/analytics";
 import { 
+  getFirestore,
   initializeFirestore,
   persistentLocalCache,
   persistentMultipleTabManager,
@@ -30,12 +31,19 @@ const app = initializeApp(firebaseConfig);
 const analytics = getAnalytics(app);
 export const auth = getAuth(app); 
 
-// 💡 Firebase SDK v10+ 推奨のマルチタブ対応 IndexedDB キャッシュ設定 (Primary Lease 競合エラーを回避)
-export const db = initializeFirestore(app, {
-  localCache: persistentLocalCache({
-    tabManager: persistentMultipleTabManager()
-  })
-});
+// 💡 Firebase SDK v10+ 推奨のマルチタブ対応 IndexedDB キャッシュ設定 (HMR 再読み込み時の二重初期化エラーを回避)
+let dbInstance;
+try {
+  dbInstance = initializeFirestore(app, {
+    localCache: persistentLocalCache({
+      tabManager: persistentMultipleTabManager()
+    })
+  });
+} catch (e) {
+  dbInstance = getFirestore(app);
+}
+
+export const db = dbInstance;
 
 export { app, analytics };
 
@@ -97,6 +105,8 @@ export const updateNurseSos = async (
   }
 };
 
+import { getJSTDateString } from '../utils/dateUtils';
+
 // 💡 看護師ごとの選択患者リスト（受け持ち割り当て）および本日セットアップ日付をFirestoreに保存・更新する関数
 export const updateNurseAssignedPatients = async (
   nurseId: string,
@@ -104,7 +114,7 @@ export const updateNurseAssignedPatients = async (
 ) => {
   if (!nurseId) return;
   try {
-    const todayStr = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
+    const todayStr = getJSTDateString(); // 🇯🇵 JST日付に統一
     const nurseRef = doc(db, 'nurses', nurseId);
     await setDoc(
       nurseRef,

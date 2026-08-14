@@ -5,6 +5,7 @@ import { addSingleTaskToGAS, resetAdditionalTasksInGAS } from '../services/gasSe
 import { updateTask } from '../hooks/useTaskUpdate';
 import { doc, setDoc, deleteDoc } from "firebase/firestore";
 import { getJSTDateString } from '../utils/dateUtils';
+import { getTaskTimeSlot } from '../utils/validateTaskGrouping';
 import { db, updateNurseSos, updateNurseAssignedPatients, toggleTaskSosInFirestore, togglePatientSosInFirestore, saveLeaderTodoInFirestore, updateLeaderTodoInFirestore, deleteLeaderTodoInFirestore } from "../lib/firebase";
 
 export interface NurseMaster {
@@ -38,6 +39,7 @@ export interface CurrentUser {
   team?: string;
   is_leader?: boolean;
   assigned_patients?: string[];
+  isAnonymous?: boolean;
 }
 
 export interface PatientSos {
@@ -107,6 +109,7 @@ interface TimelineStore {
   handleUpdateStatus: (taskId: string, status: ExtendedTaskStatus, unexecutedReason?: string) => void;
   handleUpdateTaskPeriod: (taskId: string, period: string) => void;
   handleUpdatePriority: (taskId: string, priority: 'high' | 'medium' | 'low') => void;
+  handleReorderTasks: (draggedId: string, targetId: string) => Promise<void>;
   handleGroupTasks: (draggedId: string, targetId: string) => Promise<void>;
   handleUngroupTask: (childId: string) => Promise<void>;
   
@@ -153,14 +156,7 @@ const removeTaskRecursive = (tasks: ExtendedTask[], targetIds: string[]): Extend
     });
 };
 
-const getTaskCategory = (task: ExtendedTask) => {
-  const originalPeriod = task.initial_period || task.display_period;
-  if (!originalPeriod) return 'ANY';
-  if (originalPeriod === '午前') return 'AM';
-  if (originalPeriod === '午後') return 'PM';
-  if (originalPeriod === '随時') return 'ANYTIME';
-  return originalPeriod;
-};
+
 
 // 💡 マスターデータとリアルタイムランタイム状態を重複ゼロでアトミック結合するヘルパー
 export function mergeNurseData(
@@ -609,6 +605,34 @@ export const useTimelineStore = create<TimelineStore>((set, get) => ({
     }));
   },
 
+  handleReorderTasks: async (draggedId, targetId) => {
+    const { allTasks } = get();
+    if (draggedId === targetId) return;
+
+    const oldIndex = allTasks.findIndex(t => t.task_id === draggedId);
+    const newIndex = allTasks.findIndex(t => t.task_id === targetId);
+
+    if (oldIndex === -1 || newIndex === -1) return;
+
+    const draggedTask = allTasks[oldIndex];
+    const targetTask = allTasks[newIndex];
+
+    const updatedDraggedTask = {
+      ...draggedTask,
+      display_period: targetTask.display_period || draggedTask.display_period,
+    };
+
+    const newAllTasks = [...allTasks];
+    newAllTasks.splice(oldIndex, 1);
+    newAllTasks.splice(newIndex, 0, updatedDraggedTask);
+
+    set({ allTasks: newAllTasks });
+
+    if (draggedTask.display_period !== targetTask.display_period && targetTask.display_period) {
+      await updateTask(draggedId, { display_period: targetTask.display_period });
+    }
+  },
+
   handleGroupTasks: async (draggedId, targetId) => {
     const { allTasks } = get();
     if (draggedId === targetId) return;
@@ -629,16 +653,20 @@ export const useTimelineStore = create<TimelineStore>((set, get) => ({
 
     if (!draggedTask || !targetTask) return;
 
-    const draggedCat = getTaskCategory(draggedTask);
-    const targetCat = getTaskCategory(targetTask);
+    const isSamePatient = draggedTask.patient_id === targetTask.patient_id;
+    const draggedSlot = getTaskTimeSlot(draggedTask);
+    const targetSlot = getTaskTimeSlot(targetTask);
 
-    const isMismatched = 
-      draggedCat !== 'ANYTIME' && 
-      targetCat !== 'ANYTIME' && 
-      draggedCat !== targetCat;
+    const isSameTimeSlot = Boolean(
+      draggedSlot && targetSlot && (
+        draggedSlot === targetSlot || 
+        draggedSlot === 'ANYTIME' || 
+        targetSlot === 'ANYTIME'
+      )
+    );
 
-    if (isMismatched) {
-      alert("元の指示の時間帯や時間指定が異なるため、グループ化できません");
+    if (!isSamePatient && !isSameTimeSlot) {
+      alert("「同一の患者」または「同時間帯（午前・午後）」のタスクのみグループ化できます");
       return;
     }
 

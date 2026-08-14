@@ -2,7 +2,7 @@ import { doc, setDoc, collection, getDocs, writeBatch, serverTimestamp } from 'f
 import { db, registerActiveDateInFirestore } from '../lib/firebase';
 import { getJSTDateString } from '../utils/dateUtils';
 import { fetchGASData } from './gasService';
-import { mapGASTaskToExtendedTask, cleanUndefinedFields } from './taskSyncService';
+import { mapGASTaskToExtendedTask, cleanUndefinedFields, isValidGASTask } from './taskSyncService';
 import { useTimelineStore } from '../stores/useTimelineStore';
 
 export const seedGuestData = async (guestUid: string, role: 'leader' | 'member' = 'leader') => {
@@ -10,7 +10,7 @@ export const seedGuestData = async (guestUid: string, role: 'leader' | 'member' 
 
   const todayStr = getJSTDateString();
   const isLeaderRole = role === 'leader';
-  const nurseName = isLeaderRole ? 'ゲストリーダー (nurse01モデル)' : 'ゲストメンバー (nurse02モデル)';
+  const nurseName = isLeaderRole ? 'ゲスト（リーダー）' : 'ゲスト（メンバー）';
   const nurseRoleTitle = isLeaderRole ? '日勤リーダー' : '日勤メンバー';
   const targetNurseId = isLeaderRole ? 'nurse01' : 'nurse02';
 
@@ -89,20 +89,15 @@ export const seedGuestData = async (guestUid: string, role: 'leader' | 'member' 
       console.log(`📊 [GuestSeed] GASから ${gasData.tasks.length} 件の全タスクを取得。役割 [${role}] に応じた抽出中...`);
 
       const filteredGasTasks = gasData.tasks.filter((tItem) => {
+        // 💡 不完全な空タスク（ゴーストタスク）を除外
+        if (!isValidGASTask(tItem)) return false;
+
         const rawItem = tItem as Record<string, any>;
-        const nid = String(tItem.nurse_id || tItem.staff_id || rawItem.nurseId || rawItem.staffId || '').toLowerCase();
-        const nname = String(tItem.nurse_name || rawItem.nurseName || '').toLowerCase();
         const room = String(tItem.room_id || tItem.room || rawItem.room || rawItem['病室'] || '').trim();
 
         if (isLeaderRole) {
-          return (
-            nid.includes('nurse01') ||
-            nname.includes('nurse01') ||
-            nid.includes('01') ||
-            nname.includes('01') ||
-            rawItem.is_leader ||
-            nid.includes('leader')
-          );
+          // 👑 リーダー体験：病棟全体の全ケアタスク・リーダー業務を一元取得
+          return true;
         } else {
           // 🩺 メンバー体験：202号室および203号室のタスクのみを厳密抽出
           const is202or203Room = room === '202' || room === '203' || room.includes('202') || room.includes('203');
@@ -118,7 +113,10 @@ export const seedGuestData = async (guestUid: string, role: 'leader' | 'member' 
 
       for (let i = 0; i < targetGasTasks.length; i++) {
         const gTask = targetGasTasks[i];
+        if (!isValidGASTask(gTask)) continue;
+
         const mapped = mapGASTaskToExtendedTask(gTask, i, todayStr, nurseName, gasData.patients);
+        if (!mapped.title || mapped.title === '無題タスク') continue;
 
         const taskKey = `${mapped.patient_id}_${mapped.title}_${mapped.display_period}`;
         if (seenTaskKeys.has(taskKey)) {

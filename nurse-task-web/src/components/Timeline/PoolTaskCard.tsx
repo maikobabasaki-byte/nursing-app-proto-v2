@@ -14,6 +14,7 @@ export function PoolTaskCard({
 }) {
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
     id: task.task_id,
+    data: { task },
   });
 
   const isPastTime = () => false; 

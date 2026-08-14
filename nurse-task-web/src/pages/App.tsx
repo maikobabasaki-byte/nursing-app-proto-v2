@@ -76,16 +76,15 @@ export default function App() {
         setUser(currentUser);
         const id = currentUser.email ? currentUser.email.split('@')[0] : currentUser.uid;
 
-        // 🎯 ゲストユーザー（匿名ログイン / guest / nurse01 / nurse02アカウント）の場合はシードデータを自動生成してダイレクト同期
-        const isGuest = currentUser.isAnonymous || id.includes('guest') || id.includes('nurse01') || id.includes('nurse02') || Boolean(sessionStorage.getItem('nurseflow_guest_role'));
+        // 🎯 ゲストユーザー（is_guest_session === 'true' または 匿名ログイン isAnonymous）の場合のみシードデータを同期
+        const isGuest = currentUser.isAnonymous || sessionStorage.getItem('is_guest_session') === 'true';
         if (isGuest) {
           const guestRole = (sessionStorage.getItem('nurseflow_guest_role') as 'leader' | 'member') || 'leader';
           const isLeader = guestRole === 'leader';
-          const guestName = isLeader ? 'ゲストリーダー (nurse01モデル)' : 'ゲストメンバー (nurse02モデル)';
+          const guestName = isLeader ? 'ゲスト（リーダー）' : 'ゲスト（メンバー）';
 
           console.log(`👤 [AuthCheck] ゲストユーザー(${guestRole})を検出しました! (UID: ${currentUser.uid}, isAnonymous: ${currentUser.isAnonymous})`);
           
-          // 💡 ハードコードされた P-GUEST-*** ではなく、コピータスクの患者IDへ動的追従
           setSelectedPatients([]);
           sessionStorage.setItem('selectedPatients', JSON.stringify([]));
           sessionStorage.setItem('currentScreen', 'patientMaster');
@@ -96,6 +95,7 @@ export default function App() {
             email: currentUser.email || 'guest@nurseflow.local',
             is_leader: isLeader,
             team: 'Aチーム',
+            isAnonymous: currentUser.isAnonymous,
           });
 
           console.log("🌱 [AuthCheck] ゲストデータを同期中... 100%準備が整うまでローディングを表示します");
@@ -115,10 +115,11 @@ export default function App() {
           return;
         }
 
-        // 💡 スプレッドシート (GAS) から絶対正本データを直取得して同期
-        if (currentUser.email) {
-          ensureTodayTasksSynced(id);
+        // 🔒 正規ユーザーの場合: ゲスト用ストレージキーを確実にクリア
+        sessionStorage.removeItem('is_guest_session');
+        sessionStorage.removeItem('nurseflow_guest_role');
 
+        if (currentUser.email) {
           // 💡 Firestoreの nurse_master コレクションから email でクエリ名寄せ検索
           try {
             const q = query(collection(db, 'nurse_master'), where('email', '==', currentUser.email));
@@ -147,10 +148,21 @@ export default function App() {
           }
         }
 
-        // 🎯 【本日の初期設定完了チェック＆PC同期引き継ぎ判定】
+        // 🎯 【本日の初回ログインチェック & GAS同期 / PC引き継ぎ判定】
         try {
           const todayStr = getJSTDateString();
           registerActiveDateInFirestore(todayStr);
+
+          // 💡 本日の「初回ログイン時のみ」スプレッドシート (GAS) の確認・同期を行う
+          const lastSyncedDate = localStorage.getItem(`gas_synced_date_${id}`);
+          if (lastSyncedDate !== todayStr) {
+            console.log(`🌅 [FirstLoginToday] 本日 (${todayStr}) の初回ログインを検出。スプレッドシート (GAS) データを同期中...`);
+            ensureTodayTasksSynced(id).catch((e) => console.error("初回GAS同期エラー:", e));
+            localStorage.setItem(`gas_synced_date_${id}`, todayStr);
+          } else {
+            console.log(`⚡ [FastLogin] 本日 (${todayStr}) は既にログイン・同期済みです。Firestoreキャッシュから高速読み込みします。`);
+          }
+
           const nurseRef = doc(db, 'nurses', id);
           const nurseSnap = await getDoc(nurseRef);
 
@@ -161,16 +173,11 @@ export default function App() {
               Array.isArray(nurseData.assigned_patients) &&
               nurseData.assigned_patients.length > 0
             ) {
-              // 🚀 本日の初期設定が別端末(PC等)ですでに完了している！
+              // 🚀 本日の初期設定が別端末(PC等)ですでに完了している場合は即時遷移！
               setSelectedPatients(nurseData.assigned_patients);
               sessionStorage.setItem('selectedPatients', JSON.stringify(nurseData.assigned_patients));
               
-              setIsSyncingWithPC(true);
-              setTimeout(() => {
-                setIsSyncingWithPC(false);
-                setCurrentScreen('patientMaster');
-              }, 1200);
-              
+              setCurrentScreen('patientMaster');
               setLoading(false);
               return;
             }
@@ -179,13 +186,8 @@ export default function App() {
           console.error("本日データ同期チェックエラー:", e);
         }
 
-        // 💡 未完了の場合は従来通り患者選択画面へ案内
-        setCurrentScreen((prevScreen) => {
-          if (prevScreen === 'login') {
-            return 'patientSelect';
-          }
-          return prevScreen;
-        });
+        // 🎯 初期化完了時は設定された画面（デフォルトは 'login'）をそのまま表示維持
+        setLoading(false);
       } else {
         setUser(null);
         setCurrentScreen('login');
@@ -255,6 +257,12 @@ export default function App() {
             if (taskId.startsWith('GUEST-TASK-') || data.is_guest === true) {
               return;
             }
+          }
+
+          // 👻 不完全な空タスク（ゴーストタスク）を完全に除外
+          const title = String(data.title || data.task_name || data.taskName || '').trim();
+          if (!title || title === '無題タスク') {
+            return;
           }
 
           const period = (data.display_period === "undefined" || !data.display_period) ? "" : data.display_period;
@@ -355,7 +363,6 @@ export default function App() {
   // 💡 Firestoreの看護師SOS状態 (nursesコレクション) リアルタイム監視と全端末同期
   useEffect(() => {
     if (!user) return;
-    const isGuestUser = Boolean(user.isAnonymous || (user.email && user.email.includes('guest')));
 
     const unsubscribeNurses = onSnapshot(
       collection(db, "nurses"), 
@@ -373,10 +380,18 @@ export default function App() {
             } as NursePin;
           })
           .filter((n) => {
-            if (!isGuestUser) {
-              if (n.nurse_id.includes('guest') || (n.name && n.name.includes('ゲスト'))) {
-                return false;
-              }
+            const currentUserId = user?.uid || useTimelineStore.getState().currentUser?.nurse_id;
+            const isSelf = n.nurse_id === currentUserId;
+            const isGuestNurse = Boolean(
+              n.nurse_id?.includes('guest') ||
+              n.nurse_id?.startsWith('GUEST-') ||
+              (n.email && n.email.includes('guest')) ||
+              (n.name && n.name.includes('ゲスト')) ||
+              (n.role && n.role.includes('ゲスト'))
+            );
+            // 💡 自分以外のゲストユーザーをマップから除外（他のゲストユーザーとお互いに見えないようにする）
+            if (!isSelf && isGuestNurse) {
+              return false;
             }
             return true;
           });
@@ -432,6 +447,8 @@ export default function App() {
       (error) => {
         if (error.code === 'resource-exhausted') {
           console.warn("⚠️ [LeaderTodos] Firestoreのクォータ上限に到達しました。");
+        } else if (error.code === 'permission-denied') {
+          console.warn("⚠️ [LeaderTodos] Firestoreアクセス権限を確定中...");
         } else {
           console.error("Firestore leader_todos 取得エラー:", error);
         }
@@ -522,6 +539,7 @@ export default function App() {
             <Suspense fallback={<PageLoadingFallback />}>
               <PatientSelect onSelectComplete={(list) => {
                 setSelectedPatients(list);
+                useTimelineStore.getState().setSelectedPatients(list);
                 setCurrentScreen('patientMaster');
               }} />
             </Suspense>

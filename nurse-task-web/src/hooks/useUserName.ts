@@ -9,7 +9,20 @@ export const useUserName = () => {
   const setCurrentUser = useTimelineStore((state) => state.setCurrentUser);
   const [userName, setUserName] = useState(currentUser?.name || '');
 
+  const guestRole = sessionStorage.getItem('nurseflow_guest_role');
+  const isGuestUser = Boolean(
+    sessionStorage.getItem('is_guest_session') === 'true' ||
+    currentUser?.isAnonymous === true
+  );
+
   useEffect(() => {
+    // 💡 ゲストユーザーの場合は Firestore 検索を行わず即時リターン（Missing or insufficient permissions を防止）
+    if (isGuestUser) {
+      const isLeader = currentUser ? currentUser.is_leader === true : guestRole === 'leader';
+      setUserName(isLeader ? 'ゲスト（リーダー）' : 'ゲスト（メンバー）');
+      return;
+    }
+
     if (currentUser?.name) {
       setUserName(currentUser.name);
       return;
@@ -17,6 +30,14 @@ export const useUserName = () => {
 
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
       if (user && user.email) {
+        const isGuestSession = sessionStorage.getItem('is_guest_session') === 'true' || user.isAnonymous;
+        if (isGuestSession) {
+          const role = sessionStorage.getItem('nurseflow_guest_role');
+          const isLeader = role === 'leader';
+          setUserName(isLeader ? 'ゲスト（リーダー）' : 'ゲスト（メンバー）');
+          return;
+        }
+
         try {
           // 💡 nurse_master コレクションに対して where("email", "==", user.email) クエリ検索
           const q = query(collection(db, 'nurse_master'), where('email', '==', user.email));
@@ -47,9 +68,11 @@ export const useUserName = () => {
             setCurrentUser(fallbackProfile);
             setUserName(fallbackId);
           }
-        } catch (e) {
-          console.error("nurse_master 取得エラー:", e);
-          const fallbackId = user.email.split('@')[0];
+        } catch (e: any) {
+          if (e?.code !== 'permission-denied') {
+            console.warn("nurse_master 取得警告:", e);
+          }
+          const fallbackId = user.email ? user.email.split('@')[0] : 'ユーザー';
           setUserName(fallbackId);
         }
       } else {
@@ -58,7 +81,12 @@ export const useUserName = () => {
       }
     });
     return () => unsubscribe();
-  }, [currentUser, setCurrentUser]);
+  }, [currentUser, setCurrentUser, isGuestUser, guestRole]);
+
+  if (isGuestUser) {
+    const isLeader = currentUser ? currentUser.is_leader === true : guestRole === 'leader';
+    return isLeader ? 'ゲスト（リーダー）' : 'ゲスト（メンバー）';
+  }
 
   return currentUser?.name || userName;
 };

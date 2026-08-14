@@ -12,9 +12,10 @@ export default function Login() {
   const handleLogin = async (e: React.MouseEvent<HTMLButtonElement>) => {
     e.preventDefault();
     try {
-      // 💡 チェックボックス選択状態に応じて、セッション保持期間を切り替え
-      // チェックあり（個人のスマホ・タブレット等）: browserLocalPersistence (明示的ログアウトまで保持)
-      // チェックなし（ステーションの共有PC等）: browserSessionPersistence (タブ・ブラウザを閉じたら即座に自動ログアウト)
+      // 🔒 正規ユーザーログイン時はゲストセッションフラグおよび状態を完全初期化
+      sessionStorage.removeItem('is_guest_session');
+      sessionStorage.removeItem('nurseflow_guest_role');
+      
       const persistenceType = rememberMe ? browserLocalPersistence : browserSessionPersistence;
       await setPersistence(auth, persistenceType);
 
@@ -36,7 +37,8 @@ export default function Login() {
     if (errorEl) errorEl.innerText = '';
 
     try {
-      // 💡 選択された役割および初期表示画面をセッションストレージに記録
+      // 💡 ゲスト専用セッションフラグを明示的にセット
+      sessionStorage.setItem('is_guest_session', 'true');
       sessionStorage.setItem('nurseflow_guest_role', role);
       sessionStorage.setItem('currentScreen', 'patientMaster');
       // 💡 新規体験のためチュートリアル完了フラグをクリア

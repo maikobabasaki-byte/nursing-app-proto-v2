@@ -36,7 +36,13 @@ export default function TimelineMain({
   const [isSortMode, setIsSortMode] = useState(false);
   const [isControlsDrawerOpen, setIsControlsDrawerOpen] = useState(false);
 
-  const isLeader = currentUser?.is_leader === true;
+  const isGuestUser = Boolean(
+    sessionStorage.getItem('is_guest_session') === 'true' ||
+    currentUser?.isAnonymous === true
+  );
+  const isLeader = isGuestUser
+    ? (currentUser ? currentUser.is_leader === true : sessionStorage.getItem('nurseflow_guest_role') === 'leader')
+    : Boolean(currentUser?.is_leader);
   const leaderTeam = currentUser?.team || 'Aチーム';
 
   // 💡 有効な選択患者リスト（props または ストアから算出）
@@ -69,12 +75,6 @@ export default function TimelineMain({
     }
     return false;
   };
-
-  const isGuestUser = Boolean(
-    currentUser?.nurse_id?.startsWith('GUEST-') || 
-    currentUser?.email?.includes('guest') || 
-    currentUser?.name?.includes('ゲスト')
-  );
 
   // モバイル用未配置タスクプール算出
   const poolTasks = storeAllTasks.filter(task => {

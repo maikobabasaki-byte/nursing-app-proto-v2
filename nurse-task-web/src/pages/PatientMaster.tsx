@@ -44,15 +44,14 @@ export default function PatientMasterPage({ selectedIds }: DashboardProps) {
     return flattenTasks(allTasks);
   }, [allTasks]);
 
-  // 💡 ゲスト判定およびリーダー/メンバー判定（Zustand + sessionStorageハイブリッドで即時確定）
-  const guestRole = sessionStorage.getItem('nurseflow_guest_role');
+  // 💡 ゲスト判定およびリーダー/メンバー判定（is_guest_session / isAnonymous のみで厳密評価）
   const isGuestUser = Boolean(
-    currentUser?.email?.includes('guest') ||
-    currentUser?.nurse_id?.includes('guest') ||
-    currentUser?.nurse_id?.startsWith('GUEST-') ||
-    guestRole !== null
+    sessionStorage.getItem('is_guest_session') === 'true' ||
+    currentUser?.isAnonymous === true
   );
-  const isLeader = currentUser ? currentUser.is_leader === true : guestRole === 'leader';
+  const isLeader = isGuestUser
+    ? (currentUser ? currentUser.is_leader === true : sessionStorage.getItem('nurseflow_guest_role') === 'leader')
+    : Boolean(currentUser?.is_leader);
 
   // 1. マウント時に患者マスタの静的データだけを取得
   useEffect(() => {
@@ -92,12 +91,22 @@ export default function PatientMasterPage({ selectedIds }: DashboardProps) {
 
     const mergedPatients = allPatientsList.map((patient) => {
       // 親グループが展開されたフラットなタスク群から該当患者のタスクを紐付け
-      const myTasks = flatTasks.filter((task) => task.patient_id === patient.patient_id && task.status !== 'deleted') as any[];
+      const myTasks = flatTasks.filter((task) => {
+        if (task.patient_id !== patient.patient_id || task.status === 'deleted') return false;
+        // 💡 ゲストユーザー時はゲスト作成タスクのみ抽出（正規タスクとの二重混在を排除）
+        if (isGuestUser) {
+          const isGuestTask = task.task_id?.startsWith('GUEST-') || task.nurse_id === currentUser?.nurse_id || task.assigned_nurse_id === currentUser?.nurse_id;
+          if (!isGuestTask) return false;
+        }
+        return true;
+      }) as any[];
 
-      // 💡 タスクの二重重複表示を防止（複合キー: patient_id + title + display_period で重複除去）
+      // 💡 タスクの二重重複表示を防止（正規化時間 + トリムタイトル + patient_id でアトミック重複除去）
       const seenTaskKeys = new Set<string>();
       const deduplicatedMyTasks = myTasks.filter((t) => {
-        const key = `${t.patient_id}_${t.title}_${t.display_period}`;
+        const normTime = normalizeToHHMM(t.display_period);
+        const normTitle = (t.title || '').trim();
+        const key = `${t.patient_id}_${normTitle}_${normTime}`;
         if (seenTaskKeys.has(key)) return false;
         seenTaskKeys.add(key);
         return true;
@@ -111,17 +120,18 @@ export default function PatientMasterPage({ selectedIds }: DashboardProps) {
       };
     });
 
-    // 🎯 1 & 3: 厳格なフィルタリング（タスクあり or 選択済み）
-    const validPatients = mergedPatients.filter((p) => {
-      const hasTasks = p.tasks && p.tasks.length > 0;
-      const isSelected = selectedIds && selectedIds.length > 0 ? selectedIds.includes(p.patient_id) : false;
-      return hasTasks || isSelected;
-    });
+    // 🎯 1. ユーザー選択（selectedIds）の優先フィルタリング
+    let filteredBySelection = mergedPatients;
+    if (selectedIds && selectedIds.length > 0) {
+      filteredBySelection = mergedPatients.filter((p) => selectedIds.includes(p.patient_id));
+    } else {
+      filteredBySelection = mergedPatients.filter((p) => p.tasks && p.tasks.length > 0);
+    }
 
-    // 🎯 ゲストメンバーの場合：タイムライン画面と完全同期し、202号室・203号室の患者のみ表示
-    let finalPatients = validPatients;
+    // 🎯 2. ゲストメンバーの場合：タイムライン画面と完全同期し、202号室・203号室の患者のみ表示
+    let finalPatients = filteredBySelection;
     if (isGuestUser && !isLeader) {
-      finalPatients = validPatients.filter((p) => {
+      finalPatients = filteredBySelection.filter((p) => {
         return p.room_id === '202' || p.room_id === '203' || p.room_id?.includes('202') || p.room_id?.includes('203');
       });
     }
@@ -144,7 +154,7 @@ export default function PatientMasterPage({ selectedIds }: DashboardProps) {
     const matchPatientName = patient.name.toLowerCase().includes(word);
 
     // ② タスク名（title）のなかに検索ワードが含まれているか？
-    const matchTaskTitle = patient.tasks?.some((task) =>
+    const matchTaskTitle = patient.tasks?.some((task: Task) =>
       task.title.toLowerCase().includes(word)
     ) ?? false;
 
@@ -240,7 +250,7 @@ export default function PatientMasterPage({ selectedIds }: DashboardProps) {
                     </div>
                   </div>
                   <div className="p-4 flex-1 flex flex-col gap-2 justify-center text-sm font-medium">
-                    {patient.tasks?.map((task, idx) => (
+                    {patient.tasks?.map((task: Task, idx: number) => (
                       <div key={task.task_id || idx} className="flex items-center gap-2 text-slate-700">
                         <span className="w-12 text-xs text-slate-400 shrink-0">{normalizeToHHMM(task.display_period)}</span>
                         <span className={task.title.toLowerCase().includes(searchWord.toLowerCase()) ? "bg-yellow-100 px-1 rounded font-bold text-cyan-900" : ""}>
@@ -311,7 +321,7 @@ export default function PatientMasterPage({ selectedIds }: DashboardProps) {
 
                 <div className="p-4 flex-1 flex flex-col gap-2 justify-center text-sm font-medium">
                   {patient.tasks && patient.tasks.length > 0 ? (
-                    patient.tasks.map((task, idx) => {
+                    patient.tasks.map((task: Task, idx: number) => {
                       const isUnrecorded = task.status === 'completed';
                       const isRecorded = task.status === 'record_complete';
                       let textColor = 'text-slate-700';

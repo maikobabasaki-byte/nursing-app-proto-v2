@@ -52,7 +52,13 @@ export default function GlobalHeader({ currentPage, onNavigate}: GlobalHeaderPro
   const userName = useUserName();
   const logout = useLogout();
   const currentUser = useTimelineStore((state) => state.currentUser);
-  const isLeader = currentUser?.is_leader === true;
+  const isGuestUser = Boolean(
+    sessionStorage.getItem('is_guest_session') === 'true' ||
+    currentUser?.isAnonymous === true
+  );
+  const isLeader = isGuestUser
+    ? (currentUser ? currentUser.is_leader === true : sessionStorage.getItem('nurseflow_guest_role') === 'leader')
+    : Boolean(currentUser?.is_leader);
   const { theme, currentConfig } = useTheme();
 
   const selectedDate = useTimelineStore((state) => state.selectedDate);
@@ -119,22 +125,6 @@ export default function GlobalHeader({ currentPage, onNavigate}: GlobalHeaderPro
               </span>
             )}
 
-            {/* 👤 ゲスト体験モードバッジ ＆ チュートリアル再表示ボタン */}
-            {(currentUser?.nurse_id?.startsWith('GUEST-') || currentUser?.email?.includes('guest') || currentUser?.name?.includes('ゲスト')) && (
-              <div id="header-guest-badge" className="flex items-center gap-1 bg-slate-900/90 text-white text-[11px] font-black px-2 py-0.5 rounded-lg border border-sky-400/40 shadow-sm animate-fade-in tutorial-header">
-                <span>{isLeader ? '👑 Aチームリーダー体験中 (申し送り・回診同行)' : '🩺 メンバー体験中 (202号室・203号室担当)'}</span>
-                <button
-                  type="button"
-                  onClick={() => {
-                    window.dispatchEvent(new CustomEvent('nurseflow_open_tutorial'));
-                  }}
-                  className="!bg-sky-600 hover:!bg-sky-700 !text-white !font-black !text-[10px] !px-1.5 !py-0.5 !rounded-md !transition-all !cursor-pointer border-none ml-1 flex items-center gap-0.5 shadow-2xs"
-                  title="操作チュートリアル・ガイドを再呼び出し"
-                >
-                  <span>❓ 体験ガイド</span>
-                </button>
-              </div>
-            )}
           </div>
 
           {/* 📞 タブレット・スマホ等で日付選択の下に縦並び表示されるナースコール対応ボタン */}

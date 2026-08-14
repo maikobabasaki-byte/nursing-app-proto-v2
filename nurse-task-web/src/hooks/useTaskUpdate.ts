@@ -116,6 +116,7 @@ export const updateTask = async (
       const nurseName = data.nurse_name || existingData.nurse_name || '';
       const unexecutedReason = data.unexecuted_reason !== undefined ? data.unexecuted_reason : (existingData.unexecuted_reason || '');
       const finalCompletedAt = completedAtToSave || existingData.completed_at || (isCompletedStatus ? getJSTISOString() : '');
+      const isAdditional = existingData.is_additional || '';
 
       console.log(`📡 GASへの書き戻しを実行します: ID[${emrOrderId}], Status[${newStatus}]`);
       syncTaskToGAS({
@@ -124,6 +125,7 @@ export const updateTask = async (
         completed_at: finalCompletedAt,
         nurse_name: nurseName,
         unexecuted_reason: unexecutedReason,
+        is_additional: isAdditional,
       });
     }
   } catch (error) {

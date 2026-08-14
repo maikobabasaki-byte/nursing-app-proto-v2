@@ -20,24 +20,44 @@ export default function TimelineSidebar({
 
   const currentUser = useTimelineStore((state) => state.currentUser);
   const showLowPriority = useTimelineStore((state) => state.showLowPriority);
-  const isLeader = currentUser?.is_leader === true;
+  const isGuestUser = Boolean(
+    sessionStorage.getItem('is_guest_session') === 'true' ||
+    currentUser?.isAnonymous === true
+  );
+  const isLeader = isGuestUser
+    ? (currentUser ? currentUser.is_leader === true : sessionStorage.getItem('nurseflow_guest_role') === 'leader')
+    : Boolean(currentUser?.is_leader);
 
-  // 🎯 【Single Source of Truth】ストアの全タスクからプール用タスクを直算出（リーダー時は全チーム重要タスクを網羅集約）
+  // 🎯 【Single Source of Truth】ストアの全タスクからプール用タスクを直算出（ゲストメンバーは202/203号室限定）
   const poolTasks = allTasks.filter(task => {
     if (!task || task.status === 'deleted' || task.display_period?.includes(':')) {
       return false;
     }
+
+    if (isGuestUser) {
+      const isGuestTask = task.task_id?.startsWith('GUEST-') || task.nurse_id === currentUser?.nurse_id || task.assigned_nurse_id === currentUser?.nurse_id;
+      if (!isGuestTask) return false;
+
+      if (!isLeader) {
+        const room = (task.room_id || '').trim();
+        const is202or203 = room === '202' || room === '203' || room.includes('202') || room.includes('203');
+        const isSelected = selectedPatients && selectedPatients.length > 0 ? selectedPatients.includes(task.patient_id) : false;
+        if (!is202or203 && !isSelected) return false;
+      }
+    } else if (!isLeader) {
+      if (selectedPatients && selectedPatients.length > 0) {
+        if (!selectedPatients.includes(task.patient_id)) return false;
+      }
+    }
+
     if (isLeader) {
       const isHighPriority = task.priority === 'high';
       if (!isHighPriority && !showLowPriority && task.priority === 'low') {
         return false;
       }
-      return true;
     }
-    if (!selectedPatients || selectedPatients.length === 0) {
-      return true;
-    }
-    return selectedPatients.includes(task.patient_id);
+
+    return true;
   });
 
   // Zustandの全タスクからログイン中のユーザーの「実施中・記録中タスク」を動的抽出

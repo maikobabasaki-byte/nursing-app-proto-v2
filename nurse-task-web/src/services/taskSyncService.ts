@@ -114,6 +114,23 @@ export const cleanUndefinedFields = (obj: any): any => {
   return cleaned;
 };
 
+/**
+ * GASデータの必須項目（タスク名など）を検証するバリデーション関数。
+ * 不完全なデータ（部屋番号だけが入力されている空行・ゴーストタスク等）を除外します。
+ */
+export const isValidGASTask = (item: GASTaskResponse): boolean => {
+  if (!item) return false;
+  const rawItem = item as Record<string, any>;
+  const title = String(item.title || rawItem.task_name || rawItem.taskName || rawItem['タスク名'] || rawItem['指示内容'] || '').trim();
+
+  // タスク名が空文字、null、undefined、無題タスクの場合は除外
+  if (!title || title === '無題タスク') {
+    return false;
+  }
+
+  return true;
+};
+
 // 💡 同期処理自体の重複実行を完全に防ぐためのロック用変数
 let ongoingSyncPromise: Promise<ExtendedTask[]> | null = null;
 
@@ -138,8 +155,9 @@ export const ensureTodayTasksSynced = async (userName?: string): Promise<Extende
         return [];
       }
 
-      // ① スプレッドシートの正データをアプリ用型に変換
-      const canonicalTasks: ExtendedTask[] = gasTasks.map((item, index) =>
+      // ① スプレッドシートの正データをアプリ用型に変換（不完全な空タスクを除外）
+      const validGasTasks = gasTasks.filter(isValidGASTask);
+      const canonicalTasks: ExtendedTask[] = validGasTasks.map((item, index) =>
         cleanUndefinedFields(mapGASTaskToExtendedTask(item, index, todayJST, userName, gasPatients))
       );
 

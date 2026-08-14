@@ -335,39 +335,12 @@ export const assignDefaultPriority = (task: {
 };
 
 /**
- * タスクの表示時間（display_period 等）を時系列比較用の仮想「分（0〜1440+）」に変換する
+ * タスクを表示時刻（display_period）昇順に並び替える関数
  */
-export const getTaskTimeMinutes = (timeStr?: string): number => {
-  if (!timeStr) return 1450;
-  const trimmed = String(timeStr).trim();
-
-  if (trimmed.includes('午前')) return 450;  // 07:30 相当
-  if (trimmed.includes('早出')) return 420;  // 07:00 相当
-  if (trimmed.includes('日勤')) return 480;  // 08:00 相当
-  if (trimmed.includes('午後')) return 750;  // 12:30 相当
-  if (trimmed.includes('遅出')) return 660;  // 11:00 相当
-  if (trimmed.includes('夕方')) return 960;  // 16:00 相当
-  if (trimmed.includes('夜勤')) return 1020; // 17:00 相当
-  if (trimmed.includes('就寝前')) return 1260; // 21:00 相当
-  if (trimmed.includes('随時')) return 1440; // 24:00 相当（最下部）
-
-  const match = trimmed.match(/(\d{1,2}):(\d{2})/);
-  if (match) {
-    const h = parseInt(match[1], 10);
-    const m = parseInt(match[2], 10);
-    return h * 60 + m;
-  }
-
-  return 1445;
-};
-
-/**
- * タスク配列を時系列（朝〜夜・随時）の昇順に並び替える
- */
-export const sortTasksChronologically = <T extends { display_period?: string; time?: string }>(tasks: T[]): T[] => {
+export const sortTasksChronologically = <T extends { display_period?: string; initial_period?: string }>(tasks: T[]): T[] => {
   return [...tasks].sort((a, b) => {
-    const timeA = getTaskTimeMinutes(a.display_period || (a as any).time);
-    const timeB = getTaskTimeMinutes(b.display_period || (b as any).time);
-    return timeA - timeB;
+    const timeA = a.display_period || a.initial_period || '';
+    const timeB = b.display_period || b.initial_period || '';
+    return timeA.localeCompare(timeB);
   });
 };

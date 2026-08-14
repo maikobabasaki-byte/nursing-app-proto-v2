@@ -189,6 +189,7 @@ export const syncTaskToGAS = async (payload: GASTaskPayload): Promise<boolean> =
 
     const response = await fetch(url, {
       method: 'GET',
+      redirect: 'follow',
     });
 
     if (!response.ok) {
