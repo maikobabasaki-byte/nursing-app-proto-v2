@@ -50,6 +50,20 @@ export default function PatientSelect({ onSelectComplete }: PatientSelectProps) 
           return a.bed_number - b.bed_number;
         });
         setPatients(sortedData);
+
+        // 💡 既存の選択済み患者データ（sessionStorageまたはstore）があれば初期チェック状態として復元
+        try {
+          const saved = sessionStorage.getItem('selectedPatients');
+          if (saved) {
+            const parsed = JSON.parse(saved);
+            if (Array.isArray(parsed) && parsed.length > 0) {
+              setSelectedPatientIds(parsed);
+              return;
+            }
+          }
+        } catch (e) {
+          console.error("患者復元エラー:", e);
+        }
       })
       .catch((err) => console.error('データ読み込みエラー:', err));
   }, []); // 依存配列が空のため、コンポーネントが最初に表示された1回だけ実行される

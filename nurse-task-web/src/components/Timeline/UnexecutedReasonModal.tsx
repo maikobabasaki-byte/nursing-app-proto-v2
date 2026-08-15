@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import type { ExtendedTask } from '../../types/types';
+import { CharCounter } from '../CharCounter';
 
 interface UnexecutedReasonModalProps {
   task: ExtendedTask;
@@ -28,7 +29,7 @@ export const UnexecutedReasonModal: React.FC<UnexecutedReasonModalProps> = ({
   const isOther = selectedCategory === 'その他';
 
   // バリデーション: プルダウン必須 + 「その他」の場合は詳細も必須
-  const isValid = selectedCategory !== '' && (!isOther || customDetail.trim() !== '');
+  const isValid = selectedCategory !== '' && (!isOther || customDetail.trim() !== '') && customDetail.length <= 200;
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -39,6 +40,10 @@ export const UnexecutedReasonModal: React.FC<UnexecutedReasonModalProps> = ({
     }
     if (isOther && !customDetail.trim()) {
       setErrorMessage('「その他」を選択した場合は詳細を入力してください。');
+      return;
+    }
+    if (customDetail.trim().length > 200) {
+      setErrorMessage('詳細・備考メモは200文字以内で入力してください。');
       return;
     }
 
@@ -106,10 +111,14 @@ export const UnexecutedReasonModal: React.FC<UnexecutedReasonModalProps> = ({
 
           {/* 詳細・備考エリア（「その他」の場合は必須） */}
           <div>
-            <label className="block text-xs font-bold text-gray-700 mb-1">
-              詳細・備考メモ{isOther ? <span className="text-red-500"> * 必須</span> : '（任意）'}
-            </label>
+            <div className="flex items-center justify-between mb-1">
+              <label className="block text-xs font-bold text-gray-700">
+                詳細・備考メモ{isOther ? <span className="text-red-500"> * 必須</span> : '（任意）'}
+              </label>
+              <CharCounter current={customDetail.length} max={200} />
+            </div>
             <textarea
+              maxLength={200}
               value={customDetail}
               onChange={(e) => {
                 setCustomDetail(e.target.value);

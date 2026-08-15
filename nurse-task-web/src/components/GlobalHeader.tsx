@@ -128,9 +128,10 @@ export default function GlobalHeader({ currentPage, onNavigate}: GlobalHeaderPro
           </div>
 
           {/* 📞 タブレット・スマホ等で日付選択の下に縦並び表示されるナースコール対応ボタン */}
+          {/* 📞 タブレット・スマホ等で日付選択の下に縦並び表示されるナースコール対応ボタン */}
           {!isReadOnly && (
             <button
-              id="header-nurse-call-btn"
+              id="tutorial-nurse-call"
               type="button"
               onClick={async () => {
                 const { triggerNurseCallInterruption } = await import('../hooks/useTaskUpdate');
@@ -151,7 +152,7 @@ export default function GlobalHeader({ currentPage, onNavigate}: GlobalHeaderPro
       <nav className={`hidden md:flex ${isLeader ? "w-96" : "w-72"}`}>
         <ul className="flex justify-between items-center text-center text-xs w-full">
           {/* 👥 患者マスター */}
-          <li id="nav-item-patient-master" className="cursor-pointer flex flex-col items-center justify-center" onClick={() => onNavigate('patientMaster')}>
+          <li id="tutorial-nav-patient" className="cursor-pointer flex flex-col items-center justify-center" onClick={() => onNavigate('patientMaster')}>
             <img 
               src={isMasterActive ? ACTIVE_NAV_ICONS.account_circle : inactiveIcons.account_circle} 
               alt="患者マスター" 
@@ -166,7 +167,7 @@ export default function GlobalHeader({ currentPage, onNavigate}: GlobalHeaderPro
           </li>
           
           {/* 🗓️ タイムライン */}
-          <li id="nav-item-timeline" className="cursor-pointer flex flex-col items-center justify-center" onClick={() => onNavigate('timeline')}>
+          <li id="tutorial-nav-timeline" className="cursor-pointer flex flex-col items-center justify-center" onClick={() => onNavigate('timeline')}>
             <img 
               src={currentPage === 'timeline' ? ACTIVE_NAV_ICONS.event_note : inactiveIcons.event_note} 
               alt="タイムライン" 
@@ -181,7 +182,7 @@ export default function GlobalHeader({ currentPage, onNavigate}: GlobalHeaderPro
           </li>
 
           {/* 📍 マップ */}
-          <li id="nav-item-map" className="cursor-pointer flex flex-col items-center justify-center" onClick={() => onNavigate('map')}>
+          <li id="tutorial-nav-map" className="cursor-pointer flex flex-col items-center justify-center" onClick={() => onNavigate('map')}>
             <img 
               src={currentPage === 'map' ? ACTIVE_NAV_ICONS.pin_drop : inactiveIcons.pin_drop} 
               alt="マップ" 
@@ -197,7 +198,7 @@ export default function GlobalHeader({ currentPage, onNavigate}: GlobalHeaderPro
 
           {/* 📋 リーダーTODO */}
           {isLeader && (
-            <li className="cursor-pointer flex flex-col items-center justify-center" onClick={() => onNavigate('leaderTodo')}>
+            <li id="tutorial-nav-leader-todo" className="cursor-pointer flex flex-col items-center justify-center" onClick={() => onNavigate('leaderTodo')}>
               <img 
                 src={currentPage === 'leaderTodo' ? ACTIVE_NAV_ICONS.add_task : inactiveIcons.add_task} 
                 alt="リーダーTODO" 

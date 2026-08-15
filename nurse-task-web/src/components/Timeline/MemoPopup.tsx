@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'; // ★ useEffect を追加
 import { useTimelineStore } from '../../stores/useTimelineStore';
+import { CharCounter } from '../CharCounter';
 
 export const MemoPopup = () => {
   // 🎯 ストアから状態とアクションをすべて一本釣り
@@ -52,6 +53,8 @@ export const MemoPopup = () => {
     }
   }, [editingMemo, activeMemoTime]); // 開く対象が変わったら強制同期
 
+  const currentText = editingMemo ? editingText : newMemoText;
+
   return (
     <div className="fixed inset-0 !bg-black/60 flex items-center justify-center z-50 p-4">
       <div className="bg-yellow-200 p-6 rounded-2xl shadow-2xl w-full max-w-sm">
@@ -100,10 +103,15 @@ export const MemoPopup = () => {
 
         {/* メモ内容 */}
         <div className="mb-4">
+          <div className="flex items-center justify-between mb-1">
+            <label className="block text-xs font-bold text-gray-700">メモ内容：</label>
+            <CharCounter current={currentText.length} max={200} />
+          </div>
           <textarea
+            maxLength={200}
             className="w-full !h-24 !p-3 !bg-gray-50 !border !rounded-lg focus:!ring-2 focus:!ring-blue-400 !outline-none text-gray-800"
             placeholder="メモ内容を入力... (例: 手袋補充)"
-            value={editingMemo ? editingText : newMemoText}
+            value={currentText}
             onChange={(e) => editingMemo ? setEditingText(e.target.value) : setNewMemoText(e.target.value)}
           />
         </div>
@@ -147,11 +155,19 @@ export const MemoPopup = () => {
             className="!flex-1 flex justify-center !py-2.5 !bg-blue-600 hover:!bg-blue-700 !text-white !rounded-lg !font-bold cursor-pointer transition-colors"
             onClick={() => {
               const textToSave = editingMemo ? editingText : newMemoText;
+              if (!textToSave.trim()) {
+                alert("⚠️ メモ内容を入力してください。");
+                return;
+              }
+              if (textToSave.trim().length > 200) {
+                alert("⚠️ メモ内容は200文字以内で入力してください。");
+                return;
+              }
               const memoToSave = editingMemo 
                 ? { 
                     ...editingMemo, 
                     time: memoTime, 
-                    text: textToSave, 
+                    text: textToSave.trim(), 
                     scheduledAt: scheduledAt,
                     target_room_id: targetRoomId || undefined,
                     is_completed: isCompleted
@@ -159,7 +175,7 @@ export const MemoPopup = () => {
                 : { 
                     id: Date.now().toString(), 
                     time: memoTime, 
-                    text: textToSave, 
+                    text: textToSave.trim(), 
                     scheduledAt: scheduledAt,
                     target_room_id: targetRoomId || undefined,
                     is_completed: isCompleted

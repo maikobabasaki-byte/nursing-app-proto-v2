@@ -95,7 +95,7 @@ export default function PatientMasterPage({ selectedIds }: DashboardProps) {
         if (task.patient_id !== patient.patient_id || task.status === 'deleted') return false;
         // 💡 ゲストユーザー時はゲスト作成タスクのみ抽出（正規タスクとの二重混在を排除）
         if (isGuestUser) {
-          const isGuestTask = task.task_id?.startsWith('GUEST-') || task.nurse_id === currentUser?.nurse_id || task.assigned_nurse_id === currentUser?.nurse_id;
+          const isGuestTask = task.task_id?.startsWith('GUEST-') || task.nurse_id === currentUser?.nurse_id || task.assigned_nurse_id === currentUser?.nurse_id || (task as any).is_guest === true;
           if (!isGuestTask) return false;
         }
         return true;
@@ -166,7 +166,7 @@ export default function PatientMasterPage({ selectedIds }: DashboardProps) {
     <main className="flex-1 p-6 flex flex-col gap-6 bg-slate-300 text-slate-800 font-sans overflow-y-auto">
       
       {/* ＝ 1. 上部サブステータスバー & 検索エリア ＝ */}
-      <div className="flex flex-col gap-4 bg-white/50 p-4 rounded-lg shadow-sm">
+      <div id="patient-master-header" className="flex flex-col gap-4 bg-white/50 p-4 rounded-lg shadow-sm">
         <div className="flex flex-col sm:flex-row items-center justify-between gap-4 min-h-[36px]">
           <div className="text-sm font-bold text-slate-700">
             <span className="text-cyan-700">総受け持ち数：{patients.length} 名</span>
@@ -174,14 +174,21 @@ export default function PatientMasterPage({ selectedIds }: DashboardProps) {
             <span>タスク検索・抽出</span>
           </div>
           
-          <div className="flex-1 flex justify-center w-full sm:w-auto">
+          <div className="flex-1 flex flex-col sm:flex-row items-center justify-center gap-2 w-full sm:w-auto">
             <input 
+              id="patient-master-search"
               type="text" 
+              maxLength={30}
               placeholder="患者名、またはタスク名で検索" 
               value={searchWord}
               onChange={(e) => setSearchWord(e.target.value)}
               className="w-full sm:w-64 !px-3 !py-1 !bg-white !border !border-slate-300 !rounded !text-sm !shadow-inner focus:!outline-none focus:!border-cyan-500"
             />
+            {searchWord.length > 0 && (
+              <span className={`text-xs font-mono select-none ${searchWord.length >= 30 ? 'text-red-500 font-bold' : 'text-slate-500'}`}>
+                {searchWord.length}/30
+              </span>
+            )}
           </div>
           <div className="w-32 hidden lg:block"></div>
         </div>

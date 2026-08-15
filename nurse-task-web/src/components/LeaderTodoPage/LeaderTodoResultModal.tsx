@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import type { LeaderTodo } from '../../types/types';
 import { useTimelineStore } from '../../stores/useTimelineStore';
+import { CharCounter } from '../CharCounter';
 
 interface Props {
   todo: LeaderTodo;
@@ -30,6 +31,15 @@ export const LeaderTodoResultModal: React.FC<Props> = ({ todo, onClose, onSucces
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (isSubmitting) return;
+
+    if (resultOutcome.trim().length > 200) {
+      alert('⚠️ 対応結果・方針は200文字以内で入力してください。');
+      return;
+    }
+    if (doctorInstructions.trim().length > 200) {
+      alert('⚠️ 医師指示・補足メモは200文字以内で入力してください。');
+      return;
+    }
 
     setIsSubmitting(true);
     try {
@@ -138,10 +148,14 @@ export const LeaderTodoResultModal: React.FC<Props> = ({ todo, onClose, onSucces
 
           {/* 方向性（方針）入力フォーム */}
           <div>
-            <label className="block text-xs font-black text-gray-800 mb-1">
-              どのような方向性（方針）になったか
-            </label>
+            <div className="flex items-center justify-between mb-1">
+              <label className="block text-xs font-black text-gray-800">
+                どのような方向性（方針）になったか
+              </label>
+              <CharCounter current={resultOutcome.length} max={200} />
+            </div>
             <textarea
+              maxLength={200}
               rows={4}
               placeholder="例: 主治医相談の結果、明日朝より降圧剤を1錠追加変更。ICはご家族到着を待って15時開始決定。"
               value={resultOutcome}
@@ -152,10 +166,14 @@ export const LeaderTodoResultModal: React.FC<Props> = ({ todo, onClose, onSucces
 
           {/* 医師指示・申し送りメモ */}
           <div>
-            <label className="block text-xs font-black text-gray-800 mb-1">
-              医師からの指示・補足申し送りメモ
-            </label>
+            <div className="flex items-center justify-between mb-1">
+              <label className="block text-xs font-black text-gray-800">
+                医師からの指示・補足申し送りメモ
+              </label>
+              <CharCounter current={doctorInstructions.length} max={200} />
+            </div>
             <textarea
+              maxLength={200}
               rows={3}
               placeholder="例: Dr.佐藤より指示あり。SpO2 93%未満の場合は酸素1L開始のこと。"
               value={doctorInstructions}

@@ -1,6 +1,6 @@
 import type { TimelineControlsProps } from '../../types/types';
 import { useTimelineStore } from '../../stores/useTimelineStore';
-import { startHandsOnTutorial } from '../../utils/tutorial';
+import { startHandsOnTutorial } from '../Tutorial/tutorial';
 
 // 💡 30分刻みの時間オプション（00:00 〜 24:00）を網羅
 const TIME_RANGE_OPTIONS = [

@@ -194,7 +194,7 @@ export const LeaderTodoPage: React.FC = () => {
 
   // 💡 各カラムの描画関数（PC・タブレット共通）
   const renderPatientsColumn = () => (
-    <div className="w-full h-full bg-white rounded-2xl border border-gray-200 shadow-sm flex flex-col overflow-hidden">
+    <div id="leader-todo-patients" className="w-full h-full bg-white rounded-2xl border border-gray-200 shadow-sm flex flex-col overflow-hidden">
       <div className="bg-gray-50 border-b border-gray-200 p-3.5 flex items-center justify-between">
         <h2 className="font-extrabold text-sm text-gray-800 flex items-center gap-1.5">
           <span>🏥 患者リスト</span>
@@ -256,7 +256,7 @@ export const LeaderTodoPage: React.FC = () => {
   );
 
   const renderActiveTodosColumn = () => (
-    <div className="w-full h-full bg-white rounded-2xl border border-gray-200 shadow-sm flex flex-col overflow-hidden">
+    <div id="leader-todo-active-list" className="w-full h-full bg-white rounded-2xl border border-gray-200 shadow-sm flex flex-col overflow-hidden">
       <div className="bg-gray-50 border-b border-gray-200 p-3.5 flex items-center justify-between">
         <h2 className="font-extrabold text-sm text-gray-800 flex items-center gap-1.5">
           <span>⏱️ 未対応・対応中TODO</span>
@@ -354,7 +354,7 @@ export const LeaderTodoPage: React.FC = () => {
   );
 
   const renderCompletedTodosColumn = () => (
-    <div className="w-full h-full bg-white rounded-2xl border border-gray-200 shadow-sm flex flex-col overflow-hidden">
+    <div id="leader-todo-completed-list" className="w-full h-full bg-white rounded-2xl border border-gray-200 shadow-sm flex flex-col overflow-hidden">
       <div className="bg-emerald-800 text-white p-3.5 flex items-center justify-between shadow-xs">
         <h2 className="font-extrabold text-sm flex items-center gap-1.5">
           <span>✅ 本日対応済み・完了TODO</span>
@@ -428,7 +428,7 @@ export const LeaderTodoPage: React.FC = () => {
   return (
     <div className="flex-1 bg-gray-100 flex flex-col h-[calc(100vh-64px)] overflow-hidden">
       {/* 画面サブヘッダー */}
-      <div className="bg-indigo-900 text-white px-3 sm:px-6 py-2.5 sm:py-3 shadow-md flex items-center justify-between flex-shrink-0">
+      <div id="leader-todo-header" className="bg-indigo-900 text-white px-3 sm:px-6 py-2.5 sm:py-3 shadow-md flex items-center justify-between flex-shrink-0">
         <div className="flex items-center gap-2 sm:gap-3">
           <span className="text-xl sm:text-2xl">📋</span>
           <div>
@@ -439,7 +439,7 @@ export const LeaderTodoPage: React.FC = () => {
 
         <div className="flex items-center gap-2 sm:gap-4">
           {/* 📊 計画進捗率プログレスバー (PC・タブレット表示) */}
-          <div className="hidden md:flex items-center gap-3 bg-indigo-950/80 px-3.5 py-1.5 rounded-xl border border-indigo-700/60 shadow-inner">
+          <div id="leader-todo-progress-bar" className="hidden md:flex items-center gap-3 bg-indigo-950/80 px-3.5 py-1.5 rounded-xl border border-indigo-700/60 shadow-inner">
             <div className="flex flex-col text-right">
               <span className="text-[10px] font-bold text-indigo-300">タイムライン計画進捗</span>
               <span className="text-xs font-black text-emerald-400">
@@ -469,7 +469,7 @@ export const LeaderTodoPage: React.FC = () => {
             </select>
           </div>
 
-          <div className="hidden sm:flex items-center gap-2 bg-indigo-950/60 p-1.5 rounded-xl border border-indigo-700/50">
+          <div id="leader-todo-filter" className="hidden sm:flex items-center gap-2 bg-indigo-950/60 p-1.5 rounded-xl border border-indigo-700/50">
             <span className="text-xs font-bold text-indigo-200 px-2">優先度:</span>
             {['all', 'highest', 'high', 'medium', 'low'].map((pKey) => (
               <button
@@ -515,6 +515,7 @@ export const LeaderTodoPage: React.FC = () => {
       {/* 📱 タブレット・モバイル幅（lg未満）専用手帳風インデックスタブバー */}
       <div className="lg:!hidden !flex !items-end !px-3 !pt-2 !bg-slate-200/80 !border-b-2 !border-indigo-600 !gap-1 !shrink-0 !select-none">
         <button
+          id="tab-btn-patients"
           type="button"
           onClick={() => setActiveTodoTab('patients')}
           className={`!px-3 !py-2 !rounded-t-xl !transition-all !cursor-pointer !flex !items-center !gap-1 !border-t-2 !border-x-2 ${
@@ -527,6 +528,7 @@ export const LeaderTodoPage: React.FC = () => {
         </button>
 
         <button
+          id="tab-btn-active"
           type="button"
           onClick={() => setActiveTodoTab('active')}
           className={`!px-3 !py-2 !rounded-t-xl !transition-all !cursor-pointer !flex !items-center !gap-1 !border-t-2 !border-x-2 ${
@@ -539,6 +541,7 @@ export const LeaderTodoPage: React.FC = () => {
         </button>
 
         <button
+          id="tab-btn-completed"
           type="button"
           onClick={() => setActiveTodoTab('completed')}
           className={`!px-3 !py-2 !rounded-t-xl !transition-all !cursor-pointer !flex !items-center !gap-1 !border-t-2 !border-x-2 ${

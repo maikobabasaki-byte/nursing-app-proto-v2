@@ -19,10 +19,17 @@ export default function Login() {
       const persistenceType = rememberMe ? browserLocalPersistence : browserSessionPersistence;
       await setPersistence(auth, persistenceType);
 
-      // 既存のID/パスワード入力をFirebase認証用に変換
-      const email = `${userId}@nurseflow.local`;
+      const cleanUserId = userId.trim();
+      if (!cleanUserId) {
+        const errorEl = document.getElementById('error_message');
+        if (errorEl) errorEl.innerText = 'ログインIDを入力してください';
+        return;
+      }
+
+      // 既存のID/パスワード入力をFirebase認証用に変換 (すでに@が含まれている場合はそのまま使用)
+      const email = cleanUserId.includes('@') ? cleanUserId : `${cleanUserId}@nurseflow.local`;
       await signInWithEmailAndPassword(auth, email, password);
-      // 認証成功時はApp.tsxのonAuthStateChangedが検知して画面が切り替わります
+      sessionStorage.setItem('currentScreen', 'patientSelect');
     } catch (error) {
       const errorEl = document.getElementById('error_message');
       if (errorEl) errorEl.innerText = 'IDまたはパスワードが正しくありません';
@@ -37,11 +44,13 @@ export default function Login() {
     if (errorEl) errorEl.innerText = '';
 
     try {
-      // 💡 ゲスト専用セッションフラグを明示的にセット
+      // 💡 ゲスト専用セッションフラグを明示的にセット（ゲストは直接患者マスター画面へ遷移）
       sessionStorage.setItem('is_guest_session', 'true');
       sessionStorage.setItem('nurseflow_guest_role', role);
       sessionStorage.setItem('currentScreen', 'patientMaster');
       // 💡 新規体験のためチュートリアル完了フラグをクリア
+      sessionStorage.removeItem('nurseflow_tutorial_completed');
+      sessionStorage.removeItem(`nurseflow_tutorial_completed_${role}`);
       localStorage.removeItem('nurseflow_tutorial_completed');
 
       console.log("🔑 [GuestLogin] ログインセッションをローカル保持 (browserLocalPersistence) に設定中...");

@@ -8,7 +8,7 @@ export const Settings: React.FC = () => {
     <div className="flex-1 overflow-y-auto p-4 md:p-8 animate-fade-in">
       <div className="max-w-4xl mx-auto flex flex-col gap-6">
         {/* ページのタイトルヘッダー */}
-        <div className="bg-white/90 backdrop-blur-md rounded-2xl p-6 shadow-sm border border-gray-200/80 flex items-center justify-between">
+        <div id="settings-header" className="bg-white/90 backdrop-blur-md rounded-2xl p-6 shadow-sm border border-gray-200/80 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <span className="text-3xl p-2.5 bg-indigo-50 rounded-xl">⚙️</span>
             <div className="text-left">
@@ -21,7 +21,7 @@ export const Settings: React.FC = () => {
         </div>
 
         {/* 🎨 カラーパレット（テーマ）選択セクション */}
-        <div className="bg-white/90 backdrop-blur-md rounded-2xl p-6 shadow-sm border border-gray-200/80 text-left">
+        <div id="settings-theme-selector" className="bg-white/90 backdrop-blur-md rounded-2xl p-6 shadow-sm border border-gray-200/80 text-left">
           <div className="mb-6">
             <h2 className="text-base font-extrabold text-gray-900 flex items-center gap-2">
               <span>🎨 視覚心理カラーテーマ</span>

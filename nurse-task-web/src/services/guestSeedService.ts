@@ -1,8 +1,7 @@
-import { doc, setDoc, collection, getDocs, writeBatch, serverTimestamp } from 'firebase/firestore';
+import { doc, writeBatch, serverTimestamp } from 'firebase/firestore';
 import { db, registerActiveDateInFirestore } from '../lib/firebase';
 import { getJSTDateString } from '../utils/dateUtils';
-import { fetchGASData } from './gasService';
-import { mapGASTaskToExtendedTask, cleanUndefinedFields, isValidGASTask } from './taskSyncService';
+import { mapGASTaskToExtendedTask, isValidGASTask } from './taskSyncService';
 import { useTimelineStore } from '../stores/useTimelineStore';
 
 export const seedGuestData = async (guestUid: string, role: 'leader' | 'member' = 'leader') => {
@@ -11,223 +10,139 @@ export const seedGuestData = async (guestUid: string, role: 'leader' | 'member' 
   const todayStr = getJSTDateString();
   const isLeaderRole = role === 'leader';
   const nurseName = isLeaderRole ? 'ゲスト（リーダー）' : 'ゲスト（メンバー）';
-  const nurseRoleTitle = isLeaderRole ? '日勤リーダー' : '日勤メンバー';
-  const targetNurseId = isLeaderRole ? 'nurse01' : 'nurse02';
 
-  console.log(`🚀 [GuestSeed] GAS 100%連携モード: 役割 [${role}] (ターゲット: ${targetNurseId}, UID: ${guestUid}) のシード開始`);
+  console.log(`🚀 [GuestSeed] ゲストセッション初期化: 役割 [${role}] (UID: ${guestUid}) - ローカル環境で即時準備中...`);
 
   try {
-    // 1. 👥 ゲスト看護師ドキュメントの初期作成（nurses / nurse_master）
-    const nurseRef = doc(db, 'nurses', guestUid);
-    await setDoc(
-      nurseRef,
-      {
-        nurse_id: guestUid,
-        name: nurseName,
-        role: nurseRoleTitle,
-        is_leader: isLeaderRole,
-        color: isLeaderRole ? '#4F46E5' : '#0284C7',
-        team: 'Aチーム',
-        assigned_patients: [],
-        last_setup_date: todayStr,
-        is_logged_in: true,
-        is_sos: false,
-        x_percent: 45,
-        y_percent: 50,
-        updatedAt: serverTimestamp(),
-      },
-      { merge: true }
-    );
+    // 1. 📁 ローカルJSON (/data/tasks.json & /data/patients.json) を即時取得
+    const [tasksRes, patientsRes] = await Promise.all([
+      fetch('/data/tasks.json').then((r) => r.json()).catch(() => []),
+      fetch('/data/patients.json').then((r) => r.json()).catch(() => []),
+    ]);
 
-    const masterRef = doc(db, 'nurse_master', guestUid);
-    await setDoc(
-      masterRef,
-      {
-        nurse_id: guestUid,
-        name: nurseName,
-        role: isLeaderRole ? 'リーダー' : 'メンバー',
-        team: 'Aチーム',
-        is_leader: isLeaderRole,
-      },
-      { merge: true }
-    );
+    const localTasksRaw: any[] = Array.isArray(tasksRes) ? tasksRes : [];
+    const localPatientsRaw: any[] = Array.isArray(patientsRes) ? patientsRes : [];
 
-    // 2. 🧹 旧ゲストタスク（GUEST-***）および旧ゲストTODO（GUEST-TODO-***）の一括削除
-    const allTasksSnap = await getDocs(collection(db, 'tasks'));
-    const deleteBatch = writeBatch(db);
-    let deletedTaskCount = 0;
-    allTasksSnap.docs.forEach((d) => {
-      if (d.id.startsWith('GUEST-')) {
-        deleteBatch.delete(d.ref);
-        deletedTaskCount++;
+    // 2. フィルタリング (メンバーは202/203号室限定、リーダーは全患者)
+    const filteredTasks = localTasksRaw.filter((t: any) => {
+      if (!isValidGASTask(t)) return false;
+      const room = String(t.room_id || t.room || '').trim();
+      if (isLeaderRole) {
+        return true;
       }
+      return room === '202' || room === '203' || room.includes('202') || room.includes('203');
     });
-    if (deletedTaskCount > 0) {
-      await deleteBatch.commit();
-      console.log(`🧹 [GuestSeed] 旧ゲストタスク ${deletedTaskCount} 件を完全削除しました。`);
-    }
 
-    const allTodosSnap = await getDocs(collection(db, 'leader_todos'));
-    const todoDeleteBatch = writeBatch(db);
-    let deletedTodoCount = 0;
-    allTodosSnap.docs.forEach((d) => {
-      if (d.id.startsWith('GUEST-TODO-')) {
-        todoDeleteBatch.delete(d.ref);
-        deletedTodoCount++;
+    const seenTaskKeys = new Set<string>();
+    const copiedPatientIds: string[] = [];
+    const mappedTasks: any[] = [];
+
+    filteredTasks.forEach((gTask: any, i: number) => {
+      const mapped = mapGASTaskToExtendedTask(gTask, i, todayStr, nurseName, localPatientsRaw);
+      if (!mapped.title || mapped.title === '無題タスク') return;
+
+      const taskKey = `${mapped.patient_id}_${mapped.title}_${mapped.display_period}`;
+      if (seenTaskKeys.has(taskKey)) return;
+      seenTaskKeys.add(taskKey);
+
+      const newTaskId = `GUEST-${mapped.task_id}-${guestUid.slice(0, 5)}`;
+      if (mapped.patient_id) {
+        copiedPatientIds.push(mapped.patient_id);
       }
-    });
-    if (deletedTodoCount > 0) {
-      await todoDeleteBatch.commit();
-      console.log(`🧹 [GuestSeed] 旧ゲストTODO ${deletedTodoCount} 件を完全削除しました。`);
-    }
 
-    // 3. 🌐 Googleスプレッドシート (GAS API) から連携済み本物データをリアルタイム取得
-    let copiedTaskCount = 0;
-    const gasData = await fetchGASData();
-
-    if (gasData && Array.isArray(gasData.tasks) && gasData.tasks.length > 0) {
-      console.log(`📊 [GuestSeed] GASから ${gasData.tasks.length} 件の全タスクを取得。役割 [${role}] に応じた抽出中...`);
-
-      const filteredGasTasks = gasData.tasks.filter((tItem) => {
-        // 💡 不完全な空タスク（ゴーストタスク）を除外
-        if (!isValidGASTask(tItem)) return false;
-
-        const rawItem = tItem as Record<string, any>;
-        const room = String(tItem.room_id || tItem.room || rawItem.room || rawItem['病室'] || '').trim();
-
-        if (isLeaderRole) {
-          // 👑 リーダー体験：病棟全体の全ケアタスク・リーダー業務を一元取得
-          return true;
-        } else {
-          // 🩺 メンバー体験：202号室および203号室のタスクのみを厳密抽出
-          const is202or203Room = room === '202' || room === '203' || room.includes('202') || room.includes('203');
-          return is202or203Room;
-        }
+      mappedTasks.push({
+        ...mapped,
+        task_id: newTaskId,
+        nurse_id: guestUid,
+        nurse_name: nurseName,
+        assigned_nurse_id: guestUid,
+        staff_id: guestUid,
+        target_date: todayStr,
+        is_guest: true,
       });
+    });
 
-      const targetGasTasks = filteredGasTasks.length > 0 ? filteredGasTasks : (isLeaderRole ? gasData.tasks : []);
-      const copiedPatientIds: string[] = [];
+    // 3. Zustand ストアへ直接アトミック注入
+    const uniquePatientIds = Array.from(new Set(copiedPatientIds)).filter(Boolean);
+    const store = useTimelineStore.getState();
+    store.setTasks(mappedTasks);
+    store.addDemoTask(); // 🎯 【重要】練習用タスク（【練習用】術前絶飲食確認）を自動生成！
 
-      // 💡 重複タスクの防止（患者ID + タイトル + 表示時間 でデデュープ）
-      const seenTaskKeys = new Set<string>();
+    const finalPatientIds = uniquePatientIds.length > 0
+      ? uniquePatientIds
+      : localPatientsRaw.slice(0, 4).map((p: any) => p.patient_id).filter(Boolean);
 
-      for (let i = 0; i < targetGasTasks.length; i++) {
-        const gTask = targetGasTasks[i];
-        if (!isValidGASTask(gTask)) continue;
+    store.setSelectedPatients(finalPatientIds);
 
-        const mapped = mapGASTaskToExtendedTask(gTask, i, todayStr, nurseName, gasData.patients);
-        if (!mapped.title || mapped.title === '無題タスク') continue;
-
-        const taskKey = `${mapped.patient_id}_${mapped.title}_${mapped.display_period}`;
-        if (seenTaskKeys.has(taskKey)) {
-          continue; // 同一患者・同一内容・同一時間の重複タスクをスキップ
-        }
-        seenTaskKeys.add(taskKey);
-
-        const newTaskId = `GUEST-${mapped.task_id}-${guestUid.slice(0, 5)}`;
-
-        if (mapped.patient_id) {
-          copiedPatientIds.push(mapped.patient_id);
-        }
-
-        const clonedTask = cleanUndefinedFields({
-          ...mapped,
-          task_id: newTaskId,
-          nurse_id: guestUid,
-          nurse_name: nurseName,
-          assigned_nurse_id: guestUid,
-          staff_id: guestUid,
-          target_date: todayStr,
-          updatedAt: serverTimestamp(),
-        });
-
-        await setDoc(doc(db, 'tasks', newTaskId), clonedTask, { merge: true });
-        copiedTaskCount++;
-      }
-
-      // 4. 🏥 GASから取得した患者マスター (gasData.patients) のうち、コピー対象タスクに関連する患者のみを Firestore patients コレクションに保存
-      if (Array.isArray(gasData.patients) && gasData.patients.length > 0) {
-        const uniqueCopiedPatientIds = Array.from(new Set(copiedPatientIds));
-        const matchedGasPatients = gasData.patients.filter((p) => {
-          const pid = String(p.patient_id || (p as any).patientId || (p as any).id || '').trim();
-          return uniqueCopiedPatientIds.includes(pid) || (!isLeaderRole && (p.room_id === '202' || p.room_id === '203'));
-        });
-
-        for (const p of matchedGasPatients) {
-          const pid = String(p.patient_id || (p as any).patientId || (p as any).id || '').trim();
-          if (!pid) continue;
-
-          try {
-            await setDoc(
-              doc(db, 'patients', pid),
-              cleanUndefinedFields({
-                patient_id: pid,
-                name: p.name || (p as any).patient_name || `患者(${pid})`,
-                room_id: String(p.room_id || (p as any).room || '').trim(),
-                bed_number: p.bed_number || '',
-                team: p.team || 'Aチーム',
-                is_sos: false,
-              }),
-              { merge: true }
-            );
-          } catch (pErr) {
-            try {
-              await setDoc(
-                doc(db, 'tasks', `system-patient-${pid}`),
-                cleanUndefinedFields({
-                  is_patient_doc: true,
-                  patient_id: pid,
-                  name: p.name || (p as any).patient_name || `患者(${pid})`,
-                  room_id: String(p.room_id || (p as any).room || '').trim(),
-                  bed_number: p.bed_number || '',
-                  team: p.team || 'Aチーム',
-                  is_sos: false,
-                }),
-                { merge: true }
-              );
-            } catch (sysErr) {
-              // 無視して続行
-            }
-          }
-        }
-
-        if (uniqueCopiedPatientIds.length > 0) {
-          await setDoc(nurseRef, { assigned_patients: uniqueCopiedPatientIds }, { merge: true });
-          useTimelineStore.getState().setSelectedPatients(uniqueCopiedPatientIds);
-        }
-      }
-
-      console.log(`✅ [GuestSeed] GASから ${targetNurseId} / 対象患者のタスク ${copiedTaskCount} 件を完全コピーしました!`);
-
-      // 5. 👑 スプレッドシート側のTODOデータ (gasData.todos または gasData.leader_todos) があればコピー
-      const gasTodos = (gasData as any).todos || (gasData as any).leader_todos || [];
-      if (isLeaderRole && Array.isArray(gasTodos) && gasTodos.length > 0) {
-        let copiedTodoCount = 0;
-        for (let i = 0; i < gasTodos.length; i++) {
-          const gTodo = gasTodos[i];
-          const todoId = `GUEST-TODO-${gTodo.todo_id || i + 1}-${guestUid.slice(0, 5)}`;
-          await setDoc(
-            doc(db, 'leader_todos', todoId),
-            cleanUndefinedFields({
-              ...gTodo,
-              todo_id: todoId,
-              created_at: serverTimestamp(),
-              updated_at: serverTimestamp(),
-            }),
-            { merge: true }
-          );
-          copiedTodoCount++;
-        }
-        console.log(`✅ [GuestSeed] GASからリーダーTODO ${copiedTodoCount} 件をコピーしました。`);
-      }
-    } else {
-      console.warn("⚠️ [GuestSeed] GASからタスクデータが取得できませんでした。");
+    // 4. リーダーTODOのローカル設定
+    if (isLeaderRole) {
+      const defaultLeaderTodos: any[] = [
+        {
+          todo_id: `GUEST-TODO-1-${guestUid.slice(0, 5)}`,
+          patient_id: 'P-001',
+          title: '朝の全体カンファレンス申し送り',
+          category: '申し送り',
+          priority: 'high',
+          requires_double_check: false,
+          status: 'untouched',
+          patient_name: '全体病棟',
+          room_id: 'カンファ室',
+          scheduled_at: '08:45',
+          result_outcome: '夜勤からの引き継ぎ確認完了。本日手術1件、重症観察2件の重点フォロー。',
+          doctor_instructions: 'Dr.田中指示：午前中に201号室の点滴変更予定。',
+        },
+        {
+          todo_id: `GUEST-TODO-2-${guestUid.slice(0, 5)}`,
+          patient_id: 'P-002',
+          title: 'Dr.佐藤 回診同行および指示受け',
+          category: '回診',
+          priority: 'medium',
+          requires_double_check: false,
+          status: 'in_progress',
+          patient_name: '202号室 中島伊織',
+          room_id: '202',
+          scheduled_at: '10:30',
+          result_outcome: '術前検査結果報告完了。午後14時IC決定。',
+          doctor_instructions: 'バイタル安定のため降圧剤継続。',
+        },
+      ];
+      store.setLeaderTodos(defaultLeaderTodos);
     }
 
-    // 💡 稼働日（active_dates）に登録
-    await registerActiveDateInFirestore(todayStr);
+    // 5. 権限がある場合のみバックグラウンドでFirestoreドキュメント作成を試行（権限エラー時は無視）
+    try {
+      const nurseRef = doc(db, 'nurses', guestUid);
+      const seedBatch = writeBatch(db);
+      seedBatch.set(
+        nurseRef,
+        {
+          nurse_id: guestUid,
+          name: nurseName,
+          role: isLeaderRole ? '日勤リーダー' : '日勤メンバー',
+          is_leader: isLeaderRole,
+          color: isLeaderRole ? '#4F46E5' : '#0284C7',
+          team: 'Aチーム',
+          assigned_patients: uniquePatientIds,
+          last_setup_date: todayStr,
+          is_logged_in: true,
+          is_sos: false,
+          x_percent: 45,
+          y_percent: 50,
+          updatedAt: serverTimestamp(),
+        },
+        { merge: true }
+      );
+      await seedBatch.commit();
+      await registerActiveDateInFirestore(todayStr);
+    } catch (fsErr) {
+      // ゲストは権限なし・完全ローカル動作用のため権限エラーはサイレントで無視
+    }
+
+    console.log(`✨ [GuestSeed] ゲストローカル初期化が完了しました (${mappedTasks.length}件のタスク)`);
+    return finalPatientIds;
 
   } catch (error) {
-    console.error('❌ [GuestSeed] GASデータ取得・コピー処理エラー:', error);
+    console.error('❌ [GuestSeed] ゲストローカル初期化エラー:', error);
+    return [];
   }
 };

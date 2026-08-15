@@ -10,6 +10,7 @@ import { auth } from '../lib/firebase';
 // 💡 左側のSOSパネル（LeftPanel）：タスクSOS、看護師SOS、患者SOSをリアルタイム統合表示
 const LeftPanel: React.FC<{ sosTasks: any[]; sosNurses: NursePin[]; patientSosList?: any[]; isFullWidth?: boolean }> = ({ sosTasks, sosNurses, patientSosList = [], isFullWidth }) => (
   <div 
+    id="tour-sos-panel"
     style={{ 
       width: isFullWidth ? '100%' : '240px', 
       flexShrink: 0, 
@@ -348,7 +349,7 @@ export default function MapContainer({ selectedPatients }: MapContainerProps): R
           <LeftPanel sosTasks={sosTasks} sosNurses={sosNurses} patientSosList={patientSosList} />
           
           {/* ② 中央：病棟マップ（0度・回転なし表示） */}
-          <div className="flex-1 h-full flex justify-center items-center overflow-hidden relative">
+          <div id="tour-map-canvas" className="flex-1 h-full flex justify-center items-center overflow-hidden relative">
             <div 
               ref={mapContainerRef} 
               style={{

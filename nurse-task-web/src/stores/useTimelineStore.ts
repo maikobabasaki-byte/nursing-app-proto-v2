@@ -322,9 +322,13 @@ export const useTimelineStore = create<TimelineStore>((set, get) => ({
       isGroup: false,
       isChild: false,
     };
-    set((state) => ({
-      allTasks: [demoTask, ...state.allTasks.filter(t => t.task_id !== 'demo-task-tutorial')]
-    }));
+    set((state) => {
+      const exists = state.allTasks.some(t => t.task_id === 'demo-task-tutorial');
+      if (exists) return state;
+      return {
+        allTasks: [demoTask, ...state.allTasks]
+      };
+    });
   },
   removeDemoTask: () => {
     set((state) => ({

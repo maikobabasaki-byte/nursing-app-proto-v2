@@ -35,7 +35,7 @@ export default function TimelineSidebar({
     }
 
     if (isGuestUser) {
-      const isGuestTask = task.task_id?.startsWith('GUEST-') || task.nurse_id === currentUser?.nurse_id || task.assigned_nurse_id === currentUser?.nurse_id;
+      const isGuestTask = task.task_id === 'demo-task-tutorial' || task.task_id?.startsWith('GUEST-') || task.nurse_id === currentUser?.nurse_id || task.assigned_nurse_id === currentUser?.nurse_id;
       if (!isGuestTask) return false;
 
       if (!isLeader) {
@@ -109,6 +109,7 @@ export default function TimelineSidebar({
       
       {/* ─── 1. 上部エリア：タスクプール ─── */}
       <div 
+        id="tutorial-task-pool"
         style={{ height: `${topRatio}%` }}
         className="flex flex-col border-b border-gray-200 bg-white overflow-hidden"
       >

@@ -8,8 +8,6 @@ import { handleCardClick } from '../utils/taskLogic';
 import { useTimelineDnd } from '../hooks/useTimelineDnd';
 import { useTimelineStore } from '../stores/useTimelineStore';
 
-import { useEffect } from 'react';
-import { advanceHandsOnTutorialStep, getHandsOnActiveIndex } from '../utils/tutorial';
 import { useIsMobile } from '../hooks/useIsMobile';
 
 interface TimelineProps {
@@ -31,51 +29,6 @@ export default function Timeline({ selectedPatients }: TimelineProps) {
   const storeAllTasks = useTimelineStore((state) => state.allTasks);
   const storeMemos = useTimelineStore((state) => state.memos);
   const handleStartGrouping = useTimelineStore((state) => state.handleStartGrouping);
-
-  const activePopupTaskId = useTimelineStore((state) => state.activePopupTaskId);
-  const demoTaskStatus = storeAllTasks.find(t => t.task_id === 'demo-task-tutorial')?.status;
-
-  // 💡 ステップインデックスに基づく誤発火遮断ガード付き自動進行フック
-  useEffect(() => {
-    if (!demoTaskStatus) return;
-
-    const currentIndex = getHandsOnActiveIndex();
-    // 🛡️ ガード 1: 非実行中、Index 0 (ウェルカム), Index 2 (モーダル全体説明) は手動進行のため自動進行させない
-    if (currentIndex <= 0 || currentIndex === 2) return;
-
-    let shouldAdvance = false;
-
-    // カードタップでポップアップが開いた時のステップ (Index 1, 4, 6, 8, 10, 12, 14)
-    const isModalOpenStep =
-      currentIndex === 1 ||
-      currentIndex === 4 ||
-      currentIndex === 6 ||
-      currentIndex === 8 ||
-      currentIndex === 10 ||
-      currentIndex === 12 ||
-      currentIndex === 14;
-
-    if (isModalOpenStep && activePopupTaskId === 'demo-task-tutorial') {
-      shouldAdvance = true;
-    }
-
-    // 各ボタンタップによるステータス変更ステップ (Index 3, 5, 7, 9, 11, 13, 15)
-    if (currentIndex === 3 && demoTaskStatus === 'progressing') shouldAdvance = true;
-    if (currentIndex === 5 && demoTaskStatus === 'pending') shouldAdvance = true;
-    if (currentIndex === 7 && demoTaskStatus === 'progressing') shouldAdvance = true;
-    if (currentIndex === 9 && demoTaskStatus === 'completed') shouldAdvance = true;
-    if (currentIndex === 11 && demoTaskStatus === 'record_start') shouldAdvance = true;
-    if (currentIndex === 13 && demoTaskStatus === 'record_pending') shouldAdvance = true;
-    if (currentIndex === 15 && demoTaskStatus === 'record_complete') shouldAdvance = true;
-
-    if (shouldAdvance) {
-      const timer = setTimeout(() => {
-        advanceHandsOnTutorialStep();
-      }, 180);
-
-      return () => clearTimeout(timer);
-    }
-  }, [demoTaskStatus, activePopupTaskId]);
 
   // 読み込み中なら画面を出す
   if (loading) {

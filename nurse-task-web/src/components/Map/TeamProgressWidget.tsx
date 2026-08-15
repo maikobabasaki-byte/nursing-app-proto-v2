@@ -122,8 +122,9 @@ export const TeamProgressWidget: React.FC<TeamProgressWidgetProps> = ({
 
   return (
     <div
+      id="tour-progress-panel"
       style={{
-        width: compact ? '100%' : '250px',
+        width: compact ? '100%' : '260px',
         flexShrink: 0,
         backgroundColor: '#f8fafc',
         padding: '16px',
@@ -141,7 +142,7 @@ export const TeamProgressWidget: React.FC<TeamProgressWidgetProps> = ({
           <p className="text-[10px] font-bold text-slate-500 mt-0.5">
             {selectedPatientIds.length > 0
               ? `選択患者 (${selectedPatientIds.length}名) 限定集計`
-              : '患者未選択'}
+              : '病棟全受け持ち患者集計'}
           </p>
         </div>
         <span className="text-[10px] bg-emerald-100 text-emerald-800 font-extrabold px-2 py-0.5 rounded-full animate-pulse">
@@ -149,12 +150,12 @@ export const TeamProgressWidget: React.FC<TeamProgressWidgetProps> = ({
         </span>
       </div>
 
-      {/* 看護師ごとの個別プログレスバー一覧 (選択患者タスク限定) */}
+      {/* 看護師ごとの個別プログレスバー一覧 (選択患者限定 または 全員表示) */}
       <div className="flex flex-col gap-2.5">
-        {selectedPatientIds.length === 0 ? (
+        {nurseProgressList.length === 0 ? (
           <div className="text-center py-6 px-2 bg-slate-50 rounded-xl border border-dashed border-slate-200">
-            <p className="text-xs text-slate-500 font-bold">患者が選択されていません</p>
-            <p className="text-[10px] text-slate-400 mt-1">患者選択画面で担当患者を選択してください</p>
+            <p className="text-xs text-slate-500 font-bold">表示対象のタスクはありません</p>
+            <p className="text-[10px] text-slate-400 mt-1">本日の看護タスクが取得されると表示されます</p>
           </div>
         ) : (
           nurseProgressList.map((np) => (

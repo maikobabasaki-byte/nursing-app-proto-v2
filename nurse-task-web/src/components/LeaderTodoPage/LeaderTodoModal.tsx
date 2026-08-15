@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import type { LeaderTodo, LeaderTodoCategory, LeaderTodoPriority } from '../../types/types';
 import { useTimelineStore } from '../../stores/useTimelineStore';
+import { CharCounter } from '../CharCounter';
 
 interface Props {
   patient?: {
@@ -82,6 +83,19 @@ export const LeaderTodoModal: React.FC<Props> = ({ patient, todoToEdit, onClose,
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!title.trim() || isSubmitting) return;
+
+    if (title.trim().length > 30) {
+      alert('⚠️ TODO件名は30文字以内で入力してください。');
+      return;
+    }
+    if (resultOutcome.trim().length > 200) {
+      alert('⚠️ 対応結果・方針は200文字以内で入力してください。');
+      return;
+    }
+    if (doctorInstructions.trim().length > 200) {
+      alert('⚠️ 医師指示・補足メモは200文字以内で入力してください。');
+      return;
+    }
 
     setIsSubmitting(true);
     try {
@@ -302,13 +316,17 @@ export const LeaderTodoModal: React.FC<Props> = ({ patient, todoToEdit, onClose,
 
           {/* TODO件名 / メモフォーム */}
           <div>
-            <label className="block text-xs font-bold text-gray-700 mb-1">
-              TODO件名・具体内容 {!isHandled && <span className="text-red-500">*</span>}
-            </label>
+            <div className="flex items-center justify-between mb-1">
+              <label className="block text-xs font-bold text-gray-700">
+                TODO件名・具体内容 {!isHandled && <span className="text-red-500">*</span>}
+              </label>
+              <CharCounter current={title.length} max={30} />
+            </div>
             <textarea
               required={!isHandled}
               disabled={isHandled || isSubmitting}
-              rows={3}
+              maxLength={30}
+              rows={2}
               placeholder="例: IC同席後の経過観察および主治医指示確認メモ"
               value={title}
               onChange={(e) => setTitle(e.target.value)}
@@ -364,10 +382,14 @@ export const LeaderTodoModal: React.FC<Props> = ({ patient, todoToEdit, onClose,
             </h3>
 
             <div>
-              <label className="block text-[11px] font-bold text-gray-700 mb-1">
-                どのような方向性（方針）になったか
-              </label>
+              <div className="flex items-center justify-between mb-1">
+                <label className="block text-[11px] font-bold text-gray-700">
+                  どのような方向性（方針）になったか
+                </label>
+                <CharCounter current={resultOutcome.length} max={200} />
+              </div>
               <textarea
+                maxLength={200}
                 rows={3}
                 placeholder="例: 主治医相談の結果、明日朝より降圧剤を1錠追加変更。"
                 value={resultOutcome}
@@ -377,10 +399,14 @@ export const LeaderTodoModal: React.FC<Props> = ({ patient, todoToEdit, onClose,
             </div>
 
             <div>
-              <label className="block text-[11px] font-bold text-gray-700 mb-1">
-                医師からの指示・補足申し送りメモ
-              </label>
+              <div className="flex items-center justify-between mb-1">
+                <label className="block text-[11px] font-bold text-gray-700">
+                  医師からの指示・補足申し送りメモ
+                </label>
+                <CharCounter current={doctorInstructions.length} max={200} />
+              </div>
               <textarea
+                maxLength={200}
                 rows={2}
                 placeholder="例: Dr.佐藤より指示あり。SpO2 93%未満の場合は酸素1L開始のこと。"
                 value={doctorInstructions}

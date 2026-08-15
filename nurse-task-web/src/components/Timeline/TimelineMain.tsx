@@ -60,8 +60,9 @@ export default function TimelineMain({
   };
 
   const isTaskForSelectedPatient = (task: ExtendedTask) => {
-    // ⚡ 突発割り込み・ナースコール対応・臨時追加は患者選択フィルタをバイパスしてタイムラインに常時表示
+    // ⚡ 練習用デモタスク・突発割り込み・ナースコール対応・臨時追加は患者選択フィルタをバイパスしてタイムラインに常時表示
     const isInterrupt = Boolean(
+      task.task_id === 'demo-task-tutorial' ||
       task.title?.includes('ナースコール') || 
       task.title?.includes('SOS') || 
       task.task_id?.startsWith('CALL_INTERRUPT_') ||

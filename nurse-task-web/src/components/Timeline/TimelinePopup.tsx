@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import type { ExtendedTask, ExtendedTaskStatus } from '../../types/types';
 import { useTimelineStore } from '../../stores/useTimelineStore';
+import { CharCounter } from '../CharCounter';
 
 interface TimelinePopupProps {
   task: ExtendedTask;
@@ -80,6 +81,10 @@ export const TimelinePopup: React.FC<TimelinePopupProps> = ({ task, onClose, ren
   const handleExecuteDuplicate = async () => {
     if (!duplicatePeriod) {
       alert("実施予定時間を選択してください。");
+      return;
+    }
+    if (duplicateNote.trim().length > 200) {
+      alert("⚠️ 看護判断理由・備考は200文字以内で入力してください。");
       return;
     }
 
@@ -268,8 +273,12 @@ export const TimelinePopup: React.FC<TimelinePopupProps> = ({ task, onClose, ren
               </div>
 
               <div>
-                <label className="font-extrabold block mb-1 text-gray-700">看護判断理由・備考（任意）</label>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="font-extrabold block text-gray-700">看護判断理由・備考（任意）</label>
+                  <CharCounter current={duplicateNote.length} max={200} />
+                </div>
                 <textarea
+                  maxLength={200}
                   value={duplicateNote}
                   onChange={(e) => setDuplicateNote(e.target.value)}
                   placeholder="例: SpO2低下に伴い吸引を追加実施 / バイタル変動のため再測定"

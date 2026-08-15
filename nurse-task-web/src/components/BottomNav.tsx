@@ -94,6 +94,7 @@ export default function BottomNav({ currentScreen, onNavigate }: BottomNavProps)
         return (
           <button
             key={item.id}
+            id={item.id === 'settings' ? 'bottom-nav-settings' : `bottom-nav-${item.id}`}
             type="button"
             onClick={() => onNavigate(item.id)}
             className="flex flex-col items-center justify-center flex-1 h-full py-1 transition-all duration-300 cursor-pointer select-none"

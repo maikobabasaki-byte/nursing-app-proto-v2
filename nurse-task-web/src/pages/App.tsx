@@ -11,7 +11,7 @@ import type { ExtendedTask, LeaderTodo } from '../types/types';
 import Header from '../components/Header';
 import Footer from '../components/Footer';
 import MainLayout from "../components/MainLayout";
-import { TutorialOverlay } from '../components/Tutorial/TutorialOverlay';
+import { startTutorialByPath } from '../components/Tutorial/tutorial';
 
 // 🚀 コードスプリッティング（遅延ローディング）の設定
 const Login = lazy(() => import('./Login'));
@@ -76,6 +76,9 @@ export default function App() {
         setUser(currentUser);
         const id = currentUser.email ? currentUser.email.split('@')[0] : currentUser.uid;
 
+        // 🎯 sessionStorageに保存されている画面を取得（リロード時の画面状態を安全に復元）
+        const savedScreen = sessionStorage.getItem('currentScreen') as ScreenType | null;
+
         // 🎯 ゲストユーザー（is_guest_session === 'true' または 匿名ログイン isAnonymous）の場合のみシードデータを同期
         const isGuest = currentUser.isAnonymous || sessionStorage.getItem('is_guest_session') === 'true';
         if (isGuest) {
@@ -84,10 +87,6 @@ export default function App() {
           const guestName = isLeader ? 'ゲスト（リーダー）' : 'ゲスト（メンバー）';
 
           console.log(`👤 [AuthCheck] ゲストユーザー(${guestRole})を検出しました! (UID: ${currentUser.uid}, isAnonymous: ${currentUser.isAnonymous})`);
-          
-          setSelectedPatients([]);
-          sessionStorage.setItem('selectedPatients', JSON.stringify([]));
-          sessionStorage.setItem('currentScreen', 'patientMaster');
 
           useTimelineStore.getState().setCurrentUser({
             nurse_id: currentUser.uid,
@@ -98,18 +97,24 @@ export default function App() {
             isAnonymous: currentUser.isAnonymous,
           });
 
-          console.log("🌱 [AuthCheck] ゲストデータを同期中... 100%準備が整うまでローディングを表示します");
+          console.log("🌱 [AuthCheck] ゲストデータのローカル初期化中...");
           setIsSyncingWithPC(true);
 
           try {
             const { seedGuestData } = await import('../services/guestSeedService');
-            await seedGuestData(currentUser.uid, guestRole);
-            console.log("🚀 [AuthCheck] GASデータの全コピーおよび同期が100%完了しました!");
+            const guestPatientIds = await seedGuestData(currentUser.uid, guestRole);
+            if (Array.isArray(guestPatientIds) && guestPatientIds.length > 0) {
+              setSelectedPatients(guestPatientIds);
+              sessionStorage.setItem('selectedPatients', JSON.stringify(guestPatientIds));
+            }
+            console.log("🚀 [AuthCheck] ゲストはGASデータと連携せず、ローカル初期化が完了しました! 患者数:", guestPatientIds?.length);
           } catch (syncErr) {
-            console.error("❌ ゲストデータ同期エラー:", syncErr);
+            console.warn("⚠️ ゲスト初期化ワーニング:", syncErr);
           } finally {
             setIsSyncingWithPC(false);
-            setCurrentScreen('patientMaster');
+            // 💡 ゲストユーザーは初回ログイン時、固定デモデータが存在するため直接『患者マスター画面(patientMaster)』へ遷移
+            const guestTarget = (savedScreen && savedScreen !== 'login') ? savedScreen : 'patientMaster';
+            setCurrentScreen(guestTarget);
             setLoading(false);
           }
           return;
@@ -148,7 +153,7 @@ export default function App() {
           }
         }
 
-        // 🎯 【本日の初回ログインチェック & GAS同期 / PC引き継ぎ判定】
+        // 🎯 【本日のログイン回数・データ同期・画面切り替え判定】
         try {
           const todayStr = getJSTDateString();
           registerActiveDateInFirestore(todayStr);
@@ -168,16 +173,17 @@ export default function App() {
 
           if (nurseSnap.exists()) {
             const nurseData = nurseSnap.data();
-            if (
-              nurseData.last_setup_date === todayStr &&
+            const isSetupDoneToday = nurseData.last_setup_date === todayStr &&
               Array.isArray(nurseData.assigned_patients) &&
-              nurseData.assigned_patients.length > 0
-            ) {
-              // 🚀 本日の初期設定が別端末(PC等)ですでに完了している場合は即時遷移！
+              nurseData.assigned_patients.length > 0;
+
+            if (isSetupDoneToday) {
+              // 🚀 【本日の2回目以降のログイン】データを同期し、患者マスター画面 (またはリロード元の画面) を表示！
               setSelectedPatients(nurseData.assigned_patients);
               sessionStorage.setItem('selectedPatients', JSON.stringify(nurseData.assigned_patients));
-              
-              setCurrentScreen('patientMaster');
+
+              const target = (savedScreen && savedScreen !== 'login') ? savedScreen : 'patientMaster';
+              setCurrentScreen(target);
               setLoading(false);
               return;
             }
@@ -186,7 +192,9 @@ export default function App() {
           console.error("本日データ同期チェックエラー:", e);
         }
 
-        // 🎯 初期化完了時は設定された画面（デフォルトは 'login'）をそのまま表示維持
+        // 🌅 【本日の初回 (1回目) ログイン】または初期設定未完了時:『患者選択画面(patientSelect)』を表示！
+        const firstLoginTarget = (savedScreen && savedScreen !== 'login') ? savedScreen : 'patientSelect';
+        setCurrentScreen(firstLoginTarget);
         setLoading(false);
       } else {
         setUser(null);
@@ -200,7 +208,16 @@ export default function App() {
       setLoading(false);
     });
     return () => unsubscribe();
-  }, []); // currentScreenを依存に含めないことで、画面遷移時にリセットされないようにする
+  }, []);
+
+  // 💡 画面切り替え時に画面単体ガイド（tutorialStepsByPath）を自動トリガー
+  useEffect(() => {
+    if (!user) return;
+    const timer = setTimeout(() => {
+      startTutorialByPath(currentScreen, false);
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [currentScreen, user]);
 
   const selectedDate = useTimelineStore((state) => state.selectedDate);
 
@@ -208,7 +225,12 @@ export default function App() {
   useEffect(() => {
     if (!user) return;
 
-    const isGuestUser = Boolean(user.isAnonymous || (user.email && user.email.includes('guest')));
+    const isGuestUser = Boolean(user.isAnonymous || (user.email && user.email.includes('guest')) || sessionStorage.getItem('is_guest_session') === 'true');
+    if (isGuestUser) {
+      console.log("👻 [App] ゲストユーザーのため、Firestoreからのタスク上書き監視をスキップしローカルシードデータを保護します");
+      return;
+    }
+
     const todayStr = getJSTDateString();
 
     const unsubscribe = onSnapshot(
@@ -573,7 +595,6 @@ export default function App() {
                 <Settings />
               )}
             </Suspense>
-            <TutorialOverlay />
           </MainLayout>
         ) : (
           /* 🛡️ 未ログイン状態での保護ルートアクセスに対するRoute Guard（強制ログインリダイレクト） */

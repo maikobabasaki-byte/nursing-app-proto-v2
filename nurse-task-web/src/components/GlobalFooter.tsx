@@ -22,6 +22,7 @@ export default function GlobalFooter({ onNavigate }: GlobalFooterProps) {
     >
       {/* ⚙️ 左側：システム設定（クリックで settings 画面に移動） */}
       <div 
+        id="footer-settings-btn"
         onClick={() => onNavigate?.('settings')}
         className="setting flex items-center cursor-pointer hover:opacity-80 transition-opacity"
         style={{ color: currentConfig.accentColor }}

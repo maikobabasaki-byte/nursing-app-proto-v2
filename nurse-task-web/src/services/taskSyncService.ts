@@ -161,36 +161,38 @@ export const ensureTodayTasksSynced = async (userName?: string): Promise<Extende
         cleanUndefinedFields(mapGASTaskToExtendedTask(item, index, todayJST, userName, gasPatients))
       );
 
-      // ② Firestore 上の既存タスクを全件一括削除（過去の重複・不要データを一掃）
+      // ② 不要な旧タスクの削除と正のタスクの保存を単一の Batch でアトミック（原子性）処理
+      // (※別々のBatchコミットにすると一時的にタスク0件となり画面が消える現象が発生するためアトミック化)
+      const syncBatch = writeBatch(db);
+      const canonicalIds = new Set(canonicalTasks.map(t => t.task_id));
+
       try {
         const existingSnapshot = await getDocs(collection(db, 'tasks'));
         if (!existingSnapshot.empty) {
-          const deleteBatch = writeBatch(db);
           existingSnapshot.docs.forEach(docSnap => {
             const id = docSnap.id;
-            if (!id.startsWith('system-') && !id.startsWith('patient-sos-')) {
-              deleteBatch.delete(docSnap.ref);
+            // 正のタスク一覧に含まれず、かつデモ/システム用でない旧タスクを削除対象に追加
+            if (!canonicalIds.has(id) && !id.startsWith('system-') && !id.startsWith('patient-sos-')) {
+              syncBatch.delete(docSnap.ref);
             }
           });
-          await deleteBatch.commit();
-          console.log(`🧹 Firestore内の旧タスクを安全に一括整理完了しました。`);
         }
       } catch (e) {
-        console.warn("Firestoreからの既存タスククリア中の警告:", e);
+        console.warn("Firestoreからの旧タスク整理中の警告:", e);
       }
 
-      // ③ 正のタスクデータのみを Firestore に一括保存
-      const writeBatchRef = writeBatch(db);
+      // ③ 正のタスクデータを一括セット
       canonicalTasks.forEach(task => {
         const docRef = doc(db, 'tasks', task.task_id);
-        writeBatchRef.set(docRef, task);
+        syncBatch.set(docRef, task);
       });
 
-      await writeBatchRef.commit();
+      // ⚡ アトミックに一括コミット（0件になる中間状態を排除しチラつき完全防止）
+      await syncBatch.commit();
       await registerActiveDateInFirestore(todayJST);
-      console.log(`✅ 正のタスク ${canonicalTasks.length} 件を Firestore に一括同期完了しました。`);
+      console.log(`✅ 正のタスク ${canonicalTasks.length} 件を Firestore にアトミック一括同期完了しました。`);
 
-      // ④ Zustand ストアのタスクデータもスプレッドシートの正データで一括入れ替え
+      // ④ Zustand ストアのタスクデータも一括更新
       useTimelineStore.getState().setTasks(canonicalTasks);
 
       return canonicalTasks;
