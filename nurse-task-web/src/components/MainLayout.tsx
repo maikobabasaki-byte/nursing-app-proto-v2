@@ -21,16 +21,16 @@ export default function MainLayout({ children, currentScreen, onNavigate }: Main
       {/* ログイン後の共通ヘッダー */}
       <GlobalHeader currentPage={currentScreen} onNavigate={onNavigate} /> 
       
-      {/* メイン中身（モバイル表示時はボトムナビゲーションの高さを考慮した pb-14、PC表示時は pb-0） */}
+      {/* メイン中身（モバイル・タブレット表示時はボトムナビゲーションの高さを考慮した pb-14、PC表示時は pb-0） */}
       <div
-        className="flex-1 min-h-0 overflow-hidden w-full flex flex-col pb-14 md:pb-0 transition-colors duration-300"
+        className="flex-1 min-h-0 overflow-hidden w-full flex flex-col pb-14 lg:pb-0 transition-colors duration-300"
         style={{ backgroundColor: currentConfig.bgColor }}
       >
         {children}
       </div>
       
-      {/* 💻 PC版フッター（md以上で表示、モバイルでは非表示） */}
-      <div className="hidden md:block shrink-0 relative z-30">
+      {/* 💻 PC版フッター（lg以上で表示、モバイル・タブレットでは非表示） */}
+      <div className="hidden lg:block shrink-0 relative z-30">
         <GlobalFooter onNavigate={onNavigate} />
       </div>
 

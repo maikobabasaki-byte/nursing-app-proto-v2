@@ -137,7 +137,7 @@ export const TeamProgressWidget: React.FC<TeamProgressWidgetProps> = ({
       <div className="border-b border-slate-200 pb-2.5 flex items-center justify-between">
         <div>
           <h3 className="font-black text-sm text-slate-800 flex items-center gap-1.5">
-            <span>🩺 看護師別 計画進捗</span>
+            <span>看護師別 計画進捗</span>
           </h3>
           <p className="text-[10px] font-bold text-slate-500 mt-0.5">
             {selectedPatientIds.length > 0
@@ -145,9 +145,6 @@ export const TeamProgressWidget: React.FC<TeamProgressWidgetProps> = ({
               : '病棟全受け持ち患者集計'}
           </p>
         </div>
-        <span className="text-[10px] bg-emerald-100 text-emerald-800 font-extrabold px-2 py-0.5 rounded-full animate-pulse">
-          リアルタイム同期
-        </span>
       </div>
 
       {/* 看護師ごとの個別プログレスバー一覧 (選択患者限定 または 全員表示) */}

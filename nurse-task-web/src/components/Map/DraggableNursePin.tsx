@@ -98,10 +98,11 @@ export const DraggableNursePin: React.FC<Props> = ({ nurse, isOverlay = false, i
     top: isOverlay ? undefined : `${nurse.y_percent}%`,
     backgroundColor: bgColor,
     color: textColor,
-    transform: transform ? `translate3d(${transform.x}px, ${transform.y}px, 0)` : undefined,
+    transform: (!isOverlay && transform) ? `translate3d(${transform.x}px, ${transform.y}px, 0)` : undefined,
     opacity: isDragging && !isOverlay ? 0.3 : 1,
     cursor: isOverlay ? 'grabbing' : 'grab',
     zIndex: isDragging || isOverlay ? 9999 : 50,
+    touchAction: 'none',
   };
 
   return (

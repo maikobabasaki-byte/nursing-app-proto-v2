@@ -82,11 +82,18 @@ body,
   z-index: 100000 !important;
 }
 
-.driver-popover {
+.driver-stage,
+.driver-stage-node {
   z-index: 100001 !important;
 }
 
 .driver-active-element {
+  position: relative !important;
   z-index: 100002 !important;
   pointer-events: auto !important;
+}
+
+.driver-popover {
+  z-index: 100005 !important;
+  max-width: min(340px, calc(100vw - 24px)) !important;
 }

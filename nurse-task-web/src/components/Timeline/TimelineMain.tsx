@@ -137,16 +137,23 @@ export default function TimelineMain({
 
     // 💡 リーダー参照モード (isLeader === true) の場合
     if (isLeader) {
-      const isHighPriority = task.priority === 'high';
-
-      if (!isHighPriority && !showLowPriority && task.priority === 'low') {
+      // 1. 低優先度表示フィルタ
+      if (!showLowPriority && task.priority === 'low') {
         return false;
       }
 
+      // 2. 選択患者リスト（`effectiveSelectedPatients`）が存在する場合は受け持ち・選択患者のみ抽出
+      if (effectiveSelectedPatients && effectiveSelectedPatients.length > 0) {
+        if (!isTaskForSelectedPatient(task)) {
+          return false;
+        }
+      }
+
+      // 3. チーム名の不一致チェック（他チームのタスクは完全除外）
       const normalizedLeaderTeam = normalizeTeamName(leaderTeam);
       const normalizedTaskTeam = normalizeTeamName(task.team);
 
-      if (normalizedTaskTeam !== '' && normalizedLeaderTeam !== '' && normalizedTaskTeam !== normalizedLeaderTeam && !isHighPriority) {
+      if (normalizedTaskTeam !== '' && normalizedLeaderTeam !== '' && normalizedTaskTeam !== normalizedLeaderTeam) {
         return false;
       }
 
@@ -164,7 +171,7 @@ export default function TimelineMain({
 
         if (assignedNurse && assignedNurse.team) {
           const normalizedNurseTeam = normalizeTeamName(assignedNurse.team);
-          if (normalizedNurseTeam !== '' && normalizedLeaderTeam !== '' && normalizedNurseTeam !== normalizedLeaderTeam && !isHighPriority) {
+          if (normalizedNurseTeam !== '' && normalizedLeaderTeam !== '' && normalizedNurseTeam !== normalizedLeaderTeam) {
             return false;
           }
         }
@@ -173,7 +180,7 @@ export default function TimelineMain({
       return true;
     }
 
-    // 💡 通常の受け持ち選択モード：受け持ち指定なし（0件）の場合は全患者タスクを表示
+    // 💡 通常メンバーの受け持ち選択モード
     return isTaskForSelectedPatient(task);
   });
 

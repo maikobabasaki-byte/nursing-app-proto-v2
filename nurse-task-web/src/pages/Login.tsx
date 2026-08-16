@@ -48,10 +48,20 @@ export default function Login() {
       sessionStorage.setItem('is_guest_session', 'true');
       sessionStorage.setItem('nurseflow_guest_role', role);
       sessionStorage.setItem('currentScreen', 'patientMaster');
-      // 💡 新規体験のためチュートリアル完了フラグをクリア
-      sessionStorage.removeItem('nurseflow_tutorial_completed');
-      sessionStorage.removeItem(`nurseflow_tutorial_completed_${role}`);
-      localStorage.removeItem('nurseflow_tutorial_completed');
+
+      // 💡 ゲストログイン時は毎回チュートリアルを表示するため過去の閲覧完了フラグを全削除
+      try {
+        Object.keys(localStorage).forEach((k) => {
+          if (k.startsWith('has_seen_tutorial_') || k.startsWith('nurseflow_tutorial_')) {
+            localStorage.removeItem(k);
+          }
+        });
+        Object.keys(sessionStorage).forEach((k) => {
+          if (k.startsWith('has_seen_tutorial_') || k.startsWith('nurseflow_tutorial_')) {
+            sessionStorage.removeItem(k);
+          }
+        });
+      } catch (e) {}
 
       console.log("🔑 [GuestLogin] ログインセッションをローカル保持 (browserLocalPersistence) に設定中...");
       await setPersistence(auth, browserLocalPersistence);
@@ -129,8 +139,8 @@ export default function Login() {
             >
               <img
                 src={showPassword 
-                  ? "/icon_b/visibility_24dp_1A365D_FILL0_wght400_GRAD0_opsz24.png" 
-                  : "/icon_b/visibility_off_24dp_1A365D_FILL0_wght400_GRAD0_opsz24.png"
+                  ? "/app/icon_b/visibility_24dp_1A365D_FILL0_wght400_GRAD0_opsz24.png" 
+                  : "/app/icon_b/visibility_off_24dp_1A365D_FILL0_wght400_GRAD0_opsz24.png"
                 }
                 id="toggle_icon"
                 alt={showPassword ? "非表示" : "表示"}

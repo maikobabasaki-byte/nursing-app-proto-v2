@@ -22,19 +22,31 @@ export const MemoPopup = () => {
   const [roomOptions, setRoomOptions] = useState<{ id: string; name: string }[]>([]);
 
   useEffect(() => {
-    fetch('/data/rooms.json')
-      .then((res) => res.json())
-      .then((data) => {
-        const options: { id: string; name: string }[] = [];
-        if (data.rooms) {
-          data.rooms.forEach((r: any) => options.push({ id: r.room_id, name: r.name || `${r.room_id}号室` }));
-        }
-        if (data.facilities) {
-          data.facilities.forEach((f: any) => options.push({ id: f.room_id, name: f.name }));
-        }
-        setRoomOptions(options);
-      })
-      .catch((err) => console.error("MemoPopup rooms fetch error:", err));
+    const candidatePaths = [
+      `/app/data/rooms.json`,
+      `${import.meta.env.BASE_URL || '/app/'}data/rooms.json`.replace(/\/+/g, '/'),
+      `/data/rooms.json`,
+    ];
+    const loadData = async () => {
+      for (const path of candidatePaths) {
+        try {
+          const res = await fetch(path);
+          if (res.ok) {
+            const data = await res.json();
+            const options: { id: string; name: string }[] = [];
+            if (data.rooms) {
+              data.rooms.forEach((r: any) => options.push({ id: r.room_id, name: r.name || `${r.room_id}号室` }));
+            }
+            if (data.facilities) {
+              data.facilities.forEach((f: any) => options.push({ id: f.room_id, name: f.name }));
+            }
+            setRoomOptions(options);
+            return;
+          }
+        } catch (e) {}
+      }
+    };
+    loadData();
   }, []);
 
   useEffect(() => {

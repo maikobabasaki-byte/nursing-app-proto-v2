@@ -167,6 +167,7 @@ export default function WardMap({
     <div style={{ width: '100%', height: '100%', display: 'flex', justifyContent: 'center', alignItems: 'center', boxSizing: 'border-box', overflow: 'hidden' }}>
       {/* 🎯 SVGとHTMLオーバーレイの共通アスペクト比固定ラッパー (1500 : 870) */}
       <div 
+        id="ward-map-aspect-container"
         style={{ 
           position: 'relative', 
           width: '100%', 

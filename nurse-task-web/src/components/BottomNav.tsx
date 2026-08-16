@@ -8,42 +8,48 @@ interface BottomNavProps {
 
 // 🖼️ 全カラーテーマ共通：アクティブ時（選択中）アイコン画像パス（/icon_active/ フォルダ）
 const ACTIVE_NAV_ICONS: Record<string, string> = {
-  account_circle: '/icon_active/account_circle_48dp_155DFC_FILL1_wght400_GRAD0_opsz48.png',
-  event_note: '/icon_active/event_note_48dp_155DFC_FILL1_wght400_GRAD0_opsz48.png',
-  pin_drop: '/icon_active/pin_drop_48dp_155DFC_FILL1_wght400_GRAD0_opsz48.png',
-  add_task: '/icon_active/add_task_48dp_155DFC_FILL1_wght400_GRAD0_opsz48.png',
-  settings: '/icon_active/settings_48dp_155DFC_FILL1_wght400_GRAD0_opsz48.png',
+  account_circle: '/app/icon_active/account_circle_48dp_155DFC_FILL1_wght400_GRAD0_opsz48.png',
+  event_note: '/app/icon_active/event_note_48dp_155DFC_FILL1_wght400_GRAD0_opsz48.png',
+  pin_drop: '/app/icon_active/pin_drop_48dp_155DFC_FILL1_wght400_GRAD0_opsz48.png',
+  add_task: '/app/icon_active/add_task_48dp_155DFC_FILL1_wght400_GRAD0_opsz48.png',
+  settings: '/app/icon_active/settings_48dp_155DFC_FILL1_wght400_GRAD0_opsz48.png',
 };
 
 // 🎨 各テーマ別：非アクティブ（通常時）アイコン画像パス
 const INACTIVE_NAV_ICONS: Record<AppTheme, Record<string, string>> = {
   vital: {
-    account_circle: '/icon_b/account_circle_48dp.png',
-    event_note: '/icon_b/event_note_48dp.png',
-    pin_drop: '/icon_b/pin_drop_48dp.png',
-    add_task: '/icon_b/add_task_48dp_1A365D.png',
-    settings: '/icon_b/settings_48dp.png',
+    account_circle: '/app/icon_b/account_circle_48dp.png',
+    event_note: '/app/icon_b/event_note_48dp.png',
+    pin_drop: '/app/icon_b/pin_drop_48dp.png',
+    add_task: '/app/icon_b/add_task_48dp_1A365D.png',
+    settings: '/app/icon_b/settings_48dp.png',
   },
   serene: {
-    account_circle: '/icon_s/account_circle_48dp_FAF3E0_FILL1_wght400_GRAD0_opsz48.png',
-    event_note: '/icon_s/event_note_48dp_FAF3E0_FILL1_wght400_GRAD0_opsz48.png',
-    pin_drop: '/icon_s/pin_drop_48dp_FAF3E0_FILL1_wght400_GRAD0_opsz48.png',
-    add_task: '/icon_s/add_task_48dp_FAF3E0_FILL1_wght400_GRAD0_opsz48.png',
-    settings: '/icon_s/settings_48dp_FAF3E0_FILL1_wght400_GRAD0_opsz48.png',
+    account_circle: '/app/icon_s/account_circle_48dp_FAF3E0_FILL1_wght400_GRAD0_opsz48.png',
+    event_note: '/app/icon_s/event_note_48dp_FAF3E0_FILL1_wght400_GRAD0_opsz48.png',
+    pin_drop: '/app/icon_s/pin_drop_48dp_FAF3E0_FILL1_wght400_GRAD0_opsz48.png',
+    add_task: '/app/icon_s/add_task_48dp_FAF3E0_FILL1_wght400_GRAD0_opsz48.png',
+    settings: '/app/icon_s/settings_48dp_FAF3E0_FILL1_wght400_GRAD0_opsz48.png',
   },
   dark: {
-    account_circle: '/icon_g/account_circle_48dp_2DD4BF_FILL1_wght400_GRAD0_opsz48.png',
-    event_note: '/icon_g/event_note_48dp_2DD4BF_FILL1_wght400_GRAD0_opsz48.png',
-    pin_drop: '/icon_g/pin_drop_48dp_2DD4BF_FILL1_wght400_GRAD0_opsz48.png',
-    add_task: '/icon_g/add_task_48dp_2DD4BF_FILL1_wght400_GRAD0_opsz48.png',
-    settings: '/icon_g/settings_48dp_2DD4BF_FILL1_wght400_GRAD0_opsz48.png',
+    account_circle: '/app/icon_g/account_circle_48dp_2DD4BF_FILL1_wght400_GRAD0_opsz48.png',
+    event_note: '/app/icon_g/event_note_48dp_2DD4BF_FILL1_wght400_GRAD0_opsz48.png',
+    pin_drop: '/app/icon_g/pin_drop_48dp_2DD4BF_FILL1_wght400_GRAD0_opsz48.png',
+    add_task: '/app/icon_g/add_task_48dp_2DD4BF_FILL1_wght400_GRAD0_opsz48.png',
+    settings: '/app/icon_g/settings_48dp_2DD4BF_FILL1_wght400_GRAD0_opsz48.png',
   },
 };
 
 export default function BottomNav({ currentScreen, onNavigate }: BottomNavProps) {
   const { theme, currentConfig } = useTheme();
   const currentUser = useTimelineStore((state) => state.currentUser);
-  const isLeader = currentUser?.is_leader === true;
+  const isGuestUser = Boolean(
+    sessionStorage.getItem('is_guest_session') === 'true' ||
+    currentUser?.isAnonymous === true
+  );
+  const isLeader = isGuestUser
+    ? (currentUser ? currentUser.is_leader === true : sessionStorage.getItem('nurseflow_guest_role') === 'leader')
+    : Boolean(currentUser?.is_leader);
 
   const isMasterActive = currentScreen === 'patientMaster' || currentScreen === 'patientSelect';
   const inactiveIcons = INACTIVE_NAV_ICONS[theme] || INACTIVE_NAV_ICONS.vital;
@@ -83,7 +89,7 @@ export default function BottomNav({ currentScreen, onNavigate }: BottomNavProps)
 
   return (
     <nav
-      className="fixed bottom-0 left-0 right-0 z-50 h-14 border-t border-white/10 flex md:hidden items-center justify-around px-1 shadow-2xl transition-colors duration-300"
+      className="fixed bottom-0 left-0 right-0 z-50 h-14 border-t border-white/10 flex lg:hidden items-center justify-around px-1 shadow-2xl transition-colors duration-300"
       style={{ backgroundColor: currentConfig.mainColor }}
     >
       {navItems.map((item) => {

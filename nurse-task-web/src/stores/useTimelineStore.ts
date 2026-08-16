@@ -410,7 +410,35 @@ export const useTimelineStore = create<TimelineStore>((set, get) => ({
     };
   }),
   setNurses: (incomingRuntimes) => set((state) => {
-    const mergedNurses = mergeNurseData(state.nurseMaster, incomingRuntimes);
+    // 💡 既存のローカルストア上のピン位置情報をマップ化（最新のオプティミスティックドラッグ移動結果を保持）
+    const existingPositionMap = new Map<string, { x: number; y: number }>();
+    state.nurses.forEach((n) => {
+      if (n.nurse_id && typeof n.x_percent === 'number' && typeof n.y_percent === 'number') {
+        existingPositionMap.set(n.nurse_id, { x: n.x_percent, y: n.y_percent });
+      }
+    });
+
+    const currentUserId = state.currentUser?.nurse_id;
+
+    // 💡 Firestoreからの受信データに対し、自分自身やゲストの最新ローカル移動座標を優先保護マージ
+    const protectedRuntimes = incomingRuntimes.map((rt) => {
+      const localPos = rt.nurse_id ? existingPositionMap.get(rt.nurse_id) : undefined;
+      const isSelfOrGuest = (currentUserId && rt.nurse_id === currentUserId) ||
+        rt.nurse_id?.includes('guest') ||
+        rt.nurse_id?.startsWith('GUEST-') ||
+        Boolean(sessionStorage.getItem('is_guest_session') === 'true');
+
+      if (localPos && (isSelfOrGuest || rt.x_percent === undefined)) {
+        return {
+          ...rt,
+          x_percent: localPos.x,
+          y_percent: localPos.y,
+        };
+      }
+      return rt;
+    });
+
+    const mergedNurses = mergeNurseData(state.nurseMaster, protectedRuntimes);
     const assignments: Record<string, string[]> = { ...state.nurseAssignments };
     mergedNurses.forEach((n) => {
       if (n.nurse_id && Array.isArray(n.assigned_patients)) {
@@ -424,7 +452,9 @@ export const useTimelineStore = create<TimelineStore>((set, get) => ({
   }),
   updateNursePosition: (nurseId, x_percent, y_percent) => set((state) => ({
     nurses: state.nurses.map((n) =>
-      n.nurse_id === nurseId ? { ...n, x_percent, y_percent } : n
+      (n.nurse_id === nurseId || (n.nurse_id && nurseId && (n.nurse_id.includes(nurseId) || nurseId.includes(n.nurse_id))))
+        ? { ...n, x_percent, y_percent }
+        : n
     ),
   })),
   setLoading: (loading) => set({ loading }),

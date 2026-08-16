@@ -12,31 +12,31 @@ interface GlobalHeaderProps {
 
 // 🖼️ 全カラーテーマ共通：アクティブ時（選択中）アイコン画像パス（/icon_active/ フォルダ）
 const ACTIVE_NAV_ICONS: Record<string, string> = {
-  account_circle: '/icon_active/account_circle_48dp_155DFC_FILL1_wght400_GRAD0_opsz48.png',
-  event_note: '/icon_active/event_note_48dp_155DFC_FILL1_wght400_GRAD0_opsz48.png',
-  pin_drop: '/icon_active/pin_drop_48dp_155DFC_FILL1_wght400_GRAD0_opsz48.png',
-  add_task: '/icon_active/add_task_48dp_155DFC_FILL1_wght400_GRAD0_opsz48.png',
+  account_circle: '/app/icon_active/account_circle_48dp_155DFC_FILL1_wght400_GRAD0_opsz48.png',
+  event_note: '/app/icon_active/event_note_48dp_155DFC_FILL1_wght400_GRAD0_opsz48.png',
+  pin_drop: '/app/icon_active/pin_drop_48dp_155DFC_FILL1_wght400_GRAD0_opsz48.png',
+  add_task: '/app/icon_active/add_task_48dp_155DFC_FILL1_wght400_GRAD0_opsz48.png',
 };
 
 // 🎨 各テーマ別：非アクティブ（通常時）アイコン画像パス
 const INACTIVE_NAV_ICONS: Record<AppTheme, Record<string, string>> = {
   vital: {
-    account_circle: '/icon_b/account_circle_48dp.png',
-    event_note: '/icon_b/event_note_48dp.png',
-    pin_drop: '/icon_b/pin_drop_48dp.png',
-    add_task: '/icon_b/add_task_48dp_1A365D.png',
+    account_circle: '/app/icon_b/account_circle_48dp.png',
+    event_note: '/app/icon_b/event_note_48dp.png',
+    pin_drop: '/app/icon_b/pin_drop_48dp.png',
+    add_task: '/app/icon_b/add_task_48dp_1A365D.png',
   },
   serene: {
-    account_circle: '/icon_s/account_circle_48dp_FAF3E0_FILL1_wght400_GRAD0_opsz48.png',
-    event_note: '/icon_s/event_note_48dp_FAF3E0_FILL1_wght400_GRAD0_opsz48.png',
-    pin_drop: '/icon_s/pin_drop_48dp_FAF3E0_FILL1_wght400_GRAD0_opsz48.png',
-    add_task: '/icon_s/add_task_48dp_FAF3E0_FILL1_wght400_GRAD0_opsz48.png',
+    account_circle: '/app/icon_s/account_circle_48dp_FAF3E0_FILL1_wght400_GRAD0_opsz48.png',
+    event_note: '/app/icon_s/event_note_48dp_FAF3E0_FILL1_wght400_GRAD0_opsz48.png',
+    pin_drop: '/app/icon_s/pin_drop_48dp_FAF3E0_FILL1_wght400_GRAD0_opsz48.png',
+    add_task: '/app/icon_s/add_task_48dp_FAF3E0_FILL1_wght400_GRAD0_opsz48.png',
   },
   dark: {
-    account_circle: '/icon_g/account_circle_48dp_2DD4BF_FILL1_wght400_GRAD0_opsz48.png',
-    event_note: '/icon_g/event_note_48dp_2DD4BF_FILL1_wght400_GRAD0_opsz48.png',
-    pin_drop: '/icon_g/pin_drop_48dp_2DD4BF_FILL1_wght400_GRAD0_opsz48.png',
-    add_task: '/icon_g/add_task_48dp_2DD4BF_FILL1_wght400_GRAD0_opsz48.png',
+    account_circle: '/app/icon_g/account_circle_48dp_2DD4BF_FILL1_wght400_GRAD0_opsz48.png',
+    event_note: '/app/icon_g/event_note_48dp_2DD4BF_FILL1_wght400_GRAD0_opsz48.png',
+    pin_drop: '/app/icon_g/pin_drop_48dp_2DD4BF_FILL1_wght400_GRAD0_opsz48.png',
+    add_task: '/app/icon_g/add_task_48dp_2DD4BF_FILL1_wght400_GRAD0_opsz48.png',
   },
 };
 
@@ -96,7 +96,7 @@ export default function GlobalHeader({ currentPage, onNavigate}: GlobalHeaderPro
     >
       <div className="flex flex-col lg:flex-row items-start lg:items-center gap-1.5 lg:gap-2">
         <h1 className="cursor-pointer flex items-center" onClick={handleLogoClick}>
-          <img src="/icon_b/local_hospital_48dp.png" alt="NurseFlow Dashboard" className="w-8 h-8 inline mr-2" />
+          <img src="/app/icon_b/local_hospital_48dp.png" alt="NurseFlow Dashboard" className="w-8 h-8 inline mr-2" />
           <span className="font-bold text-lg transition-colors duration-300" style={{ color: currentConfig.accentColor }}>
             NurseFlowApp
           </span>
@@ -148,8 +148,8 @@ export default function GlobalHeader({ currentPage, onNavigate}: GlobalHeaderPro
         </div>
       </div>
       
-      {/* 💻 デスクトップ版ヘッダーナビゲーション */}
-      <nav className={`hidden md:flex ${isLeader ? "w-96" : "w-72"}`}>
+      {/* 💻 デスクトップ版ヘッダーナビゲーション (lg以上で表示) */}
+      <nav className={`hidden lg:flex ${isLeader ? "w-96" : "w-72"}`}>
         <ul className="flex justify-between items-center text-center text-xs w-full">
           {/* 👥 患者マスター */}
           <li id="tutorial-nav-patient" className="cursor-pointer flex flex-col items-center justify-center" onClick={() => onNavigate('patientMaster')}>
@@ -236,7 +236,7 @@ export default function GlobalHeader({ currentPage, onNavigate}: GlobalHeaderPro
               alt="ログアウト"
               className="mx-auto w-6 h-6 object-contain transition-all duration-300"
               onError={(e) => {
-                (e.target as HTMLImageElement).src = "/icon_b/logout_48dp.png";
+                (e.target as HTMLImageElement).src = "/app/icon_b/logout_48dp.png";
               }}
             />
             <p className="font-bold mt-0.5">ログアウト</p>

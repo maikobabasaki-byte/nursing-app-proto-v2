@@ -29,7 +29,7 @@ export default function Header({ currentPage }: HeaderProps) {
     >
       <h1 className="flex items-center gap-2">
         <img
-          src="/icon_b/local_hospital_48dp.png"
+          src="/app/icon_b/local_hospital_48dp.png"
           alt="NurseFlowApp"
           className="size-12"
         />
@@ -60,7 +60,7 @@ export default function Header({ currentPage }: HeaderProps) {
               alt="ログアウト"
               className="mx-auto w-6 h-6 object-contain"
               onError={(e) => {
-                (e.target as HTMLImageElement).src = "/icon_b/logout_48dp.png";
+                (e.target as HTMLImageElement).src = "/app/icon_b/logout_48dp.png";
               }}
             />
             <p className="font-bold mt-0.5">ログアウト</p>

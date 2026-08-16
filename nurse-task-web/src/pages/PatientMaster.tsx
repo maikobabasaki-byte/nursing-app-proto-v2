@@ -53,16 +53,29 @@ export default function PatientMasterPage({ selectedIds }: DashboardProps) {
     ? (currentUser ? currentUser.is_leader === true : sessionStorage.getItem('nurseflow_guest_role') === 'leader')
     : Boolean(currentUser?.is_leader);
 
-  // 1. マウント時に患者マスタの静的データだけを取得
+  // 1. マウント時に患者マスタの静的データだけを取得 (プロダクション /app/ パス対応)
   useEffect(() => {
-    fetch('/data/patients.json')
-      .then((res) => res.json())
-      .then((data) => {
-        setRawPatients(data);
-      })
-      .catch((err) => {
-        console.error('❌ 患者データ取得失敗:', err);
-      });
+    const candidatePaths = [
+      `/app/data/patients.json`,
+      `${import.meta.env.BASE_URL || '/app/'}data/patients.json`.replace(/\/+/g, '/'),
+      `/data/patients.json`,
+    ];
+    const loadData = async () => {
+      for (const path of candidatePaths) {
+        try {
+          const res = await fetch(path);
+          if (res.ok) {
+            const data = await res.json();
+            if (Array.isArray(data) && data.length > 0) {
+              setRawPatients(data);
+              return;
+            }
+          }
+        } catch (e) {}
+      }
+      console.error('❌ 患者データ取得失敗');
+    };
+    loadData();
   }, []);
 
   // 2. リアルタイムのタスクデータと結合し、フィルタリング・ソートを行う

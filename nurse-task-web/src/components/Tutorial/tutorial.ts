@@ -127,11 +127,11 @@ export const tutorialStepsByPath: Record<string, DriveStep[]> = {
       },
     },
     {
-      element: '#patient-master-cards-container',
+      element: '#patient-master-cards-container, .tutorial-patient-master',
       popover: {
         title: '📋 本日の受け持ち患者一覧',
         description: '受持ち患者のADL、転倒リスクレベル、アレルギー情報および本日の全タスクを一覧で確認・管理できます。',
-        side: 'top',
+        side: 'bottom',
         align: 'center',
       },
     },
@@ -143,54 +143,36 @@ export const tutorialStepsByPath: Record<string, DriveStep[]> = {
       element: '#leader-todo-header',
       popover: {
         title: '📋 リーダー用TODO ＆ 申し送り管理',
-        description: 'リーダー看護師がチーム全体の患者対応、医師連絡、検査処置の進行状況を一括管理・監督できる画面です。',
+        description: 'チーム全体の看護指示、医師連絡、検査処置の進行状況を一括管理・監督する画面です。計画進捗や優先度フィルターも上部で確認できます。',
         side: 'bottom',
         align: 'center',
       },
     },
     {
-      element: '#leader-todo-progress-bar',
+      element: '#leader-todo-patients-header, #leader-todo-patients',
       popover: {
-        title: '📊 タイムライン計画進捗プログレスバー',
-        description: 'チーム全体の本日計画ケア達成率（〇%完了）がリアルタイムに自動計算されて表示されます。',
-        side: 'bottom',
-        align: 'end',
-      },
-    },
-    {
-      element: '#leader-todo-filter',
-      popover: {
-        title: '🏷️ 優先度クイックフィルター',
-        description: '最優先・高・中・低の優先度バッジでTODOをワンタップで絞り込んで確認できます。',
+        title: '🏥 1. 患者リスト（TODO作成）',
+        description: '受け持ち患者さんを選択して、優先度や時間指定付きのリーダー指示TODOを即座に作成・発行できます。',
         side: 'bottom',
         align: 'center',
       },
     },
     {
-      element: '#leader-todo-patients',
+      element: '#leader-todo-active-header, #leader-todo-active-list',
       popover: {
-        title: '🏥 患者別リーダーTODO作成',
-        description: '患者さんを選択して、優先度（最優先・高・中・低）や時間指定付きのリーダー指示TODOを即座に発行・作成できます。',
-        side: 'right',
-        align: 'start',
-      },
-    },
-    {
-      element: '#leader-todo-active-list, #tab-btn-active, #leader-todo-patients',
-      popover: {
-        title: '⏱️ 未対応・対応中TODO一覧',
-        description: '発行されたリーダーTODOがここに並びます。カードをタップすると『対応入力・結果記録』モーダルが開き、実施状況を記録できます。',
-        side: 'top',
+        title: '⏱️ 2. 未対応・対応中TODO一覧',
+        description: '発行された未対応のリーダーTODOが並びます。カードをタップすると『対応入力・結果記録』モーダルが開きます。',
+        side: 'bottom',
         align: 'center',
       },
     },
     {
-      element: '#leader-todo-completed-list, #tab-btn-completed, #leader-todo-patients',
+      element: '#leader-todo-completed-header, #leader-todo-completed-list',
       popover: {
-        title: '✅ 本日対応済み・完了TODO＆記録履歴',
-        description: '対応が完了したTODOや医師指示メモ・結果方針がここに保存され、本日の経過・申し送りとして参照・再編集できます。',
-        side: 'left',
-        align: 'start',
+        title: '✅ 3. 本日対応済み・完了TODO＆記録履歴',
+        description: '対応が完了したTODOや医師指示メモ・結果方針が保存され、本日の経過・申し送りとして参照・再編集できます。',
+        side: 'bottom',
+        align: 'center',
       },
     },
   ],
@@ -259,22 +241,45 @@ function createStepHighlightHandler(getDriverInstance: () => ReturnType<typeof d
 
     // Leader TODO モバイル表示時の自動タブ切替
     if (selector.includes('leader-todo-active')) {
-      const btn = document.getElementById('tab-btn-active');
-      if (btn) btn.click();
+      document.getElementById('tab-btn-active')?.click();
     } else if (selector.includes('leader-todo-completed')) {
-      const btn = document.getElementById('tab-btn-completed');
-      if (btn) btn.click();
+      document.getElementById('tab-btn-completed')?.click();
     } else if (selector.includes('leader-todo-patients')) {
-      const btn = document.getElementById('tab-btn-patients');
-      if (btn) btn.click();
+      document.getElementById('tab-btn-patients')?.click();
     }
+
+    // 🎯 DOMレンダリングおよびレイアウト確定後（0ms, 80ms, 200ms）の3段階で Driver.js のハイライト位置を即座かつ精密に再計算
+    [0, 80, 200].forEach((delay) => {
+      setTimeout(() => {
+        const driverInst = getDriverInstance();
+        if (driverInst && driverInst.isActive()) {
+          driverInst.refresh();
+        }
+      }, delay);
+    });
+
+    // DOM要素の取得（display:none の非表示要素をスキップし、画面上可視の要素を優先抽出）
+    const findVisibleElement = (sel: string): Element | null => {
+      const parts = sel.split(',').map((s) => s.trim());
+      for (const p of parts) {
+        const els = Array.from(document.querySelectorAll(p));
+        for (const el of els) {
+          const rect = el.getBoundingClientRect();
+          const style = window.getComputedStyle(el);
+          if (rect.width > 0 && rect.height > 0 && style.display !== 'none' && style.visibility !== 'hidden') {
+            return el;
+          }
+        }
+      }
+      return document.querySelector(sel);
+    };
 
     // DOM要素の取得とクリックイベントのアタッチ（動的描画を待つためリトライ機能付き）
     const attachListener = (attempts = 0) => {
-      const targetEl = document.querySelector(selector);
+      const targetEl = findVisibleElement(selector);
       // 「実施中」タスクの場合、サイドバー（#dummy-task-progressing）とタイムライン上（#dummy-task-inprogress-timeline）の両方のクリックに対応
       const altSelector = selector.includes('dummy-task-progressing') ? '#dummy-task-inprogress-timeline' : undefined;
-      const altEl = altSelector ? document.querySelector(altSelector) : null;
+      const altEl = altSelector ? findVisibleElement(altSelector) : null;
 
       const elementsToAttach = [targetEl, altEl].filter((el): el is Element => el !== null);
 
@@ -336,15 +341,25 @@ function createStepHighlightHandler(getDriverInstance: () => ReturnType<typeof d
   };
 }
 
+// 🚫 チュートリアル機能の一時無効化フラグ（true に設定すると全チュートリアルが再有効化されます）
+export const ENABLE_TUTORIAL = false;
+
 /**
  * 現在のパスに応じたチュートリアルを動的に開始するメイン関数
  */
 export function startTutorialByPath(pathOrScreen?: string, isManual: boolean = true) {
+  // 💡 チュートリアル一時停止中：すべてのチュートリアル起動をスキップ
+  if (!ENABLE_TUTORIAL) return;
+
   const normalizedPath = normalizeTutorialPath(pathOrScreen);
   const storageKey = `has_seen_tutorial_${normalizedPath.replace('/', '')}`;
+  const isGuestSession = Boolean(
+    sessionStorage.getItem('is_guest_session') === 'true' || 
+    useTimelineStore.getState().currentUser?.isAnonymous === true
+  );
 
-  // 自動実行時の初回閲覧チェック
-  if (!isManual) {
+  // 💡 ゲストセッションの場合は毎回チュートリアルを体験してもらうため初回閲覧チェックをバイパス
+  if (!isManual && !isGuestSession) {
     const hasSeen = localStorage.getItem(storageKey);
     if (hasSeen === 'true') return;
   }
@@ -372,7 +387,10 @@ export function startTutorialByPath(pathOrScreen?: string, isManual: boolean = t
     doneBtnText: '完了',
     onHighlightStarted: createStepHighlightHandler(() => driverObjInstance),
     onDestroyStarted: () => {
-      localStorage.setItem(storageKey, 'true');
+      // 💡 正規ユーザーの場合のみ閲覧済みフラグをローカルストレージへ保存（ゲストは次回も毎回ガイドを表示）
+      if (!isGuestSession) {
+        localStorage.setItem(storageKey, 'true');
+      }
       driverObj.destroy();
     },
     steps: steps,
@@ -391,6 +409,9 @@ export function startHandsOnTutorial(
   addDemoTask: () => void,
   removeDemoTask: () => void
 ) {
+  // 💡 チュートリアル一時停止中：すべてのチュートリアル起動をスキップ
+  if (!ENABLE_TUTORIAL) return;
+
   // デモ用タスク（09:00 【練習用】術前絶飲食確認（中島 伊織））を自動追加
   addDemoTask();
 

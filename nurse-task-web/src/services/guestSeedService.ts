@@ -14,10 +14,30 @@ export const seedGuestData = async (guestUid: string, role: 'leader' | 'member' 
   console.log(`🚀 [GuestSeed] ゲストセッション初期化: 役割 [${role}] (UID: ${guestUid}) - ローカル環境で即時準備中...`);
 
   try {
-    // 1. 📁 ローカルJSON (/data/tasks.json & /data/patients.json) を即時取得
+    // 1. 📁 ローカルJSON (/data/tasks.json & /data/patients.json) を即時取得 (プロダクション/app/パス対応)
+    const fetchJsonData = async (filename: string) => {
+      const candidatePaths = [
+        `/app/data/${filename}`,
+        `${import.meta.env.BASE_URL || '/app/'}data/${filename}`.replace(/\/+/g, '/'),
+        `/data/${filename}`,
+      ];
+      for (const path of candidatePaths) {
+        try {
+          const res = await fetch(path);
+          if (res.ok) {
+            const data = await res.json();
+            if (Array.isArray(data) && data.length > 0) return data;
+          }
+        } catch (e) {
+          // ignore and try next path
+        }
+      }
+      return [];
+    };
+
     const [tasksRes, patientsRes] = await Promise.all([
-      fetch('/data/tasks.json').then((r) => r.json()).catch(() => []),
-      fetch('/data/patients.json').then((r) => r.json()).catch(() => []),
+      fetchJsonData('tasks.json'),
+      fetchJsonData('patients.json'),
     ]);
 
     const localTasksRaw: any[] = Array.isArray(tasksRes) ? tasksRes : [];

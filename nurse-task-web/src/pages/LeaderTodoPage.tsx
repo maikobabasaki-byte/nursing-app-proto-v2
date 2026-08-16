@@ -59,22 +59,34 @@ export const LeaderTodoPage: React.FC = () => {
     return () => unsubscribe();
   }, [setLeaderTodos]);
 
-  // 患者マスター一覧の取得
+  // 患者マスター一覧の取得 (プロダクション /app/ パス対応)
   useEffect(() => {
-    fetch('/data/patients.json')
-      .then((res) => res.json())
-      .then((data) => {
-        const list = Array.isArray(data) ? data : data.patients || [];
-        setPatients(
-          list.map((p: any) => ({
-            patient_id: p.patient_id || String(p.id),
-            name: p.name || p.patient_name || '患者',
-            room_id: p.room_id || String(p.room || '000'),
-            gender: p.gender,
-          }))
-        );
-      })
-      .catch((err) => console.error('患者マスター取得エラー:', err));
+    const candidatePaths = [
+      `/app/data/patients.json`,
+      `${import.meta.env.BASE_URL || '/app/'}data/patients.json`.replace(/\/+/g, '/'),
+      `/data/patients.json`,
+    ];
+    const loadData = async () => {
+      for (const path of candidatePaths) {
+        try {
+          const res = await fetch(path);
+          if (res.ok) {
+            const data = await res.json();
+            const list = Array.isArray(data) ? data : data.patients || [];
+            setPatients(
+              list.map((p: any) => ({
+                patient_id: p.patient_id || String(p.id),
+                name: p.name || p.patient_name || '患者',
+                room_id: p.room_id || String(p.room || '000'),
+                gender: p.gender,
+              }))
+            );
+            return;
+          }
+        } catch (e) {}
+      }
+    };
+    loadData();
   }, []);
 
   // 💡 時刻文字列 (14:00 や ISO 形式) を数値（分）に変換するヘルパー関数
@@ -195,7 +207,7 @@ export const LeaderTodoPage: React.FC = () => {
   // 💡 各カラムの描画関数（PC・タブレット共通）
   const renderPatientsColumn = () => (
     <div id="leader-todo-patients" className="w-full h-full bg-white rounded-2xl border border-gray-200 shadow-sm flex flex-col overflow-hidden">
-      <div className="bg-gray-50 border-b border-gray-200 p-3.5 flex items-center justify-between">
+      <div id="leader-todo-patients-header" className="bg-gray-50 border-b border-gray-200 p-3.5 flex items-center justify-between">
         <h2 className="font-extrabold text-sm text-gray-800 flex items-center gap-1.5">
           <span>🏥 患者リスト</span>
           <span className="text-xs bg-indigo-100 text-indigo-800 font-black px-2 py-0.5 rounded-full">
@@ -257,7 +269,7 @@ export const LeaderTodoPage: React.FC = () => {
 
   const renderActiveTodosColumn = () => (
     <div id="leader-todo-active-list" className="w-full h-full bg-white rounded-2xl border border-gray-200 shadow-sm flex flex-col overflow-hidden">
-      <div className="bg-gray-50 border-b border-gray-200 p-3.5 flex items-center justify-between">
+      <div id="leader-todo-active-header" className="bg-gray-50 border-b border-gray-200 p-3.5 flex items-center justify-between">
         <h2 className="font-extrabold text-sm text-gray-800 flex items-center gap-1.5">
           <span>⏱️ 未対応・対応中TODO</span>
           <span className="text-xs bg-indigo-100 text-indigo-800 font-black px-2 py-0.5 rounded-full">
@@ -355,7 +367,7 @@ export const LeaderTodoPage: React.FC = () => {
 
   const renderCompletedTodosColumn = () => (
     <div id="leader-todo-completed-list" className="w-full h-full bg-white rounded-2xl border border-gray-200 shadow-sm flex flex-col overflow-hidden">
-      <div className="bg-emerald-800 text-white p-3.5 flex items-center justify-between shadow-xs">
+      <div id="leader-todo-completed-header" className="bg-emerald-800 text-white p-3.5 flex items-center justify-between shadow-xs">
         <h2 className="font-extrabold text-sm flex items-center gap-1.5">
           <span>✅ 本日対応済み・完了TODO</span>
           <span className="text-xs bg-white text-emerald-900 font-black px-2 py-0.5 rounded-full">
@@ -426,27 +438,27 @@ export const LeaderTodoPage: React.FC = () => {
   );
 
   return (
-    <div className="flex-1 bg-gray-100 flex flex-col h-[calc(100vh-64px)] overflow-hidden">
+    <div className="flex-1 min-h-0 bg-gray-100 flex flex-col w-full h-full overflow-hidden">
       {/* 画面サブヘッダー */}
       <div id="leader-todo-header" className="bg-indigo-900 text-white px-3 sm:px-6 py-2.5 sm:py-3 shadow-md flex items-center justify-between flex-shrink-0">
-        <div className="flex items-center gap-2 sm:gap-3">
+        <div className="hidden lg:flex items-center gap-2 sm:gap-3">
           <span className="text-xl sm:text-2xl">📋</span>
           <div>
             <h1 className="font-black text-sm sm:text-lg leading-tight">リーダー用TODO ＆ 申し送り・方向性管理</h1>
-            <p className="text-[11px] text-indigo-200 hidden sm:block">全優先度（最優先・高・中・低）のリーダーTODOを一括管理・経過結果記録</p>
+            <p className="text-[11px] text-indigo-200 hidden xl:block">全優先度（最優先・高・中・低）のリーダーTODOを一括管理・経過結果記録</p>
           </div>
         </div>
 
         <div className="flex items-center gap-2 sm:gap-4">
-          {/* 📊 計画進捗率プログレスバー (PC・タブレット表示) */}
-          <div id="leader-todo-progress-bar" className="hidden md:flex items-center gap-3 bg-indigo-950/80 px-3.5 py-1.5 rounded-xl border border-indigo-700/60 shadow-inner">
+          {/* 📊 計画進捗率プログレスバー */}
+          <div id="leader-todo-progress-bar" className="flex items-center gap-2 sm:gap-3 bg-indigo-950/80 px-2.5 sm:px-3.5 py-1 sm:py-1.5 rounded-xl border border-indigo-700/60 shadow-inner">
             <div className="flex flex-col text-right">
-              <span className="text-[10px] font-bold text-indigo-300">タイムライン計画進捗</span>
-              <span className="text-xs font-black text-emerald-400">
-                {progressStats.progressPercent}% <span className="text-[10px] text-indigo-200 font-normal">({progressStats.overallCompletedCount}/{progressStats.totalCount}件完了)</span>
+              <span className="text-[9px] sm:text-[10px] font-bold text-indigo-300">計画進捗</span>
+              <span className="text-[11px] sm:text-xs font-black text-emerald-400">
+                {progressStats.progressPercent}% <span className="text-[9px] sm:text-[10px] text-indigo-200 font-normal hidden xs:inline">({progressStats.overallCompletedCount}/{progressStats.totalCount}件)</span>
               </span>
             </div>
-            <div className="w-24 bg-indigo-900 h-2.5 rounded-full overflow-hidden border border-indigo-700/60 p-0.5">
+            <div className="w-14 sm:w-24 bg-indigo-900 h-2 sm:h-2.5 rounded-full overflow-hidden border border-indigo-700/60 p-0.5">
               <div
                 className="bg-gradient-to-r from-emerald-500 to-teal-300 h-full rounded-full transition-all duration-500 shadow-sm"
                 style={{ width: `${progressStats.progressPercent}%` }}
@@ -454,40 +466,42 @@ export const LeaderTodoPage: React.FC = () => {
             </div>
           </div>
 
-          {/* 優先度クイックフィルター（スマホ幅はドロップダウン、PC幅はボタン並び） */}
-          <div className="sm:hidden">
-            <select
-              value={filterPriority}
-              onChange={(e) => setFilterPriority(e.target.value)}
-              className="bg-indigo-950 text-indigo-100 text-xs font-extrabold px-2.5 py-1 rounded-lg border border-indigo-700 focus:outline-none cursor-pointer"
-            >
-              <option value="all">優先度: すべて</option>
-              <option value="highest">🔴 最優先</option>
-              <option value="high">🟧 高</option>
-              <option value="medium">🟨 中</option>
-              <option value="low">🟦 低</option>
-            </select>
-          </div>
-
-          <div id="leader-todo-filter" className="hidden sm:flex items-center gap-2 bg-indigo-950/60 p-1.5 rounded-xl border border-indigo-700/50">
-            <span className="text-xs font-bold text-indigo-200 px-2">優先度:</span>
-            {['all', 'highest', 'high', 'medium', 'low'].map((pKey) => (
-              <button
-                key={pKey}
-                onClick={() => setFilterPriority(pKey)}
-                className={`text-xs font-extrabold px-3 py-1 rounded-lg transition-all cursor-pointer ${
-                  filterPriority === pKey
-                    ? 'bg-white text-indigo-900 shadow-md scale-105'
-                    : 'text-indigo-200 hover:text-white hover:bg-white/10'
-                }`}
+          {/* 優先度クイックフィルター（スマホ・PCレスポンシブ） */}
+          <div id="leader-todo-filter" className="flex items-center gap-2 bg-indigo-950/60 p-1 sm:p-1.5 rounded-xl border border-indigo-700/50">
+            <div className="sm:hidden">
+              <select
+                value={filterPriority}
+                onChange={(e) => setFilterPriority(e.target.value)}
+                className="bg-indigo-950 text-indigo-100 text-xs font-extrabold px-2 py-1 rounded-lg border border-indigo-700 focus:outline-none cursor-pointer"
               >
-                {pKey === 'all' && 'すべて'}
-                {pKey === 'highest' && '🔴 最優先'}
-                {pKey === 'high' && '🟧 高'}
-                {pKey === 'medium' && '🟨 中'}
-                {pKey === 'low' && '🟦 低'}
-              </button>
-            ))}
+                <option value="all">優先度: すべて</option>
+                <option value="highest">🔴 最優先</option>
+                <option value="high">🟧 高</option>
+                <option value="medium">🟨 中</option>
+                <option value="low">🟦 低</option>
+              </select>
+            </div>
+
+            <div className="hidden sm:flex items-center gap-2">
+              <span className="text-xs font-bold text-indigo-200 px-2">優先度:</span>
+              {['all', 'highest', 'high', 'medium', 'low'].map((pKey) => (
+                <button
+                  key={pKey}
+                  onClick={() => setFilterPriority(pKey)}
+                  className={`text-xs font-extrabold px-3 py-1 rounded-lg transition-all cursor-pointer ${
+                    filterPriority === pKey
+                      ? 'bg-white text-indigo-900 shadow-md scale-105'
+                      : 'text-indigo-200 hover:text-white hover:bg-white/10'
+                  }`}
+                >
+                  {pKey === 'all' && 'すべて'}
+                  {pKey === 'highest' && '🔴 最優先'}
+                  {pKey === 'high' && '🟧 高'}
+                  {pKey === 'medium' && '🟨 中'}
+                  {pKey === 'low' && '🟦 低'}
+                </button>
+              ))}
+            </div>
           </div>
         </div>
       </div>
@@ -513,15 +527,15 @@ export const LeaderTodoPage: React.FC = () => {
       )}
 
       {/* 📱 タブレット・モバイル幅（lg未満）専用手帳風インデックスタブバー */}
-      <div className="lg:!hidden !flex !items-end !px-3 !pt-2 !bg-slate-200/80 !border-b-2 !border-indigo-600 !gap-1 !shrink-0 !select-none">
+      <div className="lg:hidden flex items-end px-3 pt-2 bg-slate-200/90 border-b-2 border-indigo-600 gap-1 shrink-0 select-none">
         <button
           id="tab-btn-patients"
           type="button"
           onClick={() => setActiveTodoTab('patients')}
           className={`!px-3 !py-2 !rounded-t-xl !transition-all !cursor-pointer !flex !items-center !gap-1 !border-t-2 !border-x-2 ${
             activeTodoTab === 'patients'
-              ? '!bg-white !text-indigo-950 !font-black !border-indigo-600 !shadow-md !z-10 !-mb-[2px] !pt-2.5 !pb-2'
-              : 'bg-slate-100 text-slate-600 hover:bg-slate-50 font-bold border-slate-300 border-b border-b-indigo-600 py-1.5'
+              ? '!bg-white !text-indigo-950 !font-black !border-indigo-600 !shadow-md !z-10 -mb-[2px] !pt-2.5 !pb-2'
+              : '!bg-slate-100 !text-slate-600 hover:!bg-slate-50 !font-bold !border-slate-300 !border-b  !py-1.5'
           }`}
         >
           <span>患者選択 ({patients.length})</span>
@@ -533,11 +547,11 @@ export const LeaderTodoPage: React.FC = () => {
           onClick={() => setActiveTodoTab('active')}
           className={`!px-3 !py-2 !rounded-t-xl !transition-all !cursor-pointer !flex !items-center !gap-1 !border-t-2 !border-x-2 ${
             activeTodoTab === 'active'
-              ? '!bg-white !text-indigo-950 !font-black !border-indigo-600 !shadow-md !z-10 !-mb-[2px] !pt-2.5 !pb-2'
+              ? '!bg-white !text-indigo-950 !font-black !border-indigo-600 !shadow-md !z-10 -mb-[2px] !pt-2.5 !pb-2'
               : '!bg-slate-100 !text-slate-600 hover:!bg-slate-50 !font-bold !border-slate-300 !border-b !py-1.5'
           }`}
         >
-          <span> 未対応TODO ({activeTodos.length})</span>
+          <span>未対応TODO ({activeTodos.length})</span>
         </button>
 
         <button
@@ -546,7 +560,7 @@ export const LeaderTodoPage: React.FC = () => {
           onClick={() => setActiveTodoTab('completed')}
           className={`!px-3 !py-2 !rounded-t-xl !transition-all !cursor-pointer !flex !items-center !gap-1 !border-t-2 !border-x-2 ${
             activeTodoTab === 'completed'
-              ? '!bg-white !text-emerald-950 !font-black !border-emerald-600 !shadow-md !z-10 !-mb-[2px] !pt-2.5 !pb-2'
+              ? '!bg-white !text-emerald-950 !font-black !border-emerald-600 !shadow-md !z-10 -mb-[2px] !pt-2.5 !pb-2'
               : '!bg-slate-100 !text-slate-600 hover:!bg-slate-50 !font-bold !border-slate-300 !border-b !py-1.5'
           }`}
         >
@@ -554,22 +568,15 @@ export const LeaderTodoPage: React.FC = () => {
         </button>
       </div>
 
-      {/* 📱 タブレット・モバイル幅（lg未満）の単一セクション表示領域 */}
-      <div className="lg:!hidden !flex-1 !min-h-0 !w-full !overflow-hidden !p-2.5 !bg-slate-100">
-        {activeTodoTab === 'patients' && renderPatientsColumn()}
-        {activeTodoTab === 'active' && renderActiveTodosColumn()}
-        {activeTodoTab === 'completed' && renderCompletedTodosColumn()}
-      </div>
-
-      {/* 💻 PC幅（lg以上）従来通りの三分割（3カラム） simultaneous 表示レイアウト */}
-      <div className="hidden lg:flex flex-1 min-h-0 overflow-hidden gap-1">
-        <div className="w-[28%] h-full">
+      {/* 統合レイアウトエリア（重複IDなし：PCは3列並列表示、スマホは選択タブを表示） */}
+      <div className="flex-1 min-h-0 overflow-hidden p-2.5 bg-slate-100 flex flex-col lg:flex-row gap-2">
+        <div className={`h-full ${activeTodoTab === 'patients' ? 'flex-1 lg:flex-none lg:w-[28%]' : 'hidden lg:block lg:w-[28%]'}`}>
           {renderPatientsColumn()}
         </div>
-        <div className="w-[44%] h-full">
+        <div className={`h-full ${activeTodoTab === 'active' ? 'flex-1 lg:flex-none lg:w-[44%]' : 'hidden lg:block lg:w-[44%]'}`}>
           {renderActiveTodosColumn()}
         </div>
-        <div className="w-[28%] h-full">
+        <div className={`h-full ${activeTodoTab === 'completed' ? 'flex-1 lg:flex-none lg:w-[28%]' : 'hidden lg:block lg:w-[28%]'}`}>
           {renderCompletedTodosColumn()}
         </div>
       </div>

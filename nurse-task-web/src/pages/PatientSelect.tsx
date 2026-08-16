@@ -42,30 +42,44 @@ export default function PatientSelect({ onSelectComplete }: PatientSelectProps) 
    * 2. 取得した患者データを「病室順 ➔ ベッド番号順」に自動並び替え（ソート）
    */
   useEffect(() => {
-    fetch('/data/patients.json')
-      .then((res) => res.json())
-      .then((data: Patient[]) => {
-        const sortedData = [...data].sort((a, b) => {
-          if (a.room_id !== b.room_id) return a.room_id.localeCompare(b.room_id);
-          return a.bed_number - b.bed_number;
-        });
-        setPatients(sortedData);
-
-        // 💡 既存の選択済み患者データ（sessionStorageまたはstore）があれば初期チェック状態として復元
+    const candidatePaths = [
+      `/app/data/patients.json`,
+      `${import.meta.env.BASE_URL || '/app/'}data/patients.json`.replace(/\/+/g, '/'),
+      `/data/patients.json`,
+    ];
+    const loadData = async () => {
+      for (const path of candidatePaths) {
         try {
-          const saved = sessionStorage.getItem('selectedPatients');
-          if (saved) {
-            const parsed = JSON.parse(saved);
-            if (Array.isArray(parsed) && parsed.length > 0) {
-              setSelectedPatientIds(parsed);
+          const res = await fetch(path);
+          if (res.ok) {
+            const data: Patient[] = await res.json();
+            if (Array.isArray(data) && data.length > 0) {
+              const sortedData = [...data].sort((a, b) => {
+                if (a.room_id !== b.room_id) return a.room_id.localeCompare(b.room_id);
+                return a.bed_number - b.bed_number;
+              });
+              setPatients(sortedData);
+
+              // 💡 既存の選択済み患者データ（sessionStorageまたはstore）があれば初期チェック状態として復元
+              try {
+                const saved = sessionStorage.getItem('selectedPatients');
+                if (saved) {
+                  const parsed = JSON.parse(saved);
+                  if (Array.isArray(parsed) && parsed.length > 0) {
+                    setSelectedPatientIds(parsed);
+                    return;
+                  }
+                }
+              } catch (e) {
+                console.error("患者復元エラー:", e);
+              }
               return;
             }
           }
-        } catch (e) {
-          console.error("患者復元エラー:", e);
-        }
-      })
-      .catch((err) => console.error('データ読み込みエラー:', err));
+        } catch (e) {}
+      }
+    };
+    loadData();
   }, []); // 依存配列が空のため、コンポーネントが最初に表示された1回だけ実行される
 
   /**

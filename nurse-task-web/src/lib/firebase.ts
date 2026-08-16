@@ -105,6 +105,30 @@ export const updateNurseSos = async (
   }
 };
 
+// 💡 看護師ピンのマップ座標 (x_percent, y_percent) をFirestoreに即座に保存・更新する関数
+export const updateNursePositionInFirestore = async (
+  nurseId: string,
+  x_percent: number,
+  y_percent: number
+) => {
+  if (!nurseId) return;
+  try {
+    const nurseRef = doc(db, 'nurses', nurseId);
+    await setDoc(
+      nurseRef,
+      {
+        nurse_id: nurseId,
+        x_percent,
+        y_percent,
+        updatedAt: serverTimestamp(),
+      },
+      { merge: true }
+    );
+  } catch (error) {
+    console.error("看護師ピンの位置更新に失敗しました:", error);
+  }
+};
+
 import { getJSTDateString } from '../utils/dateUtils';
 
 // 💡 看護師ごとの選択患者リスト（受け持ち割り当て）および本日セットアップ日付をFirestoreに保存・更新する関数

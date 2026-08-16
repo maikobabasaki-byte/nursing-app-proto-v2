@@ -37,6 +37,7 @@ import { ensureTodayTasksSynced } from '../services/taskSyncService';
 type ScreenType = 'login' | 'patientSelect' | 'timeline' | 'patientMaster' | 'map' | 'leaderTodo' | 'settings';
 
 import { GlobalSosToast } from '../components/GlobalSosToast';
+import OfflineIndicator from '../components/OfflineIndicator';
 
 import { useTheme } from '../hooks/useTheme';
 
@@ -532,6 +533,9 @@ export default function App() {
       className="min-h-screen flex flex-col relative transition-colors duration-300"
       style={{ backgroundColor: currentConfig.bgColor }}
     >
+      {/* 📡 全画面共通のネットワークオフライン検知インジケーター */}
+      <OfflineIndicator />
+
       {/* 💡 全画面共通の看護師SOSグローバル通知トースト */}
       <GlobalSosToast />
 

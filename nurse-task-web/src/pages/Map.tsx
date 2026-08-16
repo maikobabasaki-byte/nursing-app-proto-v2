@@ -2,10 +2,10 @@ import React, { useState, useEffect, useMemo } from 'react';
 import WardMap from '../components/Map/WardMap';
 import type { Patient, Room, Facility } from '../components/Map/WardMap';
 import { useTimelineStore, type NursePin } from '../stores/useTimelineStore';
-import { DndContext, DragOverlay, useSensor, useSensors, PointerSensor, type DragEndEvent, type DragStartEvent } from '@dnd-kit/core';
+import { DndContext, DragOverlay, useSensor, useSensors, PointerSensor, MouseSensor, TouchSensor, type DragEndEvent, type DragStartEvent } from '@dnd-kit/core';
 import { DraggableNursePin } from '../components/Map/DraggableNursePin';
 import { useUserName } from '../hooks/useUserName';
-import { auth } from '../lib/firebase';
+import { auth, updateNursePositionInFirestore } from '../lib/firebase';
 
 // 💡 左側のSOSパネル（LeftPanel）：タスクSOS、看護師SOS、患者SOSをリアルタイム統合表示
 const LeftPanel: React.FC<{ sosTasks: any[]; sosNurses: NursePin[]; patientSosList?: any[]; isFullWidth?: boolean }> = ({ sosTasks, sosNurses, patientSosList = [], isFullWidth }) => (
@@ -129,7 +129,10 @@ export default function MapContainer({ selectedPatients }: MapContainerProps): R
 
   const currentUserName = useUserName();
   const myPinName = currentUserName || "ログイン看護師";
-  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
+  const mouseSensor = useSensor(MouseSensor, { activationConstraint: { distance: 5 } });
+  const touchSensor = useSensor(TouchSensor, { activationConstraint: { delay: 100, tolerance: 5 } });
+  const pointerSensor = useSensor(PointerSensor, { activationConstraint: { distance: 5 } });
+  const sensors = useSensors(mouseSensor, touchSensor, pointerSensor);
 
   // 💡 Zustandストアから状態とアクションを取得
   const allTasks = useTimelineStore((state) => state.allTasks);
@@ -170,20 +173,34 @@ export default function MapContainer({ selectedPatients }: MapContainerProps): R
   }, [nurses, currentUser]);
 
   useEffect(() => {
+    const fetchJson = async (filename: string) => {
+      const candidatePaths = [
+        `/app/data/${filename}`,
+        `${import.meta.env.BASE_URL || '/app/'}data/${filename}`.replace(/\/+/g, '/'),
+        `/data/${filename}`,
+      ];
+      for (const path of candidatePaths) {
+        try {
+          const res = await fetch(path);
+          if (res.ok) {
+            const data = await res.json();
+            if (data) return data;
+          }
+        } catch (e) {}
+      }
+      return null;
+    };
+
     Promise.all([
-      fetch('/data/patients.json').then((res) => {
-        if (!res.ok) throw new Error("patients.jsonの取得失敗");
-        return res.json();
-      }),
-      fetch('/data/rooms.json').then((res) => {
-        if (!res.ok) throw new Error("rooms.jsonの取得失敗");
-        return res.json();
-      })
+      fetchJson('patients.json'),
+      fetchJson('rooms.json'),
     ])
       .then(([patientsData, roomsData]) => {
-        setPatients(patientsData);
-        setRooms(roomsData.rooms || []);
-        setFacilities(roomsData.facilities || []);
+        if (patientsData) setPatients(patientsData);
+        if (roomsData) {
+          setRooms(roomsData.rooms || []);
+          setFacilities(roomsData.facilities || []);
+        }
         setLoading(false);
       })
       .catch((err) => {
@@ -210,12 +227,25 @@ export default function MapContainer({ selectedPatients }: MapContainerProps): R
 
     if (!activeNurseObj) return;
 
-    const container = mapContainerRef.current;
-    if (container) {
-      const rect = container.getBoundingClientRect();
+    // 🎯 正確なアスペクト比固定キャンバス要素（#ward-map-aspect-container）を取得
+    const aspectContainer = document.getElementById('ward-map-aspect-container') || mapContainerRef.current;
+    if (aspectContainer) {
+      const rect = aspectContainer.getBoundingClientRect();
       if (rect.width > 0 && rect.height > 0) {
-        const deltaXPercent = (delta.x / rect.width) * 100;
-        const deltaYPercent = (delta.y / rect.height) * 100;
+        // 💡 画面幅 640px 未満のスマートフォン表示時のみ90度回転しているため、回転ドラッグ座標補正を適用
+        const isRotated = typeof window !== 'undefined' && window.innerWidth < 640;
+
+        let deltaX = delta.x;
+        let deltaY = delta.y;
+
+        if (isRotated) {
+          // 🔄 90度回転時のX/Yドラッグベクトルを正しい座標軸へ変換補正
+          deltaX = delta.y;
+          deltaY = -delta.x;
+        }
+
+        const deltaXPercent = (deltaX / rect.width) * 100;
+        const deltaYPercent = (deltaY / rect.height) * 100;
 
         const newXPercent = Math.min(Math.max(0, (activeNurseObj.x_percent || 50) + deltaXPercent), 92);
         const newYPercent = Math.min(Math.max(0, (activeNurseObj.y_percent || 45) + deltaYPercent), 92);
@@ -232,8 +262,14 @@ export default function MapContainer({ selectedPatients }: MapContainerProps): R
           };
           setNurses([myPin, ...nurses]);
         } else {
+          // 🎯 1. オプティミスティックUI（即時ローカル反映）
           updateNursePosition(activeNurseId, newXPercent, newYPercent);
         }
+
+        // 🎯 2. Firestore への即時非同期保存（全端末リアルタイム同期 ＆ スナップバック防止）
+        updateNursePositionInFirestore(activeNurseId, newXPercent, newYPercent).catch((err) => {
+          console.warn("ピン座標のFirestore更新エラー:", err);
+        });
       }
     }
   };
@@ -316,7 +352,7 @@ export default function MapContainer({ selectedPatients }: MapContainerProps): R
                 display: 'flex',
                 justifyContent: 'center',
                 alignItems: 'center',
-                transform: 'rotate(90deg) scale(1.35)',
+                transform: typeof window !== 'undefined' && window.innerWidth < 640 ? 'rotate(90deg) scale(1.35)' : 'rotate(0deg) scale(1.0)',
               }}
             >
               <WardMap 

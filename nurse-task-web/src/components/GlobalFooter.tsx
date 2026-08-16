@@ -6,9 +6,9 @@ interface GlobalFooterProps {
 
 // 🎨 各テーマ別設定アイコン画像マッピング
 const SETTINGS_ICONS: Record<AppTheme, string> = {
-  vital: '/icon_b/settings_48dp.png',
-  serene: '/icon_s/settings_48dp_FAF3E0_FILL1_wght400_GRAD0_opsz48.png',
-  dark: '/icon_g/settings_48dp_2DD4BF_FILL1_wght400_GRAD0_opsz48.png',
+  vital: '/app/icon_b/settings_48dp.png',
+  serene: '/app/icon_s/settings_48dp_FAF3E0_FILL1_wght400_GRAD0_opsz48.png',
+  dark: '/app/icon_g/settings_48dp_2DD4BF_FILL1_wght400_GRAD0_opsz48.png',
 };
 
 export default function GlobalFooter({ onNavigate }: GlobalFooterProps) {
