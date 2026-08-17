@@ -103,6 +103,11 @@ export const DraggableNursePin: React.FC<Props> = ({ nurse, isOverlay = false, i
     cursor: isOverlay ? 'grabbing' : 'grab',
     zIndex: isDragging || isOverlay ? 9999 : 50,
     touchAction: 'none',
+    pointerEvents: 'auto',
+    userSelect: 'none',
+    WebkitUserSelect: 'none',
+    MozUserSelect: 'none',
+    msUserSelect: 'none',
   };
 
   return (
@@ -110,18 +115,20 @@ export const DraggableNursePin: React.FC<Props> = ({ nurse, isOverlay = false, i
       ref={setNodeRef}
       {...listeners}
       {...attributes}
+      draggable={false}
       style={style}
+      onDragStart={(e) => e.preventDefault()}
       onContextMenu={(e) => {
         if (onNurseContextMenu) {
           e.preventDefault();
           onNurseContextMenu(e, nurse);
         }
       }}
-      className={`group inline-flex items-center justify-center px-3 py-1 rounded-full text-xs font-black transition-all hover:scale-105 select-none ${borderClassName} ${
-        isOverlay ? 'scale-110 shadow-2xl ring-2 ring-white ring-offset-2' : ''
+      className={`group inline-flex items-center justify-center px-3 py-1 rounded-full text-xs font-black transition-[transform,shadow] hover:scale-105 select-none touch-none ${borderClassName} ${
+        isOverlay ? 'scale-110 shadow-2xl ring-2 ring-white ring-offset-2 cursor-grabbing' : 'cursor-grab'
       }`}
     >
-      <span>{shortName}</span>
+      <span className="select-none pointer-events-none">{shortName}</span>
 
       {/* 💡 マウスホバー時に表示されるツールチップ（SOS中なら警告表記、通常なら名前＋役割） */}
       {!isDragging && !isOverlay && (

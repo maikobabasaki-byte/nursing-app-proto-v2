@@ -61,34 +61,35 @@ export function useRoomProximityNotification(rooms: RoomLocation[]) {
       );
 
       const isAlreadyNotified = notifiedRoomsRef.current.has(room.room_id);
+      const targetMemos = memos.filter(
+        (m) => m.target_room_id === room.room_id && !m.is_completed
+      );
 
       if (dist <= PROXIMITY_THRESHOLD_PX) {
-        if (!isAlreadyNotified) {
-          // 未完了の該当部屋メモを検索
-          const targetMemos = memos.filter(
-            (m) => m.target_room_id === room.room_id && !m.is_completed
-          );
+        if (!isAlreadyNotified && targetMemos.length > 0) {
+          // フラグセット＆トースト通知発行
+          notifiedRoomsRef.current.add(room.room_id);
 
-          if (targetMemos.length > 0) {
-            // フラグセット＆トースト通知発行
-            notifiedRoomsRef.current.add(room.room_id);
+          const newToast: NotificationToastItem = {
+            id: `${room.room_id}-${Date.now()}`,
+            roomId: room.room_id,
+            roomName: room.name,
+            memoCount: targetMemos.length,
+            memos: targetMemos,
+            timestamp: Date.now(),
+          };
 
-            const newToast: NotificationToastItem = {
-              id: `${room.room_id}-${Date.now()}`,
-              roomId: room.room_id,
-              roomName: room.name,
-              memoCount: targetMemos.length,
-              memos: targetMemos,
-              timestamp: Date.now(),
-            };
-
-            setToasts((prev) => [newToast, ...prev.slice(0, 3)]);
-          }
+          setToasts((prev) => [newToast, ...prev.filter((t) => t.roomId !== room.room_id).slice(0, 2)]);
+        } else if (isAlreadyNotified && targetMemos.length === 0) {
+          // メモがすべて完了した場合は即座に通知トーストを削除
+          notifiedRoomsRef.current.delete(room.room_id);
+          setToasts((prev) => prev.filter((t) => t.roomId !== room.room_id));
         }
       } else if (dist > RESET_THRESHOLD_PX) {
-        // 部屋から十分離れたら通知済みフラグをリセット（再接近時に再度通知可能にする）
+        // 💡 部屋から十分離れた（遠ざかった）ら通知トーストを自動消去＆通知フラグをクリア
         if (isAlreadyNotified) {
           notifiedRoomsRef.current.delete(room.room_id);
+          setToasts((prev) => prev.filter((t) => t.roomId !== room.room_id));
         }
       }
     });

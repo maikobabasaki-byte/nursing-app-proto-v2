@@ -13,6 +13,8 @@ export const GlobalSosToast: React.FC = () => {
   const nurses = useTimelineStore((state) => state.nurses);
   const allTasks = useTimelineStore((state) => state.allTasks);
   const patientSosList = useTimelineStore((state) => state.patientSosList || []);
+  const storeMemos = useTimelineStore((state) => state.memos || []);
+  const handleSaveMemo = useTimelineStore((state) => state.handleSaveMemo);
   const respondToNurseSos = useTimelineStore((state) => state.respondToNurseSos);
   const respondToTaskSos = useTimelineStore((state) => state.respondToTaskSos);
   const respondToPatientSos = useTimelineStore((state) => state.respondToPatientSos);
@@ -20,6 +22,8 @@ export const GlobalSosToast: React.FC = () => {
   const currentUserName = useUserName();
   const [dismissedIds, setDismissedIds] = useState<string[]>([]);
   const [conflictNotice, setConflictNotice] = useState<string | null>(null);
+
+  const activeMemoToasts = storeMemos.filter((m) => !m.is_completed && !dismissedIds.includes(`memo-${m.id}`));
 
   const responderName = currentUserName || '自分';
 
@@ -240,6 +244,53 @@ export const GlobalSosToast: React.FC = () => {
           </button>
         </div>
       )}
+
+      {/* 📝 未完了メモ緊急風トースト一覧 */}
+      {activeMemoToasts.map((memo) => (
+        <div
+          key={`toast-memo-${memo.id}`}
+          className="bg-amber-50 border-2 border-amber-500 rounded-xl p-4 shadow-2xl ring-4 ring-amber-100 flex flex-col gap-2 transition-all duration-300 relative animate-fade-in"
+        >
+          <button
+            onClick={() => setDismissedIds((prev) => [...prev, `memo-${memo.id}`])}
+            className="absolute top-2 right-2 text-amber-700 hover:text-amber-900 hover:bg-amber-100 w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold transition-colors cursor-pointer"
+            title="通知を閉じる"
+          >
+            ✕
+          </button>
+
+          <div className="flex items-center justify-between border-b border-amber-200 pb-2 pr-6">
+            <div className="flex items-center gap-1.5 font-black text-amber-800 text-sm">
+              <span className="animate-bounce text-base">📌</span>
+              <span>伝言メモ通知 ({memo.target_room_id ? `${memo.target_room_id}号室/エリア` : '全体'})</span>
+            </div>
+            <span className="text-[10px] bg-amber-200 text-amber-900 font-black px-2 py-0.5 rounded-full">
+              未完了
+            </span>
+          </div>
+
+          <div className="text-xs text-gray-800 font-medium leading-relaxed">
+            <div className="mt-1 text-xs font-bold text-amber-950 bg-white p-2.5 rounded-lg border border-amber-300 shadow-inner leading-normal">
+              💬 「 {memo.text} 」
+            </div>
+            <div className="mt-1.5 text-[10px] text-amber-700 font-semibold flex items-center justify-between">
+              <span>🕒 投稿日時: {memo.time || '最近'}</span>
+            </div>
+          </div>
+
+          <div className="pt-1 flex items-center justify-end">
+            <button
+              onClick={() => {
+                handleSaveMemo({ ...memo, is_completed: true });
+                setDismissedIds((prev) => [...prev, `memo-${memo.id}`]);
+              }}
+              className="!bg-amber-600 hover:!bg-amber-700 !text-white !font-bold !text-xs !px-3.5 !py-1.5 !rounded-lg !shadow hover:!shadow-md !transition-all !flex !items-center !gap-1 !cursor-pointer"
+            >
+              <span>✓ メモを完了する</span>
+            </button>
+          </div>
+        </div>
+      ))}
 
       {/* 患者SOS要請トースト一覧 */}
       {activeSosPatients.map((p) => (

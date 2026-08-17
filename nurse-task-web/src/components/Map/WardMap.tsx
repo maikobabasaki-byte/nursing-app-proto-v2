@@ -168,6 +168,7 @@ export default function WardMap({
       {/* 🎯 SVGとHTMLオーバーレイの共通アスペクト比固定ラッパー (1500 : 870) */}
       <div 
         id="ward-map-aspect-container"
+        className="ward-map-aspect-container"
         style={{ 
           position: 'relative', 
           width: '100%', 
@@ -185,17 +186,59 @@ export default function WardMap({
         {/* 1. 施設（ナースステーション・物品庫など） */}
         {facilities.map((fac) => {
           const facMemos = storeMemos.filter(m => m.target_room_id === fac.room_id && !m.is_completed);
+          const hasMemo = facMemos.length > 0;
           return (
             <g key={fac.room_id}>
-              <rect x={fac.x - fac.w / 2} y={fac.y - fac.h / 2} width={fac.w} height={fac.h} fill="white" stroke="#b2ebf2" strokeWidth={2} />
+              <rect 
+                x={fac.x - fac.w / 2} 
+                y={fac.y - fac.h / 2} 
+                width={fac.w} 
+                height={fac.h} 
+                fill="white" 
+                stroke={hasMemo ? "#d97706" : "#b2ebf2"} 
+                strokeWidth={hasMemo ? 3 : 2} 
+              />
               <text x={fac.x} y={fac.y - 20} textAnchor="middle" dominantBaseline="central" fontSize={24} fill="#333" fontWeight="bold">{fac.name}</text>
-              {facMemos.length > 0 && (
-                <g>
-                  <rect x={fac.x - 40} y={fac.y + 10} width={80} height={20} rx={10} fill="#f59e0b" />
-                  <text x={fac.x} y={fac.y + 20} textAnchor="middle" dominantBaseline="central" fontSize={11} fill="#ffffff" fontWeight="bold">
-                    📝 メモ {facMemos.length}件
-                  </text>
-                </g>
+              
+              {/* 💬 メモの「中身（テキスト本文）」が直接見えるポップアップ通知吹き出しカード */}
+              {hasMemo && (
+                <foreignObject
+                  x={fac.x - 110}
+                  y={fac.y + 4}
+                  width={220}
+                  height={50}
+                  className="overflow-visible pointer-events-auto"
+                >
+                  <div className="group relative">
+                    <div className="bg-amber-600 hover:bg-amber-700 text-white border-2 border-white rounded-xl shadow-xl px-2.5 py-1.5 flex items-center justify-between gap-1.5 transition-all duration-200 hover:scale-105 cursor-pointer">
+                      <div className="flex items-center gap-1.5 min-w-0 overflow-hidden">
+                        <span className="shrink-0 text-sm">📝</span>
+                        <span className="truncate font-extrabold text-[12px] leading-tight select-none">
+                          {facMemos[0].text}
+                        </span>
+                      </div>
+                      {facMemos.length > 1 && (
+                        <span className="shrink-0 bg-amber-800 text-amber-100 text-[10px] px-1.5 py-0.5 rounded-full font-black">
+                          +{facMemos.length - 1}件
+                        </span>
+                      )}
+                    </div>
+                    {/* 💡 マウスホバー時にメモ全文と投稿時間を展開ポップアップ表示 */}
+                    <div className="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 opacity-0 group-hover:opacity-100 transition-all duration-200 z-50 w-64 bg-gray-900/95 text-white text-xs p-2.5 rounded-xl shadow-2xl border border-amber-400/40">
+                      <div className="font-bold text-amber-300 mb-1 flex items-center justify-between border-b border-gray-700 pb-1">
+                        <span>📌 {fac.name} のメモ ({facMemos.length}件)</span>
+                        <span className="text-[10px] text-gray-400">{facMemos[0].time}</span>
+                      </div>
+                      <div className="space-y-1 max-h-32 overflow-y-auto font-medium leading-snug">
+                        {facMemos.map((m, idx) => (
+                          <div key={m.id || idx} className="text-[11px] bg-gray-800/80 p-1.5 rounded border-l-2 border-amber-400">
+                            {m.text}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                </foreignObject>
               )}
             </g>
           );
@@ -211,23 +254,82 @@ export default function WardMap({
           const headerY = isTopRow ? topY : topY + (BED_H * room.rows);
           const roomPatients = patients.filter((p) => p.room_id === room.room_id);
           const roomMemos = storeMemos.filter(m => m.target_room_id === room.room_id && !m.is_completed);
+          const hasRoomMemo = roomMemos.length > 0;
 
           return (
             <g key={room.room_id}>
               {/* 部屋の外枠 */}
-              <rect x={room.x - roomW / 2} y={topY} width={roomW} height={roomH} fill="white" />
-              {/* 部屋名の背景（薄い青のバー） */}
-              <rect x={room.x - roomW / 2} y={headerY} width={roomW} height={HEADER_H} fill="#b2ebf2" />
-              <text x={room.x - roomW / 4} y={headerY + HEADER_H / 2} textAnchor="middle" dominantBaseline="central" fontSize="18" fill="#333" fontWeight="bold">{room.name}</text>
+              <rect 
+                x={room.x - roomW / 2} 
+                y={topY} 
+                width={roomW} 
+                height={roomH} 
+                fill="white" 
+                stroke={hasRoomMemo ? "#f59e0b" : "#e0e0e0"}
+                strokeWidth={hasRoomMemo ? 2.5 : 1}
+              />
+              {/* 部屋名の背景（メモがある部屋はアンバー系でハイライト通知） */}
+              <rect 
+                x={room.x - roomW / 2} 
+                y={headerY} 
+                width={roomW} 
+                height={HEADER_H} 
+                fill={hasRoomMemo ? "#fef3c7" : "#b2ebf2"} 
+                stroke={hasRoomMemo ? "#d97706" : "none"}
+                strokeWidth={hasRoomMemo ? 1.5 : 0}
+              />
+              <text 
+                x={room.x} 
+                y={headerY + HEADER_H / 2} 
+                textAnchor="middle" 
+                dominantBaseline="central" 
+                fontSize="18" 
+                fill={hasRoomMemo ? "#78350f" : "#333"} 
+                fontWeight="bold"
+              >
+                {room.name}
+              </text>
 
-              {/* 📝 部屋内の未完了メモバッジ */}
-              {roomMemos.length > 0 && (
-                <g>
-                  <rect x={room.x + roomW / 8} y={headerY + 6} width={roomW / 3} height={HEADER_H - 12} rx={4} fill="#f59e0b" />
-                  <text x={room.x + roomW / 8 + roomW / 6} y={headerY + HEADER_H / 2} textAnchor="middle" dominantBaseline="central" fontSize={11} fill="#ffffff" fontWeight="bold">
-                    📝 メモ{roomMemos.length}件
-                  </text>
-                </g>
+              {/* 💬 部屋内のメモの「中身（テキスト本文）」が直接見えるポップアップ通知吹き出しカード */}
+              {hasRoomMemo && (
+                <foreignObject
+                  x={room.x - roomW / 2 + 5}
+                  y={isTopRow ? topY + roomH + 2 : topY - 34}
+                  width={roomW - 10}
+                  height={32}
+                  className="overflow-visible pointer-events-auto"
+                >
+                  <div className="group relative w-full h-full flex items-center">
+                    <div className="w-full bg-amber-600 hover:bg-amber-700 text-white border-2 border-white rounded-lg shadow-md px-2 py-0.5 flex items-center justify-between gap-1 transition-all duration-200 hover:scale-102 cursor-pointer">
+                      <div className="flex items-center gap-1 min-w-0 overflow-hidden">
+                        <span className="shrink-0 text-xs">📝</span>
+                        <span className="truncate font-extrabold text-[11px] leading-tight select-none">
+                          {roomMemos[0].text}
+                        </span>
+                      </div>
+                      {roomMemos.length > 1 && (
+                        <span className="shrink-0 bg-amber-800 text-amber-100 text-[9px] px-1.5 py-0.2 rounded-full font-black">
+                          +{roomMemos.length - 1}件
+                        </span>
+                      )}
+                    </div>
+
+                    {/* 💡 マウスホバー時にメモ全文を展開表示するポップアップカード */}
+                    <div className="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 opacity-0 group-hover:opacity-100 transition-all duration-200 z-50 w-64 bg-gray-900/95 text-white text-xs p-2.5 rounded-xl shadow-2xl border border-amber-400/40">
+                      <div className="font-bold text-amber-300 mb-1 flex items-center justify-between border-b border-gray-700 pb-1">
+                        <span>📌 {room.name} のメモ ({roomMemos.length}件)</span>
+                        <span className="text-[10px] text-gray-400">{roomMemos[0].time}</span>
+                      </div>
+                      <div className="space-y-1 max-h-32 overflow-y-auto font-medium leading-snug">
+                        {roomMemos.map((m, idx) => (
+                          <div key={m.id || idx} className="text-[11px] bg-gray-800/80 p-1.5 rounded border-l-2 border-amber-400">
+                            {m.text}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                </foreignObject>
               )}
 
               {/* 💡 部屋のベッド枠（グリッド線）の描画 */}
@@ -406,24 +508,23 @@ export default function WardMap({
                (normalizedCurrent !== '' && normalizedCurrent === normalizedNurseName));
 
           return (
-            <div key={nurse.nurse_id} style={{ pointerEvents: 'auto' }}>
-              <DraggableNursePin 
-                nurse={nurse} 
-                isMe={isMe}
-                onNurseContextMenu={(e, n) => {
-                  // 💡 自分（ログイン中ユーザー）のピンの場合のみSOS操作メニューを開く
-                  if (!isMe) return;
-                  setNurseMenu({
-                    visible: true,
-                    x: e.clientX,
-                    y: e.clientY,
-                    nurseId: n.nurse_id,
-                    nurseName: n.name,
-                    isSos: !!n.is_sos,
-                  });
-                }}
-              />
-            </div>
+            <DraggableNursePin 
+              key={nurse.nurse_id}
+              nurse={nurse} 
+              isMe={isMe}
+              onNurseContextMenu={(e, n) => {
+                // 💡 自分（ログイン中ユーザー）のピンの場合のみSOS操作メニューを開く
+                if (!isMe) return;
+                setNurseMenu({
+                  visible: true,
+                  x: e.clientX,
+                  y: e.clientY,
+                  nurseId: n.nurse_id,
+                  nurseName: n.name,
+                  isSos: !!n.is_sos,
+                });
+              }}
+            />
           );
         })}
       </div>

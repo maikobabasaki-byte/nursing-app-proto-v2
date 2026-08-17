@@ -418,17 +418,14 @@ export const useTimelineStore = create<TimelineStore>((set, get) => ({
       }
     });
 
-    const currentUserId = state.currentUser?.nurse_id;
-
-    // 💡 Firestoreからの受信データに対し、自分自身やゲストの最新ローカル移動座標を優先保護マージ
+    // 💡 Firestoreからの受信データに対し、すべてのナースピンの最新ローカル移動座標を保護マージ（引き戻しを防止）
     const protectedRuntimes = incomingRuntimes.map((rt) => {
-      const localPos = rt.nurse_id ? existingPositionMap.get(rt.nurse_id) : undefined;
-      const isSelfOrGuest = (currentUserId && rt.nurse_id === currentUserId) ||
-        rt.nurse_id?.includes('guest') ||
-        rt.nurse_id?.startsWith('GUEST-') ||
-        Boolean(sessionStorage.getItem('is_guest_session') === 'true');
+      const cleanId = (rt.nurse_id || '').replace(/^nurse-/, '');
+      const localPos = rt.nurse_id
+        ? (existingPositionMap.get(rt.nurse_id) || existingPositionMap.get(cleanId) || existingPositionMap.get(`nurse-${cleanId}`))
+        : undefined;
 
-      if (localPos && (isSelfOrGuest || rt.x_percent === undefined)) {
+      if (localPos) {
         return {
           ...rt,
           x_percent: localPos.x,
@@ -450,13 +447,22 @@ export const useTimelineStore = create<TimelineStore>((set, get) => ({
       nurseAssignments: assignments,
     };
   }),
-  updateNursePosition: (nurseId, x_percent, y_percent) => set((state) => ({
-    nurses: state.nurses.map((n) =>
-      (n.nurse_id === nurseId || (n.nurse_id && nurseId && (n.nurse_id.includes(nurseId) || nurseId.includes(n.nurse_id))))
-        ? { ...n, x_percent, y_percent }
-        : n
-    ),
-  })),
+  updateNursePosition: (nurseId, x_percent, y_percent) => set((state) => {
+    const rawTarget = String(nurseId || '').trim();
+    const cleanTarget = rawTarget.replace(/^nurse-/, '');
+    return {
+      nurses: state.nurses.map((n) => {
+        const rawNId = String(n.nurse_id || '').trim();
+        const cleanNId = rawNId.replace(/^nurse-/, '');
+        const isMatch =
+          rawNId === rawTarget ||
+          cleanNId === cleanTarget ||
+          (rawTarget !== '' && (rawNId === rawTarget || cleanNId === rawTarget)) ||
+          (Boolean(n.name) && Boolean(nurseId) && n.name === nurseId);
+        return isMatch ? { ...n, x_percent, y_percent } : n;
+      }),
+    };
+  }),
   setLoading: (loading) => set({ loading }),
   setActiveId: (id) => set({ activeId: id }),
   setActivePopupTaskId: (id) => set({ activePopupTaskId: id }),

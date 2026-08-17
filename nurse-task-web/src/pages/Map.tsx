@@ -4,6 +4,8 @@ import type { Patient, Room, Facility } from '../components/Map/WardMap';
 import { useTimelineStore, type NursePin } from '../stores/useTimelineStore';
 import { DndContext, DragOverlay, useSensor, useSensors, PointerSensor, MouseSensor, TouchSensor, type DragEndEvent, type DragStartEvent } from '@dnd-kit/core';
 import { DraggableNursePin } from '../components/Map/DraggableNursePin';
+import { useRoomProximityNotification } from '../hooks/useRoomProximityNotification';
+import { RoomProximityToast } from '../components/Map/RoomProximityToast';
 import { useUserName } from '../hooks/useUserName';
 import { auth, updateNursePositionInFirestore } from '../lib/firebase';
 
@@ -141,8 +143,17 @@ export default function MapContainer({ selectedPatients }: MapContainerProps): R
   const toggleTaskSos = useTimelineStore((state) => state.toggleTaskSos);
   const updateNursePosition = useTimelineStore((state) => state.updateNursePosition);
   const patientSosList = useTimelineStore((state) => state.patientSosList || []);
-
   const currentUser = useTimelineStore((state) => state.currentUser);
+
+  // 📡 看護師ピンと部屋・エリア中心点の接近検知（遠ざかると自動消去される近接通知トースト）
+  const roomLocations = useMemo(() => {
+    return [
+      ...rooms.map(r => ({ room_id: r.room_id, name: r.name, x: r.x, y: r.y })),
+      ...facilities.map(f => ({ room_id: f.room_id, name: f.name, x: f.x, y: f.y }))
+    ];
+  }, [rooms, facilities]);
+
+  const { toasts: proximityToasts, dismissToast: dismissProximityToast } = useRoomProximityNotification(roomLocations);
 
   const displayNurses = useMemo(() => {
     const currentUserId = currentUser?.nurse_id || auth.currentUser?.uid;
@@ -220,15 +231,29 @@ export default function MapContainer({ selectedPatients }: MapContainerProps): R
 
   const handleDragEnd = (event: DragEndEvent) => {
     const { active, delta } = event;
-    setActiveNurse(null);
 
-    const activeNurseId = String(active.id).replace('nurse-', '');
-    const activeNurseObj = displayNurses.find(n => n.nurse_id === activeNurseId);
+    const activeData = active.data.current;
+    const activeNurseObj = (activeData?.nurse as NursePin) ||
+      nurses.find(n => `nurse-${n.nurse_id}` === active.id || n.nurse_id === String(active.id).replace(/^nurse-/, '')) ||
+      displayNurses.find(n => `nurse-${n.nurse_id}` === active.id || n.nurse_id === String(active.id).replace(/^nurse-/, ''));
 
     if (!activeNurseObj) return;
+    const activeNurseId = activeNurseObj.nurse_id;
 
-    // 🎯 正確なアスペクト比固定キャンバス要素（#ward-map-aspect-container）を取得
-    const aspectContainer = document.getElementById('ward-map-aspect-container') || mapContainerRef.current;
+    // 🎯 画面上で実際に表示中（width > 0 & height > 0）の正確なマップキャンバス要素を特定（PC/モバイルでの表示切替・非表示要素干渉を回避）
+    const candidateContainers = Array.from(document.querySelectorAll('.ward-map-aspect-container, #ward-map-aspect-container, #tour-map-canvas'));
+    let aspectContainer = candidateContainers.find((el) => {
+      const r = el.getBoundingClientRect();
+      return r.width > 0 && r.height > 0;
+    });
+
+    if (!aspectContainer && mapContainerRef.current) {
+      const r = mapContainerRef.current.getBoundingClientRect();
+      if (r.width > 0 && r.height > 0) {
+        aspectContainer = mapContainerRef.current;
+      }
+    }
+
     if (aspectContainer) {
       const rect = aspectContainer.getBoundingClientRect();
       if (rect.width > 0 && rect.height > 0) {
@@ -247,10 +272,37 @@ export default function MapContainer({ selectedPatients }: MapContainerProps): R
         const deltaXPercent = (deltaX / rect.width) * 100;
         const deltaYPercent = (deltaY / rect.height) * 100;
 
-        const newXPercent = Math.min(Math.max(0, (activeNurseObj.x_percent || 50) + deltaXPercent), 92);
-        const newYPercent = Math.min(Math.max(0, (activeNurseObj.y_percent || 45) + deltaYPercent), 92);
+        const cleanId = activeNurseId.replace(/^nurse-/, '');
 
-        const existsInStore = nurses.some(n => n.nurse_id === activeNurseId);
+        // 💡 クロージャの古くなった参照を防ぐため、Zustandストアから最新のナースデータを取得
+        const latestNurse = useTimelineStore.getState().nurses.find(n =>
+          n.nurse_id === activeNurseId ||
+          n.nurse_id === cleanId ||
+          n.nurse_id === activeNurseObj.nurse_id ||
+          (Boolean(n.name) && Boolean(activeNurseObj.name) && n.name === activeNurseObj.name)
+        ) || activeNurseObj;
+
+        const currentX = typeof latestNurse.x_percent === 'number' ? latestNurse.x_percent : (typeof activeNurseObj.x_percent === 'number' ? activeNurseObj.x_percent : 50);
+        const currentY = typeof latestNurse.y_percent === 'number' ? latestNurse.y_percent : (typeof activeNurseObj.y_percent === 'number' ? activeNurseObj.y_percent : 45);
+
+        const newXPercent = Math.min(Math.max(0, currentX + deltaXPercent), 92);
+        const newYPercent = Math.min(Math.max(0, currentY + deltaYPercent), 92);
+
+        // 🎯 1. オプティミスティックUI（即時ローカル反映）
+        updateNursePosition(activeNurseId, newXPercent, newYPercent);
+        updateNursePosition(cleanId, newXPercent, newYPercent);
+        updateNursePosition(`nurse-${cleanId}`, newXPercent, newYPercent);
+        if (latestNurse.nurse_id) {
+          updateNursePosition(latestNurse.nurse_id, newXPercent, newYPercent);
+        }
+        if (latestNurse.name) {
+          updateNursePosition(latestNurse.name, newXPercent, newYPercent);
+        }
+
+        // 💡 位置情報をローカル同期更新した直後にオーバーレイ表示をクリア
+        setActiveNurse(null);
+
+        const existsInStore = nurses.some(n => n.nurse_id === activeNurseId || n.nurse_id === cleanId);
         if (!existsInStore && activeNurseId.includes('me')) {
           const myPin: NursePin = {
             nurse_id: activeNurseId,
@@ -261,15 +313,15 @@ export default function MapContainer({ selectedPatients }: MapContainerProps): R
             y_percent: newYPercent,
           };
           setNurses([myPin, ...nurses]);
-        } else {
-          // 🎯 1. オプティミスティックUI（即時ローカル反映）
-          updateNursePosition(activeNurseId, newXPercent, newYPercent);
         }
 
         // 🎯 2. Firestore への即時非同期保存（全端末リアルタイム同期 ＆ スナップバック防止）
         updateNursePositionInFirestore(activeNurseId, newXPercent, newYPercent).catch((err) => {
           console.warn("ピン座標のFirestore更新エラー:", err);
         });
+        if (cleanId !== activeNurseId) {
+          updateNursePositionInFirestore(cleanId, newXPercent, newYPercent).catch(() => {});
+        }
       }
     }
   };
@@ -416,6 +468,9 @@ export default function MapContainer({ selectedPatients }: MapContainerProps): R
       <DragOverlay dropAnimation={null}>
         {activeNurse ? <DraggableNursePin nurse={activeNurse} isOverlay /> : null}
       </DragOverlay>
+
+      {/* 📡 部屋接近時・離脱時に連動する近接メモ通知トースト */}
+      <RoomProximityToast toasts={proximityToasts} onDismiss={dismissProximityToast} />
     </DndContext>
   );
 }

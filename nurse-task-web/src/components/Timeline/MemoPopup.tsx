@@ -128,18 +128,38 @@ export const MemoPopup = () => {
           />
         </div>
 
-        {/* 完了フラグ */}
-        <div className="mb-6 flex items-center gap-2">
-          <input 
-            type="checkbox"
-            id="memo-completed"
-            checked={isCompleted}
-            onChange={(e) => setIsCompleted(e.target.checked)}
-            className="w-4 h-4 text-blue-600 rounded focus:ring-blue-500 cursor-pointer"
-          />
-          <label htmlFor="memo-completed" className="text-sm font-bold text-gray-700 cursor-pointer">
-            完了済みにする
-          </label>
+        {/* 完了フラグ (ブラウザに依存せず100%クッキリ表示されるカスタムトグルカード) */}
+        <div 
+          onClick={() => setIsCompleted(!isCompleted)}
+          className={`!mb-6 !flex !items-center !justify-between !p-3 !rounded-xl !border-2 !cursor-pointer !transition-all select-none ${
+            isCompleted 
+              ? '!bg-emerald-50 !border-emerald-500 !text-emerald-900 shadow-md' 
+              : '!bg-white !border-gray-300 hover:!border-blue-400 !text-gray-800'
+          }`}
+        >
+          <div className="!flex !items-center !gap-3">
+            {/* 🎯 自前SVGグラフィックによる完全視認保証チェックボックス */}
+            <div className={`!w-6 !h-6 !rounded-md !flex !items-center !justify-center !border-2 !transition-all ${
+              isCompleted 
+                ? '!bg-emerald-600 !border-emerald-600 !text-white' 
+                : '!bg-gray-100 !border-gray-400'
+            }`}>
+              {isCompleted && (
+                <svg className="!w-4 !h-4" fill="none" viewBox="0 0 24 24" strokeWidth="3.5" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+                </svg>
+              )}
+            </div>
+            <span className="!text-sm !font-black">
+              完了済みにする
+            </span>
+          </div>
+
+          <span className={`!text-xs !font-black !px-2.5 !py-1 !rounded-full ${
+            isCompleted ? '!bg-emerald-600 !text-white' : '!bg-gray-200 !text-gray-600'
+          }`}>
+            {isCompleted ? '✓ 完了済み' : '未完了'}
+          </span>
         </div>
 
         {/* ボタンエリア */}
