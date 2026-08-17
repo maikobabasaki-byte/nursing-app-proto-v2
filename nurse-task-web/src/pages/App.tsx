@@ -264,8 +264,24 @@ export default function App() {
           }
 
           // 📅 日付によるパーティショニングフィルタ（選択中の日付のタスクのみ読み込み）
-          const taskTargetDate = data.target_date || todayStr;
-          if (taskTargetDate !== selectedDate) {
+          let taskTargetDate = data.target_date;
+          if (!taskTargetDate) {
+            // 💡 target_dateがない割り込みタスクの場合、created_atやIDタイムスタンプから日付を正確に抽出
+            if (data.created_at?.toDate) {
+              const dt = data.created_at.toDate();
+              taskTargetDate = `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`;
+            } else if (taskId.startsWith('CALL_INTERRUPT_')) {
+              const ts = Number(taskId.replace('CALL_INTERRUPT_', ''));
+              if (!isNaN(ts) && ts > 0) {
+                const dt = new Date(ts);
+                taskTargetDate = `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`;
+              }
+            }
+          }
+
+          // それでも日付が判定できない場合は本日分とみなし、日付が存在し不一致の場合は除外
+          const finalTargetDate = taskTargetDate || todayStr;
+          if (finalTargetDate !== selectedDate) {
             return;
           }
 

@@ -13,6 +13,7 @@ import { useTimelineStore } from '../../stores/useTimelineStore';
 import { updateTask } from '../../hooks/useTaskUpdate';
 import { useUserName } from '../../hooks/useUserName';
 import { checkIsLeader } from '../../utils/userUtils';
+import { getJSTDateString } from '../../utils/dateUtils';
 import { PoolTaskCard } from './PoolTaskCard';
 import { normalizeToHHMM, normalizeTeamName, isTaskInLeaderTeam, extractUserProgressingTasks, isTimeInSlot } from '../../utils/taskLogic';
 import { useIsMobile } from '../../hooks/useIsMobile';
@@ -24,6 +25,7 @@ export default function TimelineMain({
   const userName = useUserName();
   const handleUpdateStatus = useTimelineStore((state) => state.handleUpdateStatus);
   const storeAllTasks = useTimelineStore((state) => state.allTasks);
+  const storeSelectedDate = useTimelineStore((state) => state.selectedDate);
   const nurseMaster = useTimelineStore((state) => state.nurseMaster);
   const currentUser = useTimelineStore((state) => state.currentUser);
   const showLowPriority = useTimelineStore((state) => state.showLowPriority);
@@ -59,7 +61,14 @@ export default function TimelineMain({
   };
 
   const isTaskForSelectedPatient = (task: ExtendedTask) => {
-    // ⚡ 練習用デモタスク・突発割り込み・ナースコール対応・臨時追加は患者選択フィルタをバイパスしてタイムラインに常時表示
+    // 📅 過去日付のナースコール対応・割り込みタスクが本日の画面に混入するのを防ぐ日付チェック
+    const taskDate = task.target_date;
+    const currentTargetDate = storeSelectedDate || getJSTDateString();
+    if (taskDate && taskDate !== currentTargetDate) {
+      return false;
+    }
+
+    // ⚡ 練習用デモタスク・突発割り込み・ナースコール対応・臨時追加は患者選択フィルタをバイパスしてタイムラインに表示
     const isInterrupt = Boolean(
       task.task_id === 'demo-task-tutorial' ||
       task.title?.includes('ナースコール') || 
@@ -111,6 +120,13 @@ export default function TimelineMain({
   // 🎯 【Single Source of Truth】ストアの全タスクから評価
   const extendedTasks = storeAllTasks.filter((task) => {
     if (!task || task.status === 'deleted' || !task.display_period?.includes(':')) {
+      return false;
+    }
+
+    // 📅 過去日付のナースコール対応・割り込みタスクが本日のタイムラインに混入するのを防ぐ日付チェック
+    const taskDate = task.target_date;
+    const currentTargetDate = storeSelectedDate || getJSTDateString();
+    if (taskDate && taskDate !== currentTargetDate) {
       return false;
     }
 

@@ -30,6 +30,54 @@ export const TimelinePopup: React.FC<TimelinePopupProps> = ({ task, onClose, ren
   const [duplicateNote, setDuplicateNote] = useState('');
   const [isDuplicating, setIsDuplicating] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [patientsList, setPatientsList] = useState<any[]>([]);
+
+  React.useEffect(() => {
+    const fetchPatients = async () => {
+      try {
+        const basePath = import.meta.env.BASE_URL || '/';
+        const res = await fetch(`${basePath}data/patients.json`.replace(/\/+/g, '/'));
+        if (res.ok) {
+          const data = await res.json();
+          setPatientsList(data);
+        }
+      } catch (e) {
+        console.error("患者マスターデータ読み込みエラー:", e);
+      }
+    };
+    fetchPatients();
+  }, []);
+
+  const handleAssignPatient = async (patientId: string, patientName: string, roomId: string) => {
+    // 1. Zustand ローカルストアを即座に更新
+    const store = useTimelineStore.getState();
+    const updatedTasks = store.allTasks.map((t) => {
+      if (t.task_id === task.task_id) {
+        return {
+          ...t,
+          patient_id: patientId,
+          patient_name: patientName,
+          room_id: roomId,
+        };
+      }
+      return t;
+    });
+    store.setTasks(updatedTasks);
+
+    // 2. Firestore を非同期更新
+    try {
+      const { doc, updateDoc } = await import('firebase/firestore');
+      const { db } = await import('../../lib/firebase');
+      const taskRef = doc(db, 'tasks', task.task_id);
+      await updateDoc(taskRef, {
+        patient_id: patientId,
+        patient_name: patientName,
+        room_id: roomId,
+      });
+    } catch (e) {
+      console.error("患者割り当て更新エラー:", e);
+    }
+  };
 
   const handleDeleteTask = async () => {
     const isConfirmed = window.confirm(`「${task.title}」を画面上から削除しますか？\n（※この操作は取り消せません）`);
@@ -151,6 +199,44 @@ export const TimelinePopup: React.FC<TimelinePopupProps> = ({ task, onClose, ren
               </>
             );
           })()}
+          {/* 👤 患者の割り当て・変更ドロップダウン */}
+          <div className="mb-3 bg-sky-50/90 p-2.5 rounded-xl border border-sky-200 flex flex-col gap-1 text-left shadow-xs">
+            <label className="text-[11px] font-black text-sky-900 flex items-center justify-between">
+              <span>👤 対象患者の選択・変更</span>
+              {task.patient_name ? (
+                <span className="text-[10px] bg-sky-200 text-sky-900 font-bold px-1.5 py-0.5 rounded">
+                  現在: {task.patient_name} ({task.room_id ? `${task.room_id}号室` : ''})
+                </span>
+              ) : (
+                <span className="text-[10px] bg-amber-100 text-amber-900 font-bold px-1.5 py-0.5 rounded">
+                  未指定 (フリー応援)
+                </span>
+              )}
+            </label>
+            <select
+              value={task.patient_id || ''}
+              onChange={(e) => {
+                const targetVal = e.target.value;
+                if (!targetVal) {
+                  handleAssignPatient('', '', '');
+                  return;
+                }
+                const selectedP = patientsList.find((p) => p.patient_id === targetVal);
+                if (selectedP) {
+                  handleAssignPatient(selectedP.patient_id, selectedP.name, selectedP.room_id || '');
+                }
+              }}
+              className="w-full bg-white border border-sky-300 rounded-lg px-2.5 py-1.5 text-xs font-bold text-slate-800 focus:ring-2 focus:ring-sky-400 focus:outline-none cursor-pointer"
+            >
+              <option value="">（患者指定なし / フリー応援・ナースコール対応）</option>
+              {patientsList.map((p) => (
+                <option key={p.patient_id} value={p.patient_id}>
+                  {p.room_id ? `${p.room_id}号室 ` : ''}{p.name} 様 ({p.patient_id})
+                </option>
+              ))}
+            </select>
+          </div>
+
           <div className="text-base font-black mb-1">{task.title}</div>
           <div className="text-xs opacity-80 mb-3 min-h-[40px] whitespace-pre-wrap text-left">{task.details || '詳細はありません'}</div>
           
