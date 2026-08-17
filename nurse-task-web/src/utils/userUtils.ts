@@ -84,3 +84,16 @@ export function checkIsLeader(currentUser: any): boolean {
   const id = String(currentUser.nurse_id || currentUser.email || currentUser.name || '').toLowerCase();
   return id.includes('leader') || id.includes('head') || id === 'nurse01' || id === 'nurse-1';
 }
+
+/**
+ * 📱 ブラウザ端末/タブごとにユニークなセッションIDを取得（SOS自他判定用）
+ */
+export function getSessionId(): string {
+  if (typeof window === 'undefined') return 'server';
+  let sid = sessionStorage.getItem('nurseflow_client_session_id');
+  if (!sid) {
+    sid = 'sess_' + Math.random().toString(36).substring(2, 9) + '_' + Date.now();
+    sessionStorage.setItem('nurseflow_client_session_id', sid);
+  }
+  return sid;
+}

@@ -37,7 +37,7 @@ import { ensureTodayTasksSynced } from '../services/taskSyncService';
 
 type ScreenType = 'login' | 'patientSelect' | 'timeline' | 'patientMaster' | 'map' | 'leaderTodo' | 'settings';
 
-import { GlobalSosToast } from '../components/GlobalSosToast';
+import { GlobalSosToast } from '../components/Map/GlobalSosToast';
 import OfflineIndicator from '../components/OfflineIndicator';
 
 import { useTheme } from '../hooks/useTheme';
@@ -380,14 +380,11 @@ export default function App() {
   // 💡 Firestoreの看護師SOS状態 (nursesコレクション) リアルタイム監視と全端末同期
   useEffect(() => {
     if (!user) return;
+    const isGuestSession = sessionStorage.getItem('is_guest_session') === 'true' || user.isAnonymous;
 
     const unsubscribeNurses = onSnapshot(
       collection(db, "nurses"), 
       (snapshot) => {
-        if (snapshot.metadata.hasPendingWrites) {
-          return;
-        }
-
         const firestoreNurses = snapshot.docs
           .map((doc) => {
             const data = doc.data();
@@ -397,17 +394,23 @@ export default function App() {
             } as NursePin;
           })
           .filter((n) => {
+            const isGuestNurse = Boolean(
+              n.nurse_id?.toLowerCase().includes('guest') ||
+              n.nurse_id?.startsWith('GUEST-') ||
+              (n.email && n.email.toLowerCase().includes('guest')) ||
+              (n.name && n.name.includes('ゲスト'))
+            );
+
+            // 🛡️ 通常ユーザーログイン時は、ゲスト看護師データ（SOS含む全データ）を100%完全遮断
+            if (!isGuestSession) {
+              if (isGuestNurse) return false;
+              return true;
+            }
+
+            // ゲストログイン時：自分以外の通常時ゲストナースを除外
             const currentUserId = user?.uid || useTimelineStore.getState().currentUser?.nurse_id;
             const isSelf = n.nurse_id === currentUserId;
-            const isGuestNurse = Boolean(
-              n.nurse_id?.includes('guest') ||
-              n.nurse_id?.startsWith('GUEST-') ||
-              (n.email && n.email.includes('guest')) ||
-              (n.name && n.name.includes('ゲスト')) ||
-              (n.role && n.role.includes('ゲスト'))
-            );
-            // 💡 自分以外のゲストユーザーをマップから除外（他のゲストユーザーとお互いに見えないようにする）
-            if (!isSelf && isGuestNurse) {
+            if (!isSelf && isGuestNurse && !n.is_sos) {
               return false;
             }
             return true;
