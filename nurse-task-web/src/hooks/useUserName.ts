@@ -3,6 +3,7 @@ import { auth, db } from '../lib/firebase';
 import { onAuthStateChanged } from 'firebase/auth';
 import { collection, query, where, getDocs } from 'firebase/firestore';
 import { useTimelineStore } from '../stores/useTimelineStore';
+import { resolveNurseProfile } from '../utils/userUtils';
 
 export const useUserName = () => {
   const currentUser = useTimelineStore((state) => state.currentUser);
@@ -23,7 +24,7 @@ export const useUserName = () => {
       return;
     }
 
-    if (currentUser?.name) {
+    if (currentUser?.name && !currentUser.name.match(/^(nurse|leader|user)\d*$/i)) {
       setUserName(currentUser.name);
       return;
     }
@@ -39,41 +40,30 @@ export const useUserName = () => {
         }
 
         try {
-          // 💡 nurse_master コレクションに対して where("email", "==", user.email) クエリ検索
           const q = query(collection(db, 'nurse_master'), where('email', '==', user.email));
           const querySnapshot = await getDocs(q);
 
+          let rawData: any = undefined;
+          let matchedId = user.email.split('@')[0];
+
           if (!querySnapshot.empty) {
             const matchedDoc = querySnapshot.docs[0];
-            const data = matchedDoc.data();
-            const nurseProfile = {
-              nurse_id: matchedDoc.id,
-              name: data.name || user.email.split('@')[0],
-              email: user.email,
-              team: data.team || '',
-              is_leader: Boolean(data.is_leader),
-            };
-
-            // 💡 Zustandストアに正本マスタープロファイルをグローバル保存
-            setCurrentUser(nurseProfile);
-            setUserName(nurseProfile.name);
-          } else {
-            // フォールバック: IDプレフィックス
-            const fallbackId = user.email.split('@')[0];
-            const fallbackProfile = {
-              nurse_id: fallbackId,
-              name: fallbackId,
-              email: user.email,
-            };
-            setCurrentUser(fallbackProfile);
-            setUserName(fallbackId);
+            rawData = matchedDoc.data();
+            matchedId = matchedDoc.id;
           }
+
+          // 🎯 resolveNurseProfile 共通ヘルパーにより、ユーザー名を日本語表示名に自動変換 ＆ リーダー権限を判定
+          const nurseProfile = resolveNurseProfile(matchedId, user.email, rawData);
+          setCurrentUser(nurseProfile);
+          setUserName(nurseProfile.name);
         } catch (e: any) {
           if (e?.code !== 'permission-denied') {
             console.warn("nurse_master 取得警告:", e);
           }
-          const fallbackId = user.email ? user.email.split('@')[0] : 'ユーザー';
-          setUserName(fallbackId);
+          const emailPrefix = user.email.split('@')[0];
+          const fallbackProfile = resolveNurseProfile(emailPrefix, user.email);
+          setCurrentUser(fallbackProfile);
+          setUserName(fallbackProfile.name);
         }
       } else {
         setUserName('');

@@ -3,7 +3,8 @@ import type { ExtendedTask } from '../../types/types';
 import { PoolTaskCard } from './PoolTaskCard';
 import { useTimelineStore } from '../../stores/useTimelineStore';
 import { useUserName } from '../../hooks/useUserName';
-import { extractUserProgressingTasks } from '../../utils/taskLogic';
+import { checkIsLeader } from '../../utils/userUtils';
+import { extractUserProgressingTasks, isTaskInLeaderTeam } from '../../utils/taskLogic';
 
 interface TimelineSidebarProps { 
   selectedPatients: string[];
@@ -24,9 +25,9 @@ export default function TimelineSidebar({
     sessionStorage.getItem('is_guest_session') === 'true' ||
     currentUser?.isAnonymous === true
   );
-  const isLeader = isGuestUser
-    ? (currentUser ? currentUser.is_leader === true : sessionStorage.getItem('nurseflow_guest_role') === 'leader')
-    : Boolean(currentUser?.is_leader);
+  const isLeader = checkIsLeader(currentUser);
+  const leaderTeam = currentUser?.team || 'Aチーム';
+  const nurseMaster = useTimelineStore((state) => state.nurseMaster || []);
 
   // 🎯 【Single Source of Truth】ストアの全タスクからプール用タスクを直算出（ゲストメンバーは202/203号室限定）
   const poolTasks = allTasks.filter(task => {
@@ -51,6 +52,10 @@ export default function TimelineSidebar({
     }
 
     if (isLeader) {
+      // 🛡️ チームの不一致チェック（他チームのタスクはタスクプールからも完全排除）
+      if (!isTaskInLeaderTeam(task, leaderTeam, nurseMaster)) {
+        return false;
+      }
       const isHighPriority = task.priority === 'high';
       if (!isHighPriority && !showLowPriority && task.priority === 'low') {
         return false;

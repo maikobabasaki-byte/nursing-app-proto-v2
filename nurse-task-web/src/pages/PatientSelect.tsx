@@ -1,5 +1,8 @@
 import { useState, useEffect } from 'react';
 import { useUserName } from '../hooks/useUserName';
+import { useTimelineStore } from '../stores/useTimelineStore';
+import { checkIsLeader } from '../utils/userUtils';
+import { normalizeTeamName } from '../utils/taskLogic';
 import { ensureTodayTasksSynced } from '../services/taskSyncService';
 
 /**
@@ -29,7 +32,12 @@ interface PatientSelectProps {
  */
 export default function PatientSelect({ onSelectComplete }: PatientSelectProps) {
   const userName = useUserName();
-  const [role, setRole] = useState('member');
+  const currentUser = useTimelineStore((state) => state.currentUser);
+  const isLeader = checkIsLeader(currentUser);
+  const userTeam = currentUser?.team || 'Aチーム';
+  const normalizedUserTeam = normalizeTeamName(userTeam) || 'A';
+
+  const [role, setRole] = useState<'member' | 'leader'>(isLeader ? 'leader' : 'member');
   const [patients, setPatients] = useState<Patient[]>([]);
   const [isSyncing, setIsSyncing] = useState<boolean>(false);
 
@@ -40,6 +48,7 @@ export default function PatientSelect({ onSelectComplete }: PatientSelectProps) 
    * 【画面起動時の初期化処理（マウント時のみ実行）】
    * 1. 患者データ（JSON）の非同期取得
    * 2. 取得した患者データを「病室順 ➔ ベッド番号順」に自動並び替え（ソート）
+   * 3. ログインユーザーの所属チーム（例: Aチーム）の患者を初期自動選択
    */
   useEffect(() => {
     const candidatePaths = [
@@ -73,6 +82,19 @@ export default function PatientSelect({ onSelectComplete }: PatientSelectProps) 
               } catch (e) {
                 console.error("患者復元エラー:", e);
               }
+
+              // 🎯 【チーム選択の適用】ログインユーザーの所属チーム（例: Aチーム）の全患者をデフォルトで自動チェック
+              const defaultTeamPatients = sortedData
+                .filter(p => normalizeTeamName(p.team) === normalizedUserTeam)
+                .map(p => p.patient_id);
+
+              if (defaultTeamPatients.length > 0) {
+                setSelectedPatientIds(defaultTeamPatients);
+              } else {
+                // 万が一該当チームがいない場合は最初の病室の患者を選択
+                setSelectedPatientIds(sortedData.slice(0, 6).map(p => p.patient_id));
+              }
+
               return;
             }
           }
@@ -80,7 +102,7 @@ export default function PatientSelect({ onSelectComplete }: PatientSelectProps) 
       }
     };
     loadData();
-  }, []); // 依存配列が空のため、コンポーネントが最初に表示された1回だけ実行される
+  }, [normalizedUserTeam]);
 
   /**
    * 個人のチェックボックスがクリックされたときの処理
@@ -157,23 +179,16 @@ export default function PatientSelect({ onSelectComplete }: PatientSelectProps) 
    * * @param teamName クリックされたチーム名（例: "A", "B"）
    */
   const handleTeamCheck = (teamName: string) => {
-    // 1. 全患者の中から、指定されたチーム（teamName）に所属する患者のIDだけをガサッと抽出してリスト化
-    // ※今後、Patientインターフェースに「team: string」が追加される前提の処理です
+    const targetNormTeam = normalizeTeamName(teamName);
     const teamPatientIds = patients
-      .filter(p => p.team === teamName)
+      .filter(p => normalizeTeamName(p.team) === targetNormTeam)
       .map(p => p.patient_id);
 
-    // 2. 「そのチームの全員」が、すでに自分の選択リスト（selectedPatientIds）に入っているかを判定
     const isAllChecked = teamPatientIds.every(id => selectedPatientIds.includes(id));
 
     if (isAllChecked) {
-      // 【チームごと一括解除】
-      // すでに全員選ばれている状態なら、現在の選択リストから「このチームのメンバーのID」だけを綺麗に排除する
       setSelectedPatientIds(selectedPatientIds.filter(id => !teamPatientIds.includes(id)));
     } else {
-      // 【チームごと全員選択（漏れ防止）】
-      // 1人でも選ばれていない人がいるなら、一度現在のリストからこのチームのメンバーを引いて（重複防止）、
-      // 「他のチームの選択中メンバー」＋「このチームの全員」を綺麗に合体させる
       const otherPatientIds = selectedPatientIds.filter(id => !teamPatientIds.includes(id));
       setSelectedPatientIds([...otherPatientIds, ...teamPatientIds]);
     }
@@ -292,13 +307,13 @@ export default function PatientSelect({ onSelectComplete }: PatientSelectProps) 
                   </label>
                 </div>
 
-                {/* Aチーム / Bチーム（モック） */}
+                {/* Aチーム / Bチーム */}
                 <div className="flex items-center gap-[15px] py-[10px] px-[15px] border border-[#eee] rounded-[6px] hover:bg-[#f9f9f9] transition-colors">
                   <input 
                     type="checkbox" 
                     id="team-a" 
-                    checked={patients.filter(p => p.team === 'A').length > 0 && patients.filter(p => p.team === 'A').every(p => selectedPatientIds.includes(p.patient_id))}
-                    onChange={() => handleTeamCheck('A')} // 💡 ここで関数を呼び出す
+                    checked={patients.filter(p => normalizeTeamName(p.team) === 'A').length > 0 && patients.filter(p => normalizeTeamName(p.team) === 'A').every(p => selectedPatientIds.includes(p.patient_id))}
+                    onChange={() => handleTeamCheck('A')}
                     className="w-[22px] h-[22px] accent-[#1A365D] !appearance-auto" 
                   />
                   <label htmlFor="team-a" className="flex-1 cursor-pointer text-[1.1rem] font-bold text-gray-700">Aチーム</label>
@@ -307,8 +322,8 @@ export default function PatientSelect({ onSelectComplete }: PatientSelectProps) 
                   <input 
                     type="checkbox" 
                     id="team-b" 
-                    checked={patients.filter(p => p.team === 'B').length > 0 && patients.filter(p => p.team === 'B').every(p => selectedPatientIds.includes(p.patient_id))}
-                    onChange={() => handleTeamCheck('B')} // 💡 ここで関数を呼び出す
+                    checked={patients.filter(p => normalizeTeamName(p.team) === 'B').length > 0 && patients.filter(p => normalizeTeamName(p.team) === 'B').every(p => selectedPatientIds.includes(p.patient_id))}
+                    onChange={() => handleTeamCheck('B')}
                     className="w-[22px] h-[22px] accent-[#1A365D] !appearance-auto" 
                   />
                   <label htmlFor="team-b" className="flex-1 cursor-pointer text-[1.1rem] font-bold text-gray-700">Bチーム</label>

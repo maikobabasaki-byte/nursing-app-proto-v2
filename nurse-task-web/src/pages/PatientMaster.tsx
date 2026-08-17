@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useTimelineStore } from '../stores/useTimelineStore';
+import { checkIsLeader } from '../utils/userUtils';
 import { normalizeToHHMM, flattenTasks, sortTasksChronologically } from '../utils/taskLogic';
 
 // --- 型定義 ---
@@ -49,9 +50,7 @@ export default function PatientMasterPage({ selectedIds }: DashboardProps) {
     sessionStorage.getItem('is_guest_session') === 'true' ||
     currentUser?.isAnonymous === true
   );
-  const isLeader = isGuestUser
-    ? (currentUser ? currentUser.is_leader === true : sessionStorage.getItem('nurseflow_guest_role') === 'leader')
-    : Boolean(currentUser?.is_leader);
+  const isLeader = checkIsLeader(currentUser);
 
   // 1. マウント時に患者マスタの静的データだけを取得 (プロダクション /app/ パス対応)
   useEffect(() => {

@@ -12,8 +12,9 @@ import { PendingTray } from './PendingTray';
 import { useTimelineStore } from '../../stores/useTimelineStore';
 import { updateTask } from '../../hooks/useTaskUpdate';
 import { useUserName } from '../../hooks/useUserName';
+import { checkIsLeader } from '../../utils/userUtils';
 import { PoolTaskCard } from './PoolTaskCard';
-import { normalizeToHHMM, normalizeTeamName, extractUserProgressingTasks, isTimeInSlot } from '../../utils/taskLogic';
+import { normalizeToHHMM, normalizeTeamName, isTaskInLeaderTeam, extractUserProgressingTasks, isTimeInSlot } from '../../utils/taskLogic';
 import { useIsMobile } from '../../hooks/useIsMobile';
 
 export default function TimelineMain({ 
@@ -40,9 +41,7 @@ export default function TimelineMain({
     sessionStorage.getItem('is_guest_session') === 'true' ||
     currentUser?.isAnonymous === true
   );
-  const isLeader = isGuestUser
-    ? (currentUser ? currentUser.is_leader === true : sessionStorage.getItem('nurseflow_guest_role') === 'leader')
-    : Boolean(currentUser?.is_leader);
+  const isLeader = checkIsLeader(currentUser);
   const leaderTeam = currentUser?.team || 'Aチーム';
 
   // 💡 有効な選択患者リスト（props または ストアから算出）
@@ -96,6 +95,10 @@ export default function TimelineMain({
     }
 
     if (isLeader) {
+      // 🛡️ チームの不一致チェック（他チームのタスクはタスクプールからも完全排除）
+      if (!isTaskInLeaderTeam(task, leaderTeam, nurseMaster)) {
+        return false;
+      }
       const isHighPriority = task.priority === 'high';
       if (!isHighPriority && !showLowPriority && task.priority === 'low') {
         return false;

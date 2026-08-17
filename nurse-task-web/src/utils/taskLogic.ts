@@ -39,6 +39,48 @@ export const normalizeTeamName = (teamName?: string): string => {
   return match ? match[1] : cleaned;
 };
 
+/**
+ * リーダーのチーム（leaderTeam）とタスクのチームが一致しているかを判定する
+ */
+export const isTaskInLeaderTeam = (
+  task: ExtendedTask, 
+  leaderTeam?: string, 
+  nurseMaster: any[] = []
+): boolean => {
+  if (!leaderTeam) return true;
+  const normalizedLeaderTeam = normalizeTeamName(leaderTeam);
+  if (!normalizedLeaderTeam) return true;
+
+  // 1. タスク自体のチーム属性チェック
+  const normalizedTaskTeam = normalizeTeamName(task.team);
+  if (normalizedTaskTeam !== '' && normalizedTaskTeam !== normalizedLeaderTeam) {
+    return false;
+  }
+
+  // 2. 担当看護師のマスタチーム属性チェック
+  const tNurseName = (task.nurse_name || '').replace(/[\s　]+/g, '');
+  const tNurseId = (task.nurse_id || task.staff_id || task.assigned_nurse_id || '').trim();
+  if ((tNurseName || tNurseId) && nurseMaster.length > 0) {
+    const assignedNurse = nurseMaster.find(n => {
+      const nName = (n.name || '').replace(/[\s　]+/g, '');
+      const nId = (n.nurse_id || '').trim();
+      return (
+        (nId !== '' && (nId === tNurseId || nId === tNurseName)) ||
+        (nName !== '' && (nName === tNurseName || nName === tNurseId || tNurseName.includes(nName) || nName.includes(tNurseName)))
+      );
+    });
+
+    if (assignedNurse && assignedNurse.team) {
+      const normalizedNurseTeam = normalizeTeamName(assignedNurse.team);
+      if (normalizedNurseTeam !== '' && normalizedNurseTeam !== normalizedLeaderTeam) {
+        return false;
+      }
+    }
+  }
+
+  return true;
+};
+
 export const handleCardClick = (task: ExtendedTask) => {
   if (task.priority === 'high') {
     alert("このタスクは重要度が高いため、グループ化できません");

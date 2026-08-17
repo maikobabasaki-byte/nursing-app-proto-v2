@@ -12,6 +12,7 @@ import Header from '../components/Header';
 import Footer from '../components/Footer';
 import MainLayout from "../components/MainLayout";
 import { startTutorialByPath } from '../components/Tutorial/tutorial';
+import { resolveNurseProfile } from '../utils/userUtils';
 
 // 🚀 コードスプリッティング（遅延ローディング）の設定
 const Login = lazy(() => import('./Login'));
@@ -130,27 +131,20 @@ export default function App() {
           try {
             const q = query(collection(db, 'nurse_master'), where('email', '==', currentUser.email));
             const querySnapshot = await getDocs(q);
+            let rawData: any = undefined;
+            let matchedId = id;
             if (!querySnapshot.empty) {
               const matchedDoc = querySnapshot.docs[0];
-              const data = matchedDoc.data();
-              const profile = {
-                nurse_id: matchedDoc.id,
-                name: data.name || id,
-                email: currentUser.email,
-                team: data.team || '',
-                is_leader: Boolean(data.is_leader),
-              };
-              useTimelineStore.getState().setCurrentUser(profile);
-            } else {
-              const fallbackProfile = {
-                nurse_id: id,
-                name: id,
-                email: currentUser.email,
-              };
-              useTimelineStore.getState().setCurrentUser(fallbackProfile);
+              rawData = matchedDoc.data();
+              matchedId = matchedDoc.id;
             }
+            // 🎯 resolveNurseProfile 共通ヘルパーにより、ユーザー名を日本語表示名に自動変換 ＆ リーダー権限を判定
+            const profile = resolveNurseProfile(matchedId, currentUser.email, rawData);
+            useTimelineStore.getState().setCurrentUser(profile);
           } catch (e) {
             console.error("Auth nurse_master クエリ設定エラー:", e);
+            const fallbackProfile = resolveNurseProfile(id, currentUser.email);
+            useTimelineStore.getState().setCurrentUser(fallbackProfile);
           }
         }
 

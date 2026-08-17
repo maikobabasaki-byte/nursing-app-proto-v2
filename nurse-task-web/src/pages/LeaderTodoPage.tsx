@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useTimelineStore } from '../stores/useTimelineStore';
+import { checkIsLeader } from '../utils/userUtils';
 import type { LeaderTodo, LeaderTodoPriority } from '../types/types';
 import { LeaderTodoModal } from '../components/LeaderTodoPage/LeaderTodoModal';
 import { LeaderTodoResultModal } from '../components/LeaderTodoPage/LeaderTodoResultModal';
@@ -189,8 +190,10 @@ export const LeaderTodoPage: React.FC = () => {
     }
   };
 
+  const isLeader = checkIsLeader(currentUser);
+
   // 💡 非リーダー権限ユーザーに対するアクセス制限制御
-  if (currentUser && !currentUser.is_leader) {
+  if (!isLeader) {
     return (
       <div className="flex-1 bg-gray-100 flex flex-col items-center justify-center p-8">
         <div className="bg-white border border-gray-200 rounded-2xl p-8 shadow-xl max-w-md text-center animate-fade-in">

@@ -41,18 +41,24 @@ export const MemoCell = ({ memo, isSortMode, isOverlay }: MemoCellProps) => {
     }
   };
 
+  const isCompleted = Boolean(memo.is_completed);
+
   return (
     <div 
       ref={setNodeRef}
       style={{ touchAction: 'none' }}
       {...(isCardDrag ? listeners : {})}
       {...(isCardDrag ? attributes : {})}
-      className={`w-full text-[12px] bg-yellow-100 p-1.5 rounded shadow-sm border border-yellow-300 mb-1 flex items-start gap-1 select-none ${
+      className={`w-full text-[12px] p-1.5 rounded shadow-sm border mb-1 flex items-start gap-1 select-none transition-all ${
+        isCompleted
+          ? 'bg-emerald-50/90 border-emerald-300/80'
+          : 'bg-yellow-100 border-yellow-300'
+      } ${
         isDragging
           ? 'opacity-0 pointer-events-none shadow-none'
           : isCardDrag 
             ? 'touch-none cursor-grab active:cursor-grabbing border-amber-400 ring-2 ring-amber-300 shadow-md' 
-            : 'hover:bg-yellow-200'
+            : isCompleted ? 'hover:bg-emerald-100' : 'hover:bg-yellow-200'
       }`}
     >
       {!isCardDrag && (
@@ -62,7 +68,9 @@ export const MemoCell = ({ memo, isSortMode, isOverlay }: MemoCellProps) => {
           onPointerDown={handlePointerDown}
           onPointerMove={handlePointerMove}
           onPointerUp={handlePointerUp}
-          className="hidden md:block cursor-grab active:cursor-grabbing text-yellow-500 font-bold px-0.5 text-xs select-none"
+          className={`hidden md:block cursor-grab active:cursor-grabbing font-bold px-0.5 text-xs select-none ${
+            isCompleted ? 'text-emerald-500' : 'text-yellow-500'
+          }`}
         >
           ⠿
         </div>
@@ -80,13 +88,26 @@ export const MemoCell = ({ memo, isSortMode, isOverlay }: MemoCellProps) => {
           setEditingMemo(memo);
         }}
       >
-        <div className="font-bold border-b border-yellow-300/60 mb-0.5">{memo.time}</div>
+        <div className={`font-bold border-b mb-0.5 flex items-center justify-between gap-1 ${
+          isCompleted ? 'border-emerald-200 text-emerald-900' : 'border-yellow-300/60 text-gray-900'
+        }`}>
+          <span>{memo.time}</span>
+          {isCompleted && (
+            <span className="text-[10px] bg-emerald-600 text-white font-extrabold px-1.5 py-0.2 rounded-full flex items-center gap-0.5 shrink-0 shadow-xs">
+              ✓ 完了
+            </span>
+          )}
+        </div>
         {formattedDate && (
-          <div className="text-[11px] text-gray-600 mb-0.5">
+          <div className={`text-[11px] mb-0.5 ${isCompleted ? 'text-emerald-700' : 'text-gray-600'}`}>
             実施予定：{formattedDate}
           </div>
         )}
-        <div className="truncate font-medium text-gray-800">{memo.text}</div>
+        <div className={`truncate font-medium ${
+          isCompleted ? 'line-through text-gray-400 font-normal' : 'text-gray-800'
+        }`}>
+          {memo.text}
+        </div>
       </div>
     </div>
   );

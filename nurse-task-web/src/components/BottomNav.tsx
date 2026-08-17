@@ -1,4 +1,5 @@
 import { useTimelineStore } from '../stores/useTimelineStore';
+import { checkIsLeader } from '../utils/userUtils';
 import { useTheme, type AppTheme } from '../hooks/useTheme';
 
 interface BottomNavProps {
@@ -43,13 +44,7 @@ const INACTIVE_NAV_ICONS: Record<AppTheme, Record<string, string>> = {
 export default function BottomNav({ currentScreen, onNavigate }: BottomNavProps) {
   const { theme, currentConfig } = useTheme();
   const currentUser = useTimelineStore((state) => state.currentUser);
-  const isGuestUser = Boolean(
-    sessionStorage.getItem('is_guest_session') === 'true' ||
-    currentUser?.isAnonymous === true
-  );
-  const isLeader = isGuestUser
-    ? (currentUser ? currentUser.is_leader === true : sessionStorage.getItem('nurseflow_guest_role') === 'leader')
-    : Boolean(currentUser?.is_leader);
+  const isLeader = checkIsLeader(currentUser);
 
   const isMasterActive = currentScreen === 'patientMaster' || currentScreen === 'patientSelect';
   const inactiveIcons = INACTIVE_NAV_ICONS[theme] || INACTIVE_NAV_ICONS.vital;
