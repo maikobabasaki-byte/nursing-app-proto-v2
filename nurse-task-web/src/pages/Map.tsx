@@ -51,9 +51,26 @@ const LeftPanel: React.FC<{ sosTasks: any[]; sosNurses: NursePin[]; patientSosLi
             <div style={{ fontSize: '12px', fontWeight: 'bold', color: '#333', marginBottom: '4px' }}>
               対象: {p.patient_name} 様
             </div>
-            <div style={{ fontSize: '11px', color: '#666', backgroundColor: '#fff5f5', padding: '6px', borderRadius: '4px', lineHeight: '1.4' }}>
+            <div style={{ fontSize: '11px', color: '#666', backgroundColor: '#fff5f5', padding: '6px', borderRadius: '4px', lineHeight: '1.4', marginBottom: '8px' }}>
               ⚠️ {p.reason}
             </div>
+            <button
+              type="button"
+              onClick={async () => {
+                const { triggerNurseCallInterruption } = await import('../hooks/useTaskUpdate');
+                await triggerNurseCallInterruption({
+                  patientId: p.patient_id,
+                  patientName: p.patient_name,
+                  roomId: p.room_id || '病室',
+                  title: `🚨 患者SOS緊急対応 (${p.patient_name}様)`,
+                  sosReason: p.reason || `${p.patient_name}様への緊急応援要請`,
+                });
+                useTimelineStore.getState().respondToPatientSos(p.patient_id, '自分');
+              }}
+              className="w-full !bg-red-600 hover:!bg-red-700 !text-white !font-bold !text-xs !py-1.5 !px-2 !rounded-md !shadow-xs !cursor-pointer flex items-center justify-center gap-1"
+            >
+              <span>🤝 要請に応じる</span>
+            </button>
           </div>
         ))}
 
@@ -67,9 +84,24 @@ const LeftPanel: React.FC<{ sosTasks: any[]; sosNurses: NursePin[]; patientSosLi
             <div style={{ fontSize: '12px', fontWeight: 'bold', color: '#333', marginBottom: '4px' }}>
               対象: {nurse.name} さん
             </div>
-            <div style={{ fontSize: '11px', color: '#666', backgroundColor: '#fff5f5', padding: '6px', borderRadius: '4px', lineHeight: '1.4' }}>
+            <div style={{ fontSize: '11px', color: '#666', backgroundColor: '#fff5f5', padding: '6px', borderRadius: '4px', lineHeight: '1.4', marginBottom: '8px' }}>
               ⚠️ {nurse.sos_reason || `${nurse.name}さんが緊急応援を要請しています`}
             </div>
+            <button
+              type="button"
+              onClick={async () => {
+                const { triggerNurseCallInterruption } = await import('../hooks/useTaskUpdate');
+                await triggerNurseCallInterruption({
+                  title: `🚨 看護師SOS緊急対応 (${nurse.name}の応援)`,
+                  patientName: nurse.name ? `${nurse.name}の応援` : '緊急SOS対応',
+                  sosReason: nurse.sos_reason || `${nurse.name}さんからの緊急アシスト要請`,
+                });
+                useTimelineStore.getState().respondToNurseSos(nurse.nurse_id, '自分');
+              }}
+              className="w-full !bg-red-600 hover:!bg-red-700 !text-white !font-bold !text-xs !py-1.5 !px-2 !rounded-md !shadow-xs !cursor-pointer flex items-center justify-center gap-1"
+            >
+              <span>🤝 要請に応じる</span>
+            </button>
           </div>
         ))}
 
@@ -82,9 +114,26 @@ const LeftPanel: React.FC<{ sosTasks: any[]; sosNurses: NursePin[]; patientSosLi
             <div style={{ fontSize: '12px', fontWeight: 'bold', color: '#333', marginBottom: '4px' }}>
               対象: {task.title}
             </div>
-            <div style={{ fontSize: '11px', color: '#666', backgroundColor: '#f5f5f5', padding: '6px', borderRadius: '4px', lineHeight: '1.4' }}>
+            <div style={{ fontSize: '11px', color: '#666', backgroundColor: '#f5f5f5', padding: '6px', borderRadius: '4px', lineHeight: '1.4', marginBottom: '8px' }}>
               ⚠️ {task.sos_reason}
             </div>
+            <button
+              type="button"
+              onClick={async () => {
+                const { triggerNurseCallInterruption } = await import('../hooks/useTaskUpdate');
+                await triggerNurseCallInterruption({
+                  patientId: task.patient_id,
+                  patientName: task.patient_name || '患者',
+                  roomId: task.room_id,
+                  title: `🚨 タスクSOS支援対応 (${task.patient_name ? `${task.patient_name}様` : '要請'})`,
+                  sosReason: task.sos_reason ? `タスク「${task.title}」への緊急支援要請` : 'タスク支援要請への応援対応',
+                });
+                useTimelineStore.getState().respondToTaskSos(task.task_id, '自分');
+              }}
+              className="w-full !bg-red-600 hover:!bg-red-700 !text-white !font-bold !text-xs !py-1.5 !px-2 !rounded-md !shadow-xs !cursor-pointer flex items-center justify-center gap-1"
+            >
+              <span>🤝 要請に応じる</span>
+            </button>
           </div>
         ))}
       </div>
@@ -157,12 +206,16 @@ export default function MapContainer({ selectedPatients }: MapContainerProps): R
 
   const displayNurses = useMemo(() => {
     const currentUserId = currentUser?.nurse_id || auth.currentUser?.uid;
+    const isGuestSession = Boolean(
+      sessionStorage.getItem('is_guest_session') === 'true' ||
+      currentUser?.isAnonymous === true
+    );
     const seenKeys = new Set<string>();
     return nurses.filter((nurse) => {
       if (nurse.is_logged_in === false) {
         return false;
       }
-      // 💡 自分以外のゲストユーザーをマップ表示から除外
+      // 💡 自分以外の別モードユーザーをマップ表示から完全排除
       const isSelf = nurse.nurse_id === currentUserId;
       const isGuestNurse = Boolean(
         nurse.nurse_id?.includes('guest') ||
@@ -171,8 +224,10 @@ export default function MapContainer({ selectedPatients }: MapContainerProps): R
         (nurse.name && nurse.name.includes('ゲスト')) ||
         (nurse.role && nurse.role.includes('ゲスト'))
       );
-      if (!isSelf && isGuestNurse) {
-        return false;
+      if (!isGuestSession) {
+        if (isGuestNurse) return false;
+      } else {
+        if (!isSelf && !isGuestNurse) return false;
       }
       const key = nurse.nurse_id || nurse.name.replace(/[\s　]+/g, '');
       if (seenKeys.has(key)) {
@@ -341,9 +396,35 @@ export default function MapContainer({ selectedPatients }: MapContainerProps): R
     );
   }
 
-  const sosTasks = allTasks.filter(task => task.is_sos === true);
-  const sosNurses = displayNurses.filter(nurse => nurse.is_sos === true);
-  const totalSosCount = sosTasks.length + sosNurses.length + patientSosList.length;
+  const isGuestSession = Boolean(
+    sessionStorage.getItem('is_guest_session') === 'true' ||
+    currentUser?.isAnonymous === true
+  );
+
+  const checkIsGuestSourceMap = (id?: string, name?: string): boolean => {
+    const sId = String(id || '').trim().toLowerCase();
+    const sName = String(name || '').trim();
+    return sId.includes('guest') || sId.startsWith('g-') || sId.startsWith('demo-') || sName.includes('ゲスト');
+  };
+
+  const sosTasks = allTasks.filter((task) => {
+    const isSosActive = task.is_sos === true || Boolean((task as any).sos_reason);
+    if (!isSosActive) return false;
+    const isTaskGuest = checkIsGuestSourceMap(
+      task.task_id || task.requested_by_id || task.nurse_id,
+      task.requested_by_name || task.nurse_name
+    ) || task.is_guest === true;
+    return isGuestSession === isTaskGuest;
+  });
+
+  const sosNurses = displayNurses.filter((nurse) => nurse.is_sos === true);
+
+  const filteredPatientSosList = patientSosList.filter((p) => {
+    const isPatientGuest = checkIsGuestSourceMap(p.patient_id || p.requested_by_id, p.requested_by_name) || (p as any).is_guest === true;
+    return isGuestSession === isPatientGuest;
+  });
+
+  const totalSosCount = sosTasks.length + sosNurses.length + filteredPatientSosList.length;
 
   return (
     <DndContext sensors={sensors} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
@@ -420,7 +501,7 @@ export default function MapContainer({ selectedPatients }: MapContainerProps): R
 
           {activeTab === 'alerts' && (
             <div className="w-full h-full overflow-y-auto">
-              <LeftPanel sosTasks={sosTasks} sosNurses={sosNurses} patientSosList={patientSosList} isFullWidth={true} />
+              <LeftPanel sosTasks={sosTasks} sosNurses={sosNurses} patientSosList={filteredPatientSosList} isFullWidth={true} />
             </div>
           )}
 
@@ -434,7 +515,7 @@ export default function MapContainer({ selectedPatients }: MapContainerProps): R
         {/* 💻 PC幅（lg以上）従来通りの三分割同時表示レイアウト（マップは0度表示） */}
         <div className="hidden lg:flex w-full h-full overflow-hidden relative">
           {/* ① 左側：緊急アラート */}
-          <LeftPanel sosTasks={sosTasks} sosNurses={sosNurses} patientSosList={patientSosList} />
+          <LeftPanel sosTasks={sosTasks} sosNurses={sosNurses} patientSosList={filteredPatientSosList} />
           
           {/* ② 中央：病棟マップ（0度・回転なし表示） */}
           <div id="tour-map-canvas" className="flex-1 h-full flex justify-center items-center overflow-hidden relative">

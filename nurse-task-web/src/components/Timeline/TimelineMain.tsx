@@ -61,10 +61,9 @@ export default function TimelineMain({
   };
 
   const isTaskForSelectedPatient = (task: ExtendedTask) => {
-    // 📅 過去日付のナースコール対応・割り込みタスクが本日の画面に混入するのを防ぐ日付チェック
-    const taskDate = task.target_date;
+    // 📅 過去日付のナースコール割り込みタスクのみ異日付を除外
     const currentTargetDate = storeSelectedDate || getJSTDateString();
-    if (taskDate && taskDate !== currentTargetDate) {
+    if (task.task_id?.startsWith('CALL_INTERRUPT_') && task.target_date && task.target_date !== currentTargetDate) {
       return false;
     }
 
@@ -92,7 +91,7 @@ export default function TimelineMain({
     }
 
     if (isGuestUser) {
-      const isGuestTask = task.task_id?.startsWith('GUEST-') || task.nurse_id === currentUser?.nurse_id || task.assigned_nurse_id === currentUser?.nurse_id;
+      const isGuestTask = task.task_id?.startsWith('GUEST-') || (task as any).is_guest === true || task.nurse_id === currentUser?.nurse_id || task.assigned_nurse_id === currentUser?.nurse_id;
       if (!isGuestTask) return false;
 
       if (!isLeader) {
@@ -100,6 +99,10 @@ export default function TimelineMain({
         const is202or203 = room === '202' || room === '203' || room.includes('202') || room.includes('203');
         const isSelected = effectiveSelectedPatients && effectiveSelectedPatients.length > 0 ? effectiveSelectedPatients.includes(task.patient_id) : false;
         if (!is202or203 && !isSelected) return false;
+      }
+    } else {
+      if (task.task_id?.startsWith('GUEST-') || (task as any).is_guest === true) {
+        return false;
       }
     }
 
@@ -123,16 +126,15 @@ export default function TimelineMain({
       return false;
     }
 
-    // 📅 過去日付のナースコール対応・割り込みタスクが本日のタイムラインに混入するのを防ぐ日付チェック
-    const taskDate = task.target_date;
+    // 📅 過去日付のナースコール割り込みタスクのみ異日付を除外
     const currentTargetDate = storeSelectedDate || getJSTDateString();
-    if (taskDate && taskDate !== currentTargetDate) {
+    if (task.task_id?.startsWith('CALL_INTERRUPT_') && task.target_date && task.target_date !== currentTargetDate) {
       return false;
     }
 
-    // 🛡️ ゲストログイン時の全件一瞬ちらつき（Flicker）を完全防止
+    // 🛡️ ゲストログイン時の全件一瞬ちらつき（Flicker）および通常・ゲスト混在を完全防止
     if (isGuestUser) {
-      const isGuestTask = task.task_id?.startsWith('GUEST-') || task.nurse_id === currentUser?.nurse_id || task.assigned_nurse_id === currentUser?.nurse_id;
+      const isGuestTask = task.task_id?.startsWith('GUEST-') || (task as any).is_guest === true || task.nurse_id === currentUser?.nurse_id || task.assigned_nurse_id === currentUser?.nurse_id;
       if (!isGuestTask) {
         return false;
       }
@@ -151,6 +153,10 @@ export default function TimelineMain({
         if (!is202or203 && !isSelected && !isInterrupt) {
           return false;
         }
+      }
+    } else {
+      if (task.task_id?.startsWith('GUEST-') || (task as any).is_guest === true) {
+        return false;
       }
     }
 
@@ -203,13 +209,20 @@ export default function TimelineMain({
     return isTaskForSelectedPatient(task);
   });
 
-  // 🛡️ 二重表示・重複の完全防止デデュープ
+  // 🛡️ 二重表示・重複の完全防止デデュープ（実施・進捗状態の最新タスクを優先採用）
   const deduplicatedExtendedTasks = useMemo(() => {
     const map = new Map<string, ExtendedTask>();
     extendedTasks.forEach((t: ExtendedTask) => {
       const key = `${t.patient_id}_${t.title}_${t.display_period}`;
-      if (!map.has(key)) {
+      const existing = map.get(key);
+      if (!existing) {
         map.set(key, t);
+      } else {
+        const isExistingUntouched = existing.status === 'untouched' || existing.status === 'initial';
+        const isNewExecuted = t.status !== 'untouched' && t.status !== 'initial';
+        if (isExistingUntouched && isNewExecuted) {
+          map.set(key, t);
+        }
       }
     });
     return Array.from(map.values());
@@ -691,8 +704,8 @@ export default function TimelineMain({
                 const messages: Record<string, string> = {
                   progressing: '実施を開始しました（前タスクは自動で中断・保留へ移動）',
                   pending: '中断・保留しました',
-                  completed: '実施を完了しました',
-                  record_start: '記録を開始しました',
+                  completed: '実施を完了しました（記録なし）',
+                  record_start: '実施完了・記録を開始しました',
                   record_pending: '記録を一時中断しました',
                   record_complete: '記録を完了しました',
                   unexecuted: '未実施に設定しました',
@@ -710,9 +723,20 @@ export default function TimelineMain({
                 });
                 
                 handleUpdateStatus(t.task_id, s);
-                const firestoreUpdate: { status: typeof s; unexecuted_reason?: string; nurse_name?: string } = { 
+                const nowJST = getJSTDateString() + 'T' + new Date().toTimeString().slice(0, 8);
+                const firestoreUpdate: { 
+                  status: typeof s; 
+                  unexecuted_reason?: string; 
+                  nurse_name?: string;
+                  completed_at?: string;
+                  completed_by?: string;
+                } = { 
                   status: s,
-                  nurse_name: userName 
+                  nurse_name: userName,
+                  ...(s === 'completed' || s === 'record_start' || s === 'record_complete' ? {
+                    completed_at: nowJST,
+                    completed_by: userName || currentUser?.name || '看護師',
+                  } : {})
                 };
                 if (t.status === 'unexecuted') {
                   firestoreUpdate.unexecuted_reason = '';

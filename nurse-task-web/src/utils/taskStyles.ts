@@ -1,8 +1,8 @@
 import type{ ExtendedTask } from '../types/types';
 
 export const getTaskStyles = (task: ExtendedTask, isPastTime: (period: string) => boolean) => {
-  const isRecordDone = task.status === 'record_complete';
-  const isActionRequiredDone = ['completed', 'record_start', 'record_pending'].includes(task.status);
+  const isRecordDone = task.status === 'record_complete' || task.status === 'completed';
+  const isActionRequiredDone = ['record_start', 'record_pending'].includes(task.status);
 
   let cardColorClass = '';
 

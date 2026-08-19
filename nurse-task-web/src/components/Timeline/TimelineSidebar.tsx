@@ -45,9 +45,14 @@ export default function TimelineSidebar({
         const isSelected = selectedPatients && selectedPatients.length > 0 ? selectedPatients.includes(task.patient_id) : false;
         if (!is202or203 && !isSelected) return false;
       }
-    } else if (!isLeader) {
-      if (selectedPatients && selectedPatients.length > 0) {
-        if (!selectedPatients.includes(task.patient_id)) return false;
+    } else {
+      if (task.task_id?.startsWith('GUEST-') || (task as any).is_guest === true) {
+        return false;
+      }
+      if (!isLeader) {
+        if (selectedPatients && selectedPatients.length > 0) {
+          if (!selectedPatients.includes(task.patient_id)) return false;
+        }
       }
     }
 

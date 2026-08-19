@@ -31,6 +31,61 @@ export const TimelinePopup: React.FC<TimelinePopupProps> = ({ task, onClose, ren
   const [isDuplicating, setIsDuplicating] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [patientsList, setPatientsList] = useState<any[]>([]);
+  const [recordNote, setRecordNote] = useState(task.details || '');
+  const [isSavingRecordNote, setIsSavingRecordNote] = useState(false);
+
+  React.useEffect(() => {
+    setRecordNote(task.details || '');
+  }, [task.task_id, task.details]);
+
+  const handleExecuteCompleteWithOption = async () => {
+    setIsSavingRecordNote(true);
+    try {
+      const { updateTask } = await import('../../hooks/useTaskUpdate');
+      const { getJSTDateString } = await import('../../utils/dateUtils');
+      const currentUser = useTimelineStore.getState().currentUser;
+      const userName = currentUser?.name || sessionStorage.getItem('nurse_name') || '看護師';
+      const nurseId = currentUser?.nurse_id || currentUser?.staff_id || sessionStorage.getItem('nurse_id') || '';
+      const completedByInfo = nurseId ? `${userName} (${nurseId})` : userName;
+      const nowStr = getJSTDateString() + 'T' + new Date().toTimeString().slice(0, 8);
+
+      const targetStatus: ExtendedTaskStatus = !recordNote.trim() ? 'completed' : 'record_complete';
+      const finalDetails = recordNote.trim();
+
+      const store = useTimelineStore.getState();
+      store.handleUpdateStatus(task.task_id, targetStatus);
+      
+      const updatedTasks = store.allTasks.map((t) => {
+        if (t.task_id === task.task_id) {
+          return {
+            ...t,
+            status: targetStatus,
+            details: finalDetails,
+            completed_at: nowStr,
+            completed_by: completedByInfo,
+            nurse_name: userName,
+          };
+        }
+        return t;
+      });
+      store.setTasks(updatedTasks);
+
+      await updateTask(task.task_id, {
+        status: targetStatus,
+        details: finalDetails,
+        completed_at: nowStr,
+        completed_by: completedByInfo,
+        nurse_name: userName,
+      });
+
+      onClose();
+    } catch (e) {
+      console.error("タスク完了処理に失敗しました:", e);
+      alert("タスク完了処理に失敗しました。");
+    } finally {
+      setIsSavingRecordNote(false);
+    }
+  };
 
   React.useEffect(() => {
     const fetchPatients = async () => {
@@ -66,14 +121,14 @@ export const TimelinePopup: React.FC<TimelinePopupProps> = ({ task, onClose, ren
 
     // 2. Firestore を非同期更新
     try {
-      const { doc, updateDoc } = await import('firebase/firestore');
+      const { doc, setDoc } = await import('firebase/firestore');
       const { db } = await import('../../lib/firebase');
       const taskRef = doc(db, 'tasks', task.task_id);
-      await updateDoc(taskRef, {
+      await setDoc(taskRef, {
         patient_id: patientId,
         patient_name: patientName,
         room_id: roomId,
-      });
+      }, { merge: true });
     } catch (e) {
       console.error("患者割り当て更新エラー:", e);
     }
@@ -244,6 +299,49 @@ export const TimelinePopup: React.FC<TimelinePopupProps> = ({ task, onClose, ren
             <div className="bg-red-100 border border-red-300 text-red-800 text-xs rounded-lg p-2.5 mb-4 text-left font-bold">
               <div className="text-[10px] opacity-70 mb-0.5">⚠️ 未実施理由</div>
               <div>{task.unexecuted_reason}</div>
+            </div>
+          )}
+
+          {/* 📝 実施完了後の記録入力フォーム (SOAP / 特記事項) */}
+          {(currentStatus === 'record_start' || currentStatus === 'record_pending' || currentStatus === 'record_complete') && (
+            <div className="bg-sky-50/90 border-2 border-sky-300 rounded-xl p-3 mb-3.5 text-left shadow-xs flex flex-col gap-2 animate-fade-in">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-black text-sky-900 flex items-center gap-1">
+                  <span>📝 実施完了後の記録・SOAP入力</span>
+                </span>
+                <span className="text-[10px] bg-sky-200 text-sky-900 font-extrabold px-2 py-0.5 rounded-full">
+                  {currentStatus === 'record_complete' ? '記録完了済み' : '記録入力中'}
+                </span>
+              </div>
+              <textarea
+                value={recordNote}
+                onChange={(e) => setRecordNote(e.target.value)}
+                placeholder="SOAPや実施後の患者状態・特記事項を入力してください（例: S: 呼吸苦軽減 / O: SpO2 97% / A: 処置完了 / P: 経過観察）"
+                rows={3}
+                className="w-full bg-white border border-sky-300 rounded-lg p-2 text-xs font-medium text-slate-800 focus:ring-2 focus:ring-sky-400 focus:outline-none resize-none shadow-inner"
+              />
+              <div className="flex justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={handleExecuteCompleteWithOption}
+                  disabled={isSavingRecordNote}
+                  className="!py-1.5 !px-3.5 !bg-purple-600 hover:!bg-purple-700 !text-white !font-bold !text-xs !rounded-lg !shadow-xs cursor-pointer transition-all disabled:opacity-50 border-none flex items-center gap-1 active:scale-98"
+                >
+                  <span>{isSavingRecordNote ? '保存中...' : '💾 記録を保存して完了'}</span>
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* 既に記録なしで完了済みの場合の表示 */}
+          {currentStatus === 'completed' && (
+            <div className="bg-emerald-50/90 border border-emerald-300 rounded-xl p-3 mb-3.5 text-left shadow-xs flex flex-col gap-1">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-black text-emerald-900">実施完了（記録なし）</span>
+                <span className="text-[10px] bg-emerald-200 text-emerald-900 font-bold px-2 py-0.5 rounded-full">
+                  {task.completed_by ? `対応: ${task.completed_by}` : '完了'}
+                </span>
+              </div>
             </div>
           )}
 

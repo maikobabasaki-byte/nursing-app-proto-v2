@@ -6,9 +6,10 @@ import {
   initializeFirestore,
   persistentLocalCache,
   persistentMultipleTabManager,
+  setLogLevel,
   doc, 
-  updateDoc, 
   setDoc, 
+  getDoc,
   deleteDoc,
   runTransaction, 
   collection, 
@@ -16,6 +17,9 @@ import {
   arrayUnion
 } from "firebase/firestore"; 
 import type { TaskStatus, LeaderTodo } from '../types/types';
+
+// 💡 複数タブ起動時のプライマリーリース取得情報ログ（Failed to obtain primary lease）を抑制
+setLogLevel('error');
 
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,                                                                                                                                                  
@@ -70,7 +74,7 @@ export const updateTask = async (
       ...data // status や time があれば追加される
     };
 
-    await updateDoc(taskRef, updatePayload);
+    await setDoc(taskRef, updatePayload, { merge: true });
   } catch (error) {
     console.error("タスクの更新に失敗しました:", error);
   }
@@ -152,6 +156,70 @@ export const updateNurseAssignedPatients = async (
     );
   } catch (error) {
     console.error("看護師の受け持ち患者更新に失敗しました:", error);
+  }
+};
+
+/**
+ * 💡 ユーザーログイン時に nurses コレクションへ自身のドキュメントを Upsert（更新または挿入）する関数。
+ * すでに自分の nurse_id のドキュメントが存在する場合は位置情報(x_percent, y_percent)等を維持してログイン状態のみ更新、
+ * 存在しない場合のみ新規作成（setDoc + merge: true）します。
+ */
+export const upsertNurseOnLogin = async (userProfile: {
+  nurse_id: string;
+  name: string;
+  email?: string;
+  role?: string;
+  team?: string;
+  is_leader?: boolean;
+}) => {
+  const nurseId = String(userProfile.nurse_id || '').trim();
+  if (!nurseId) return;
+
+  try {
+    const nurseRef = doc(db, 'nurses', nurseId);
+    const nurseSnap = await getDoc(nurseRef);
+
+    if (nurseSnap.exists()) {
+      // 既存ドキュメントが存在する場合：位置情報(x_percent, y_percent)は維持し、ログイン状態と更新日時のみ同期更新
+      await setDoc(
+        nurseRef,
+        {
+          nurse_id: nurseId,
+          name: userProfile.name,
+          email: userProfile.email || '',
+          is_logged_in: true,
+          updatedAt: serverTimestamp(),
+          ...(userProfile.team ? { team: userProfile.team } : {}),
+          ...(userProfile.is_leader !== undefined ? { is_leader: userProfile.is_leader } : {}),
+        },
+        { merge: true }
+      );
+      console.log(`✅ [NurseUpsert] 既存のナースピン(${nurseId})の位置情報を維持し、ログイン状態を更新しました`);
+    } else {
+      // ドキュメントが存在しない場合：デフォルト初期位置とともに新規作成
+      await setDoc(
+        nurseRef,
+        {
+          nurse_id: nurseId,
+          name: userProfile.name,
+          email: userProfile.email || '',
+          role: userProfile.is_leader ? '日勤リーダー' : '日勤メンバー',
+          is_leader: Boolean(userProfile.is_leader),
+          color: userProfile.is_leader ? '#4F46E5' : '#059669',
+          team: userProfile.team || 'Aチーム',
+          assigned_patients: [],
+          is_logged_in: true,
+          is_sos: false,
+          x_percent: 48.0,
+          y_percent: 45.0,
+          updatedAt: serverTimestamp(),
+        },
+        { merge: true }
+      );
+      console.log(`✨ [NurseUpsert] ナースピン(${nurseId})を新規作成しました`);
+    }
+  } catch (error) {
+    console.error("ナースログイン時のUpsert処理エラー:", error);
   }
 };
 

@@ -26,6 +26,7 @@ export interface Task {
   scheduled_at: string;
   scheduled_time?: string;
   completed_at?: string;
+  completed_by?: string;
   patient_id: string;
   room_id: string;
   patient_name: string;
@@ -39,6 +40,7 @@ export interface Task {
 
   is_sos?: boolean; 
   sos_reason?: string;
+  is_guest?: boolean;
   requested_by_id?: string;
   requested_by_name?: string;
   responder_name?: string;
@@ -69,6 +71,7 @@ export interface TaskDocument {
   scheduled_at: string;
   scheduled_time?: string;
   completed_at?: string;
+  completed_by?: string;
   patient_id: string;
   room_id: string;
   patient_name: string;
@@ -82,6 +85,7 @@ export interface TaskDocument {
   parent_id?: string | null;
   is_sos?: boolean; 
   sos_reason?: string;
+  is_guest?: boolean;
   requested_by_id?: string;
   requested_by_name?: string;
   unexecuted_reason?: string;

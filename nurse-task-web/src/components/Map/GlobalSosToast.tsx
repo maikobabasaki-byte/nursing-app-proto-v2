@@ -35,7 +35,8 @@ export const GlobalSosToast: React.FC = () => {
     const sEmail = String(email || '').trim().toLowerCase();
     return (
       sId.includes('guest') ||
-      sId.startsWith('g-') ||
+      sId.startsWith('guest-') ||
+      sId.startsWith('guest_') ||
       sId.startsWith('demo-') ||
       sEmail.includes('guest') ||
       sName.includes('ゲスト')
@@ -111,26 +112,39 @@ export const GlobalSosToast: React.FC = () => {
 
   // 💡 FirestoreのSOS状態クリア（is_sos === false）を検知して dismissedIds を自動クリーンアップ
   useEffect(() => {
-    const activeNurseSosIds = new Set(nurses.filter((n) => n.is_sos).map((n) => String(n.nurse_id)));
-    const activeTaskSosIds = new Set(flattenTasks(allTasks).filter((t) => t.is_sos).map((t) => String(t.task_id)));
+    const activeNurseSosIds = new Set(nurses.filter((n) => n.is_sos).map((n) => `nurse-${n.nurse_id}`));
+    const activeTaskSosIds = new Set(flattenTasks(allTasks).filter((t) => t.is_sos || (t as any).sos_reason).map((t) => `task-${t.task_id}`));
+    const activePatientSosIds = new Set(patientSosList.flatMap((p) => [`patient-${p.patient_id}`, String(p.patient_id)]));
+    const activeMemoIds = new Set(storeMemos.filter((m) => !m.is_completed).map((m) => `memo-${m.id}`));
 
-    setDismissedIds((prev) => prev.filter((id) => activeNurseSosIds.has(id) || activeTaskSosIds.has(id)));
-  }, [nurses, allTasks]);
+    setDismissedIds((prev) => prev.filter((id) => 
+      activeNurseSosIds.has(id) || 
+      activeTaskSosIds.has(id) ||
+      activePatientSosIds.has(id) ||
+      activeMemoIds.has(id)
+    ));
+  }, [nurses, allTasks, patientSosList, storeMemos]);
+
+  // 🔍 デバッグ用: Store到達・全体のSOS保持状況の定期/評価時ログ
+  const rawSosNurses = nurses.filter((n) => n.is_sos === true);
+  if (rawSosNurses.length > 0) {
+    console.log(`[Store受信チェック] Store内に is_sos=true の看護師データが届いています (${rawSosNurses.length}件):`, rawSosNurses.map(n => ({ id: n.nurse_id, name: n.name })));
+  }
 
   // 1. 他画面・他スタッフからの「看護師SOS」を抽出（本人画面およびゲスト要請の通常ユーザー遮断）
   const activeSosNurses = nurses.filter((nurse) => {
     if (nurse.is_sos !== true) return false;
 
-    console.log(`[看護師SOS検知] ${nurse.name}からのSOSを評価中... (nurse_id: ${nurse.nurse_id})`);
+    console.log(`[SOS検知] ${nurse.name}からのSOSを評価中...`);
 
     if (dismissedIds.includes(`nurse-${nurse.nurse_id}`)) {
       console.log(`  -> 却下: 既読（dismissedIdsに含まれています）`);
       return false;
     }
 
-    const isTargetGuest = checkIsGuestSource(nurse.nurse_id, nurse.name, (nurse as any).email);
-    if (!isGuestUser && isTargetGuest) {
-      console.log(`  -> 却下: 受信者は通常ユーザーですが、発信者がゲストと判定されました (isTargetGuest: true)`);
+    const isTargetGuest = checkIsGuestSource(nurse.nurse_id, nurse.name, (nurse as any).email) || (nurse as any).is_guest === true;
+    if (isGuestUser !== isTargetGuest) {
+      console.log(`  -> 却下: 受信者(${isGuestUser ? 'ゲスト' : '通常'})と発信者(${isTargetGuest ? 'ゲスト' : '通常'})の環境種別が不一致です`);
       return false;
     }
 
@@ -151,15 +165,21 @@ export const GlobalSosToast: React.FC = () => {
       return false;
     }
 
-    console.log(`  => 【通過】画面に表示します！ (${nurse.name})`);
+    console.log(`  => 【通過】画面に表示します！`);
     return true;
   });
+
+  // 🔍 デバッグ用: Store到達・全体のタスクSOS保持状況の定期/評価時ログ
+  const rawSosTasks = flattenTasks(allTasks).filter((t) => t.is_sos === true || (t as any).sos_reason);
+  if (rawSosTasks.length > 0) {
+    console.log(`[Store受信チェック] Store内に is_sos=true/sos_reason 有りのタスクSOSデータが届いています (${rawSosTasks.length}件):`, rawSosTasks.map(t => ({ id: t.task_id, title: t.title })));
+  }
 
   // 2. フラット化した全タスクからアクティブな「タスクSOS」を抽出（本人画面およびゲスト要請の通常ユーザー遮断）
   const activeSosTasks = flattenTasks(allTasks).filter((task) => {
     if (task.is_sos !== true && !(task as any).sos_reason) return false;
 
-    console.log(`[タスクSOS検知] タスク「${task.title}」からのSOSを評価中... (task_id: ${task.task_id})`);
+    console.log(`[SOS検知] タスク「${task.title}」からのSOSを評価中...`);
 
     if (dismissedIds.includes(`task-${task.task_id}`)) {
       console.log(`  -> 却下: 既読（dismissedIdsに含まれています）`);
@@ -168,10 +188,11 @@ export const GlobalSosToast: React.FC = () => {
 
     const isTargetGuest = checkIsGuestSource(
       task.task_id || task.requested_by_id || task.nurse_id, 
-      task.requested_by_name || task.nurse_name
-    );
-    if (!isGuestUser && isTargetGuest) {
-      console.log(`  -> 却下: 受信者は通常ユーザーですが、タスク発信者がゲストと判定されました`);
+      task.requested_by_name || task.nurse_name,
+      (task as any).email
+    ) || (task as any).is_guest === true;
+    if (isGuestUser !== isTargetGuest) {
+      console.log(`  -> 却下: 受信者(${isGuestUser ? 'ゲスト' : '通常'})と発信者(${isTargetGuest ? 'ゲスト' : '通常'})の環境種別が不一致です`);
       return false;
     }
 
@@ -184,31 +205,21 @@ export const GlobalSosToast: React.FC = () => {
       return false;
     }
     if (reqId !== '' && myNurseId !== '' && reqId === myNurseId) {
-      console.log(`  -> 却下: 自分自身（同一ID）からの要請発信です (requested_by_id: ${reqId})`);
+      console.log(`  -> 却下: 自分自身（同一ID）からの発信です (myNurseId: ${myNurseId})`);
       return false;
     }
     if (reqName !== '' && myNurseName !== '' && reqName === myNurseName) {
-      console.log(`  -> 却下: 自分自身（同一名）からの要請発信です (requested_by_name: ${reqName})`);
+      console.log(`  -> 却下: 自分自身（同一名）からの発信です (myNurseName: ${myNurseName})`);
       return false;
     }
 
-    console.log(`  => 【通過】タスクSOS画面に表示します！ (${task.title})`);
+    console.log(`  => 【通過】画面に表示します！`);
     return true;
   });
 
   // 💡 修正：ボタンを押した瞬間に0秒でUIを更新（楽観的更新）し、全端末へブロードキャスト送信
   const handleRespondNurse = async (nurseId: string) => {
-    // 0. 既存実施中タスクの自動中断 ＆ 現在時刻でのナースコール・SOS割り込みタスクの動的生成
-    try {
-      const targetNurse = nurses.find((n) => n.nurse_id === nurseId);
-      const { triggerNurseCallInterruption } = await import('../../hooks/useTaskUpdate');
-      triggerNurseCallInterruption({
-        patientName: targetNurse?.name ? `${targetNurse.name}の応援対応` : '緊急SOS対応',
-        sosReason: targetNurse?.sos_reason || `${targetNurse?.name || '他スタッフ'}からの緊急SOS対応要請`,
-      });
-    } catch (e) {}
-
-    // 1. 即座にローカルストアと画面表示をクリア（0秒で反応）
+    // 1. 即座にローカルストアと画面表示をクリア（0秒で反応・ブロッキング排除）
     respondToNurseSos(nurseId, responderName);
     setDismissedIds((prev) => [...prev, `nurse-${nurseId}`]);
 
@@ -222,7 +233,22 @@ export const GlobalSosToast: React.FC = () => {
       });
     }
 
-    // 3. バックグラウンドで Firestore トランザクション通信
+    // 3. バックグラウンドで割り込みタスクの作成
+    try {
+      const targetNurse = nurses.find((n) => n.nurse_id === nurseId);
+      const { triggerNurseCallInterruption } = await import('../../hooks/useTaskUpdate');
+      await triggerNurseCallInterruption({
+        patientId: '',
+        patientName: targetNurse?.name ? `${targetNurse.name}の応援対応` : '緊急SOS対応',
+        roomId: '',
+        sosReason: targetNurse?.sos_reason || `${targetNurse?.name || '他スタッフ'}からの緊急SOS対応要請`,
+        title: `🚨 看護師SOS対応 (${targetNurse?.name || '他スタッフ'}の応援)`,
+      });
+    } catch (e) {
+      console.error("看護師SOSタスク作成エラー:", e);
+    }
+
+    // 4. バックグラウンドで Firestore トランザクション通信
     try {
       const result = await respondToNurseSosWithTransaction(nurseId, responderName);
       if (result && result.alreadyResponded) {
@@ -236,20 +262,7 @@ export const GlobalSosToast: React.FC = () => {
   };
 
   const handleRespondTask = async (taskId: string) => {
-    // 0. 既存実施中タスクの自動中断 ＆ 現在時刻でのナースコール・SOS割り込みタスクの動的生成
-    try {
-      const { flattenTasks } = await import('../../utils/taskLogic');
-      const targetTask = flattenTasks(allTasks).find((t) => t.task_id === taskId);
-      const { triggerNurseCallInterruption } = await import('../../hooks/useTaskUpdate');
-      triggerNurseCallInterruption({
-        patientId: targetTask?.patient_id,
-        patientName: targetTask?.patient_name,
-        roomId: targetTask?.room_id,
-        sosReason: targetTask ? `「${targetTask.title}」支援応援対応` : 'タスク支援要請への応援対応',
-      });
-    } catch (e) {}
-
-    // 1. 即座にローカルストアと画面表示をクリア（0秒で反応）
+    // 1. 即座にローカルストアと画面表示をクリア（0秒で反応・ブロッキング排除）
     respondToTaskSos(taskId, responderName);
     setDismissedIds((prev) => [...prev, `task-${taskId}`]);
 
@@ -263,7 +276,23 @@ export const GlobalSosToast: React.FC = () => {
       });
     }
 
-    // 3. バックグラウンドで Firestore トランザクション通信
+    // 3. バックグラウンドで割り込みタスクの作成
+    try {
+      const { flattenTasks } = await import('../../utils/taskLogic');
+      const targetTask = flattenTasks(allTasks).find((t) => t.task_id === taskId);
+      const { triggerNurseCallInterruption } = await import('../../hooks/useTaskUpdate');
+      await triggerNurseCallInterruption({
+        patientId: targetTask?.patient_id || '',
+        patientName: targetTask?.patient_name || '患者',
+        roomId: targetTask?.room_id || '',
+        sosReason: targetTask ? `「${targetTask.title}」支援応援対応` : 'タスク支援要請への応援対応',
+        title: `🚨 タスクSOS支援対応 (${targetTask?.patient_name ? `${targetTask.patient_name}様` : '要請'})`,
+      });
+    } catch (e) {
+      console.error("タスクSOSタスク作成エラー:", e);
+    }
+
+    // 4. バックグラウンドで Firestore トランザクション通信
     try {
       const result = await respondToTaskSosWithTransaction(taskId, responderName);
       if (result && result.alreadyResponded) {
@@ -277,21 +306,7 @@ export const GlobalSosToast: React.FC = () => {
   };
 
   const handleRespondPatient = async (patientId: string, patientName: string, roomId?: string, reason?: string) => {
-    // 0. 応じた看護師のタイムラインにナースコール同様の応援要請対応割り込みタスクを動的追加
-    try {
-      const { triggerNurseCallInterruption } = await import('../../hooks/useTaskUpdate');
-      await triggerNurseCallInterruption({
-        patientId: patientId,
-        patientName: patientName,
-        roomId: roomId || '病室',
-        sosReason: reason || `${patientName}様 (${roomId ? `${roomId}号室` : ''}) への緊急応援要請`,
-        title: `🤝 緊急応援要請対応 (${patientName}様)`,
-      });
-    } catch (e) {
-      console.error("患者SOS対応割り込み作成エラー:", e);
-    }
-
-    // 1. 即座にローカルストアおよびFirestoreの患者SOSをクリア（0秒で反応）
+    // 1. 即座にローカルストアおよびFirestoreの患者SOSをクリア（0秒で反応・ブロッキング排除）
     respondToPatientSos(patientId, responderName);
     setDismissedIds((prev) => [...prev, `patient-${patientId}`]);
 
@@ -304,19 +319,38 @@ export const GlobalSosToast: React.FC = () => {
         senderSessionId: currentSessionId,
       });
     }
+
+    // 3. バックグラウンドで割り込みタスクの作成
+    try {
+      const { triggerNurseCallInterruption } = await import('../../hooks/useTaskUpdate');
+      await triggerNurseCallInterruption({
+        patientId: patientId || '',
+        patientName: patientName || '患者',
+        roomId: roomId || '病室',
+        sosReason: reason || `${patientName || '患者'}様 (${roomId ? `${roomId}号室` : ''}) への緊急応援要請`,
+        title: `🤝 緊急応援要請対応 (${patientName || '患者'}様)`,
+      });
+    } catch (e) {
+      console.error("患者SOS対応割り込み作成エラー:", e);
+    }
   };
 
+  // 🔍 デバッグ用: Store到達・全体の患者SOS保持状況の定期/評価時ログ
+  if (patientSosList.length > 0) {
+    console.log(`[Store受信チェック] Store内に患者SOSデータが届いています (${patientSosList.length}件):`, patientSosList.map(p => ({ id: p.patient_id, name: p.patient_name })));
+  }
+
   const activeSosPatients = patientSosList.filter((p) => {
-    console.log(`[患者SOS検知] ${p.patient_name}様からのSOSを評価中... (patient_id: ${p.patient_id})`);
+    console.log(`[SOS検知] 患者 ${p.patient_name}様からのSOSを評価中...`);
 
     if (dismissedIds.includes(p.patient_id) || dismissedIds.includes(`patient-${p.patient_id}`)) {
       console.log(`  -> 却下: 既読（dismissedIdsに含まれています）`);
       return false;
     }
 
-    const isTargetGuest = checkIsGuestSource(p.patient_id || p.requested_by_id, p.requested_by_name);
-    if (!isGuestUser && isTargetGuest) {
-      console.log(`  -> 却下: 受信者は通常ユーザーですが、患者SOS発信者がゲストと判定されました`);
+    const isTargetGuest = checkIsGuestSource(p.patient_id || p.requested_by_id, p.requested_by_name) || (p as any).is_guest === true;
+    if (isGuestUser !== isTargetGuest) {
+      console.log(`  -> 却下: 受信者(${isGuestUser ? 'ゲスト' : '通常'})と発信者(${isTargetGuest ? 'ゲスト' : '通常'})の環境種別が不一致です`);
       return false;
     }
 
@@ -337,7 +371,7 @@ export const GlobalSosToast: React.FC = () => {
       return false;
     }
 
-    console.log(`  => 【通過】患者SOS画面に表示します！ (${p.patient_name})`);
+    console.log(`  => 【通過】画面に表示します！`);
     return true;
   });
 

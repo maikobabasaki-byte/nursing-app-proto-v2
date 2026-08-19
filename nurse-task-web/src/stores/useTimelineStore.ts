@@ -158,16 +158,34 @@ const removeTaskRecursive = (tasks: ExtendedTask[], targetIds: string[]): Extend
 
 
 
-// 💡 マスターデータとリアルタイムランタイム状態を重複ゼロでアトミック結合するヘルパー
+export const getTimestampValue = (item: any): number => {
+  if (!item) return 0;
+  const ts = item.updatedAt || item.updated_at || item.created_at;
+  if (ts?.toDate && typeof ts.toDate === 'function') {
+    return ts.toDate().getTime();
+  }
+  if (ts?.seconds) {
+    return ts.seconds * 1000;
+  }
+  if (typeof ts === 'string' || typeof ts === 'number') {
+    const parsed = new Date(ts).getTime();
+    if (!isNaN(parsed) && parsed > 0) return parsed;
+  }
+  // 💡 0を返してサーバー確定の最新タイムスタンプを拒否しないようにする
+  return 0;
+};
+
+// 💡 マスターデータとリアルタイムランタイム状態を重複ゼロ（nurse_id 単位で一意）でアトミック結合するヘルパー
 export function mergeNurseData(
   masters: NurseMaster[],
   runtimes: NursePin[]
 ): NursePin[] {
   const nurseMap = new Map<string, NursePin>();
 
-  // 1. まずマスターデータをベースとして登録
+  // 1. まずマスターデータをベースとして登録（nurse_id で正規化）
   masters.forEach((master) => {
-    const key = master.nurse_id || master.name.replace(/[\s　]+/g, '');
+    const cleanId = (master.nurse_id || '').replace(/^nurse-/, '').trim();
+    const key = cleanId || master.name.replace(/[\s　]+/g, '');
     nurseMap.set(key, {
       nurse_id: master.nurse_id,
       name: master.name,
@@ -184,17 +202,55 @@ export function mergeNurseData(
     });
   });
 
-  // 2. リアルタイム状態（位置・SOS情報等）を既存マスターと結合（なければ新規追加）
-  runtimes.forEach((runtime) => {
+  // 2. runtimes 自体の重複をあらかじめ最新の updatedAt / updated_at 優先で整理（デデュープ）
+  const deduplicatedRuntimes = new Map<string, NursePin>();
+  runtimes.forEach((rt) => {
+    const cleanId = (rt.nurse_id || '').replace(/^nurse-/, '').trim();
+    const normalizedName = rt.name ? rt.name.replace(/[\s　]+/g, '') : '';
+    const key = cleanId || normalizedName;
+    if (!key) return;
+
+    if (!deduplicatedRuntimes.has(key)) {
+      deduplicatedRuntimes.set(key, rt);
+    } else {
+      const existing = deduplicatedRuntimes.get(key)!;
+      const existingTime = getTimestampValue(existing);
+      const newTime = getTimestampValue(rt);
+      const isSosActive = Boolean(rt.is_sos || existing.is_sos);
+
+      if (newTime >= existingTime || rt.is_sos) {
+        deduplicatedRuntimes.set(key, {
+          ...existing,
+          ...rt,
+          is_sos: isSosActive,
+          sos_reason: rt.sos_reason || existing.sos_reason,
+          responder_name: rt.responder_name || existing.responder_name,
+        });
+      } else {
+        deduplicatedRuntimes.set(key, {
+          ...rt,
+          ...existing,
+          is_sos: isSosActive,
+          sos_reason: existing.sos_reason || rt.sos_reason,
+          responder_name: existing.responder_name || rt.responder_name,
+        });
+      }
+    }
+  });
+
+  // 3. デデュープ済みのリアルタイム状態をマスターマップへマージ
+  deduplicatedRuntimes.forEach((runtime) => {
+    const cleanRtId = (runtime.nurse_id || '').replace(/^nurse-/, '').trim();
     const normalizedRuntimeName = runtime.name ? runtime.name.replace(/[\s　]+/g, '') : '';
     
-    // nurse_id または正規化された名前でマスターとマッチング
+    // nurse_id または正規化名で既存キーを探索
     let targetKey = Array.from(nurseMap.keys()).find((k) => {
       const existing = nurseMap.get(k);
       if (!existing) return false;
+      const cleanExistingId = (existing.nurse_id || '').replace(/^nurse-/, '').trim();
       const normalizedExistingName = existing.name.replace(/[\s　]+/g, '');
       return (
-        existing.nurse_id === runtime.nurse_id ||
+        (cleanRtId !== '' && cleanExistingId === cleanRtId) ||
         (normalizedRuntimeName !== '' && normalizedExistingName === normalizedRuntimeName)
       );
     });
@@ -204,27 +260,28 @@ export function mergeNurseData(
       nurseMap.set(targetKey, {
         ...existing,
         ...runtime,
-        // IDと名前はマスターを優先
         nurse_id: existing.nurse_id,
         name: existing.name,
         x_percent: runtime.x_percent ?? existing.x_percent,
         y_percent: runtime.y_percent ?? existing.y_percent,
-        is_sos: runtime.is_sos ?? existing.is_sos,
-        sos_reason: runtime.sos_reason ?? existing.sos_reason,
-        responder_name: runtime.responder_name ?? existing.responder_name,
+        is_sos: runtime.is_sos !== undefined ? runtime.is_sos : existing.is_sos,
+        sos_reason: runtime.sos_reason !== undefined ? runtime.sos_reason : existing.sos_reason,
+        responder_name: runtime.responder_name !== undefined ? runtime.responder_name : existing.responder_name,
         is_logged_in: runtime.is_logged_in ?? existing.is_logged_in,
       });
-    } else if (runtime.nurse_id && runtime.name) {
-      // マスター未登録の単体リアルタイムピン
-      nurseMap.set(runtime.nurse_id, {
-        ...runtime,
-        role: runtime.role || 'メンバー',
-        color: runtime.color || '#059669',
-        x_percent: runtime.x_percent ?? 48.0,
-        y_percent: runtime.y_percent ?? 45.0,
-        is_logged_in: runtime.is_logged_in ?? true,
-        is_sos: runtime.is_sos ?? false,
-      });
+    } else {
+      const key = cleanRtId || normalizedRuntimeName || runtime.nurse_id;
+      if (key) {
+        nurseMap.set(key, {
+          ...runtime,
+          role: runtime.role || 'メンバー',
+          color: runtime.color || '#059669',
+          x_percent: runtime.x_percent ?? 48.0,
+          y_percent: runtime.y_percent ?? 45.0,
+          is_logged_in: runtime.is_logged_in ?? true,
+          is_sos: runtime.is_sos ?? false,
+        });
+      }
     }
   });
 

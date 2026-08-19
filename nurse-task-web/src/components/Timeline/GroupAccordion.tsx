@@ -115,12 +115,11 @@ const SortableChildItem = ({ child, parentDisplayPeriod, onChildClick }: {
         </button>
       </div>
       
-      {/* 📝 タイトルの前に、記録状態が一瞬でわかる絵文字（🔵 🟢 🟠 ✅）を自動で添える */}
+      {/* 📝 タイトルの前に、記録状態が一瞬でわかる絵文字（🟢 🟠 ✅）を自動で添える */}
       <div className="font-black text-sm flex items-center gap-1">
-        {child.status === 'completed' && <span className="text-xs select-none">🔵</span>}
+        {(child.status === 'completed' || child.status === 'record_complete') && <span className="text-xs select-none">✅</span>}
         {child.status === 'record_start' && <span className="text-xs select-none">🟢</span>}
         {child.status === 'record_pending' && <span className="text-xs select-none">🟠</span>}
-        {child.status === 'record_complete' && <span className="text-xs select-none">✅</span>}
         <span>{child.patient_name}様</span>
       </div>
       

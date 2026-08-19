@@ -110,6 +110,68 @@ export const Settings: React.FC = () => {
           </div>
         </div>
 
+        {/* 📲 SOS / エリア接近 Web Push 通知設定セクション */}
+        <div id="settings-push-notification" className="bg-white/90 backdrop-blur-md rounded-2xl p-6 shadow-sm border border-gray-200/80 text-left">
+          <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
+            <div>
+              <h2 className="text-base font-extrabold text-gray-900 flex items-center gap-2">
+                <span>📲 SOS & 緊急通知 (Web Push)</span>
+                <span className="text-[10px] bg-red-100 text-red-800 font-bold px-2 py-0.5 rounded-full">
+                  端末連携・リアルタイムアラート
+                </span>
+              </h2>
+              <p className="text-xs text-gray-600 mt-1 leading-relaxed">
+                看護師SOS・タスクSOS・患者SOS発生時に、ブラウザやスマホOS本体へ即時にネイティブ通知バナー・アラーム音・バイブレーションを発行します。
+              </p>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={async () => {
+                  const { requestNotificationPermission } = await import('../utils/notification');
+                  const perm = await requestNotificationPermission();
+                  if (perm === 'granted') {
+                    alert('✅ 通知が許可されています！');
+                  } else {
+                    alert('⚠️ ブラウザの設定で通知が許可されていません');
+                  }
+                }}
+                className="!bg-indigo-50 hover:!bg-indigo-100 !text-indigo-700 !font-extrabold !text-xs !px-3 !py-2 !rounded-xl !border !border-indigo-200 !shadow-xs !cursor-pointer"
+              >
+                🔔 通知許可を確認
+              </button>
+
+              <button
+                type="button"
+                onClick={async () => {
+                  const { sendNativePushNotification } = await import('../utils/notification');
+                  sendNativePushNotification('🚨 【テストSOS】緊急アシスト要請', {
+                    body: 'これはSOSプッシュ通知のテストです。アラーム音とバイブレーションが発動します。',
+                    tag: 'test-sos-notification',
+                    playSound: true,
+                    requireInteraction: true,
+                  });
+                }}
+                className="!bg-rose-600 hover:!bg-rose-700 !text-white !font-black !text-xs !px-4 !py-2 !rounded-xl !shadow-md hover:!shadow-lg !transition-all !cursor-pointer flex items-center gap-1.5"
+              >
+                <span>🚨 プッシュ通知テスト発信</span>
+              </button>
+            </div>
+          </div>
+
+          <div className="bg-slate-50 rounded-xl p-3.5 border border-slate-200 text-xs text-slate-700 flex items-center justify-between flex-wrap gap-2">
+            <div className="flex items-center gap-2">
+              <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse" />
+              <span className="font-bold">端末プッシュ通知機能:</span>
+              <span className="text-slate-600">画面がバックグラウンド時や他タブ閲覧中もOS通知でお知らせします</span>
+            </div>
+            <span className="text-[11px] font-mono bg-white px-2 py-0.5 rounded border border-slate-200 text-slate-500 font-bold">
+              Permission: {typeof window !== 'undefined' && 'Notification' in window ? Notification.permission : 'unsupported'}
+            </span>
+          </div>
+        </div>
+
         {/* 💡 補足説明カード */}
         <div className="bg-indigo-50/70 border border-indigo-200/80 rounded-2xl p-5 text-left flex items-start gap-3">
           <span className="text-xl p-2 bg-indigo-100 rounded-xl">💡</span>

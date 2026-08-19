@@ -2,10 +2,10 @@ import { useState, useEffect, lazy, Suspense } from 'react';
 import { onAuthStateChanged } from 'firebase/auth';
 import type { User } from 'firebase/auth';
 import { getJSTDateString } from '../utils/dateUtils';
-import { auth, db, registerActiveDateInFirestore } from '../lib/firebase';
+import { auth, db, registerActiveDateInFirestore, upsertNurseOnLogin } from '../lib/firebase';
 import { collection, getDocs, onSnapshot, query, where, doc, getDoc } from 'firebase/firestore';
 import { reconstructGroups } from '../utils/taskLogic';
-import { useTimelineStore } from '../stores/useTimelineStore';
+import { useTimelineStore, getTimestampValue } from '../stores/useTimelineStore';
 import type { NurseMaster, NursePin } from '../stores/useTimelineStore';
 import type { ExtendedTask, LeaderTodo } from '../types/types';
 import Header from '../components/Header';
@@ -141,10 +141,12 @@ export default function App() {
             // 🎯 resolveNurseProfile 共通ヘルパーにより、ユーザー名を日本語表示名に自動変換 ＆ リーダー権限を判定
             const profile = resolveNurseProfile(matchedId, currentUser.email, rawData);
             useTimelineStore.getState().setCurrentUser(profile);
+            upsertNurseOnLogin(profile).catch((e) => console.error("Nurse login upsert error:", e));
           } catch (e) {
             console.error("Auth nurse_master クエリ設定エラー:", e);
             const fallbackProfile = resolveNurseProfile(id, currentUser.email);
             useTimelineStore.getState().setCurrentUser(fallbackProfile);
+            upsertNurseOnLogin(fallbackProfile).catch((e) => console.error("Nurse login upsert error:", e));
           }
         }
 
@@ -226,8 +228,6 @@ export default function App() {
       return;
     }
 
-    const todayStr = getJSTDateString();
-
     const unsubscribe = onSnapshot(
       collection(db, "tasks"), 
       (snapshot) => {
@@ -250,6 +250,16 @@ export default function App() {
           // 🚨 患者SOS専用ドキュメントの抽出と除外（タイムラインの通常タスクとは分離）
           if (taskId.startsWith('patient-sos-') || data.is_patient_sos === true) {
             if (data.is_sos !== false) {
+              const isPatientGuest = Boolean(
+                taskId.includes('guest') ||
+                data.patient_id?.includes('guest') ||
+                data.requested_by_id?.includes('guest') ||
+                data.requested_by_name?.includes('ゲスト') ||
+                data.is_guest === true
+              );
+              if (isGuestUser !== isPatientGuest) {
+                return;
+              }
               extractedPatientSosList.push({
                 patient_id: data.patient_id || taskId.replace('patient-sos-', ''),
                 patient_name: data.patient_name || '',
@@ -263,31 +273,33 @@ export default function App() {
             return;
           }
 
-          // 📅 日付によるパーティショニングフィルタ（選択中の日付のタスクのみ読み込み）
-          let taskTargetDate = data.target_date;
-          if (!taskTargetDate) {
-            // 💡 target_dateがない割り込みタスクの場合、created_atやIDタイムスタンプから日付を正確に抽出
-            if (data.created_at?.toDate) {
-              const dt = data.created_at.toDate();
-              taskTargetDate = `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`;
-            } else if (taskId.startsWith('CALL_INTERRUPT_')) {
-              const ts = Number(taskId.replace('CALL_INTERRUPT_', ''));
-              if (!isNaN(ts) && ts > 0) {
-                const dt = new Date(ts);
+          // 📅 ナースコール・割り込みタスクのみ異日付を除外（通常指示タスクはシード/初期日付でも表示保持）
+          if (taskId.startsWith('CALL_INTERRUPT_')) {
+            let taskTargetDate = data.target_date;
+            if (!taskTargetDate) {
+              if (data.created_at?.toDate) {
+                const dt = data.created_at.toDate();
                 taskTargetDate = `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`;
+              } else {
+                const ts = Number(taskId.replace('CALL_INTERRUPT_', ''));
+                if (!isNaN(ts) && ts > 0) {
+                  const dt = new Date(ts);
+                  taskTargetDate = `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`;
+                }
               }
+            }
+            if (taskTargetDate && taskTargetDate !== selectedDate) {
+              return;
             }
           }
 
-          // それでも日付が判定できない場合は本日分とみなし、日付が存在し不一致の場合は除外
-          const finalTargetDate = taskTargetDate || todayStr;
-          if (finalTargetDate !== selectedDate) {
-            return;
-          }
-
-          // 🛡️ 通常メンバーログイン時は、一時ゲスト作成タスクのみを除外
+          // 🛡️ 通常ユーザーとゲストユーザーのタスク混入を100%完全遮断
           if (!isGuestUser) {
-            if (taskId.startsWith('GUEST-TASK-') || data.is_guest === true) {
+            if (taskId.startsWith('GUEST-') || data.is_guest === true) {
+              return;
+            }
+          } else {
+            if (!taskId.startsWith('GUEST-') && data.is_guest !== true) {
               return;
             }
           }
@@ -423,17 +435,53 @@ export default function App() {
               return true;
             }
 
-            // ゲストログイン時：自分以外の通常時ゲストナースを除外
+            // 🛡️ ゲストログイン時：通常看護師（非ゲスト）を100%完全遮断（自分またはゲストナースのみ）
             const currentUserId = user?.uid || useTimelineStore.getState().currentUser?.nurse_id;
             const isSelf = n.nurse_id === currentUserId;
-            if (!isSelf && isGuestNurse && !n.is_sos) {
+            if (!isSelf && !isGuestNurse) {
               return false;
             }
             return true;
           });
 
-        if (firestoreNurses.length > 0) {
-          useTimelineStore.getState().setNurses(firestoreNurses);
+        // 💡 nurse_id または正規化名単位で重複排除（最新の updatedAt / updated_at タイムスタンプ優先）
+        const deduplicatedMap = new Map<string, NursePin>();
+        firestoreNurses.forEach((nurse) => {
+          const cleanId = (nurse.nurse_id || '').replace(/^nurse-/, '').trim();
+          const normalizedName = nurse.name ? nurse.name.replace(/[\s　]+/g, '') : '';
+          const key = cleanId || normalizedName;
+          if (!key) return;
+
+          if (!deduplicatedMap.has(key)) {
+            deduplicatedMap.set(key, nurse);
+          } else {
+            const existing = deduplicatedMap.get(key)!;
+            const existingTime = getTimestampValue(existing);
+            const newTime = getTimestampValue(nurse);
+            const isSosActive = Boolean(nurse.is_sos || existing.is_sos);
+
+            if (newTime >= existingTime || nurse.is_sos) {
+              deduplicatedMap.set(key, { 
+                ...existing, 
+                ...nurse,
+                is_sos: isSosActive,
+                sos_reason: nurse.sos_reason || existing.sos_reason || '',
+              });
+            } else {
+              deduplicatedMap.set(key, { 
+                ...nurse, 
+                ...existing,
+                is_sos: isSosActive,
+                sos_reason: existing.sos_reason || nurse.sos_reason || '',
+              });
+            }
+          }
+        });
+
+        const uniqueNurses = Array.from(deduplicatedMap.values());
+
+        if (uniqueNurses.length > 0) {
+          useTimelineStore.getState().setNurses(uniqueNurses);
         }
       },
       (error) => {
@@ -549,8 +597,8 @@ export default function App() {
       {/* 📡 全画面共通のネットワークオフライン検知インジケーター */}
       <OfflineIndicator />
 
-      {/* 💡 全画面共通の看護師SOSグローバル通知トースト */}
-      <GlobalSosToast />
+      {/* 💡 ログイン後画面のみ看護師SOSグローバル通知トーストを表示（ログイン画面での誤発動防止） */}
+      {currentScreen !== 'login' && <GlobalSosToast />}
 
       {/* ─── 【A：ログイン前の世界】 ─── */}
       {currentScreen === 'login' && (

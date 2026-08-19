@@ -1,8 +1,23 @@
-import { doc, getDoc, setDoc, updateDoc, serverTimestamp } from 'firebase/firestore';
+import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import type { ExtendedTaskStatus } from '../types/types';
 import { syncTaskToGAS } from '../services/gasService';
 import { getJSTISOString, getJSTDateString } from '../utils/dateUtils';
+
+/**
+ * 💡 Firestore書き込み直前にオブジェクト内のすべての undefined プロパティを全自動でクリーンアップする関数
+ */
+export const cleanUndefinedFields = (obj: any): any => {
+  if (obj === null || typeof obj !== 'object') return obj;
+  if (Array.isArray(obj)) return obj.map(cleanUndefinedFields);
+  const cleaned: Record<string, any> = {};
+  Object.entries(obj).forEach(([key, val]) => {
+    if (val !== undefined) {
+      cleaned[key] = cleanUndefinedFields(val);
+    }
+  });
+  return cleaned;
+};
 
 /**
  * Firestore上のタスク情報を更新する関数
@@ -19,11 +34,13 @@ export const updateTask = async (
     is_sos?: boolean;
     sos_reason?: string;
     unexecuted_reason?: string;
+    details?: string;
     initial_period?: string;
     nurse_name?: string;
     assigned_nurse_id?: string;
     staff_id?: string;
     completed_at?: string;
+    completed_by?: string;
     emr_order_id?: string;
     priority?: 'high' | 'medium' | 'low';
   }
@@ -38,8 +55,37 @@ export const updateTask = async (
     const docSnap = await getDoc(taskRef);
     const existingData = docSnap.exists() ? docSnap.data() : {};
 
+    // 💡 既存のFirestoreドキュメントが存在しない場合、ストアのローカルタスク情報を統合して新規作成にも対応
+    let localTask: any = null;
+    try {
+      const { useTimelineStore } = await import('../stores/useTimelineStore');
+      const storeAllTasks = useTimelineStore.getState().allTasks || [];
+      const findTask = (list: any[]): any => {
+        for (const t of list) {
+          if (t.task_id === taskId) return t;
+          if (t.children && t.children.length > 0) {
+            const found = findTask(t.children);
+            if (found) return found;
+          }
+        }
+        return null;
+      };
+      localTask = findTask(storeAllTasks);
+    } catch (e) {}
+
+    const todayStr = getJSTDateString();
+
     // Firestore のドキュメント構造にマッピングして保存
     const updatePayload: any = {
+      task_id: taskId,
+      title: existingData.title || localTask?.title || '無題タスク',
+      patient_id: existingData.patient_id || localTask?.patient_id || '',
+      patient_name: existingData.patient_name || localTask?.patient_name || '',
+      room_id: existingData.room_id || localTask?.room_id || '',
+      target_date: existingData.target_date || localTask?.target_date || todayStr,
+      display_period: existingData.display_period || localTask?.display_period || '',
+      priority: existingData.priority || localTask?.priority || 'medium',
+      ...existingData,
       updatedAt: serverTimestamp(),
     };
 
@@ -73,6 +119,10 @@ export const updateTask = async (
       updatePayload.unexecuted_reason = data.unexecuted_reason;
     }
 
+    if (data.details !== undefined) {
+      updatePayload.details = data.details;
+    }
+
     if (data.initial_period !== undefined) {
       updatePayload.initial_period = data.initial_period;
     }
@@ -89,9 +139,9 @@ export const updateTask = async (
       updatePayload.staff_id = data.staff_id;
     }
 
-    // ステータスが completed の場合、completed_at が渡されていなければ日本時間の現在時刻をセット
+    // ステータスが completed または record_complete の場合、completed_at および completed_by を確実に記録
     let completedAtToSave = data.completed_at;
-    if (data.status === 'completed' && !completedAtToSave) {
+    if ((data.status === 'completed' || data.status === 'record_complete') && !completedAtToSave) {
       completedAtToSave = getJSTISOString();
     }
 
@@ -99,12 +149,19 @@ export const updateTask = async (
       updatePayload.completed_at = completedAtToSave;
     }
 
+    if (data.completed_by !== undefined) {
+      updatePayload.completed_by = data.completed_by;
+    } else if (data.status === 'completed' || data.status === 'record_complete') {
+      updatePayload.completed_by = data.nurse_name || existingData.nurse_name || existingData.completed_by || '';
+    }
+
     if (data.emr_order_id !== undefined) {
       updatePayload.emr_order_id = data.emr_order_id;
     }
 
-    await updateDoc(taskRef, updatePayload);
-    console.log(`Firestoreのタスク ${taskId} を更新しました:`, updatePayload);
+    const cleanedPayload = cleanUndefinedFields(updatePayload);
+    await setDoc(taskRef, cleanedPayload, { merge: true });
+    console.log(`Firestoreのタスク ${taskId} を同期更新しました:`, cleanedPayload);
 
     // 💡 スプレッドシートへの書き戻し条件：実施完了（completed / record_complete）または 未実施（unexecuted）
     const newStatus = data.status || existingData.status;
@@ -157,8 +214,14 @@ export const triggerNurseCallInterruption = async (options?: {
   const allTasks = store.allTasks;
   const currentUser = store.currentUser;
 
-  const nurseId = String(currentUser?.nurse_id || currentUser?.staff_id || 'guest_nurse').trim();
-  const nurseName = String(currentUser?.name || '自分').trim();
+  const isGuestUser = Boolean(
+    sessionStorage.getItem('is_guest_session') === 'true' ||
+    currentUser?.isAnonymous === true
+  );
+  const todayJST = getJSTDateString();
+
+  const nurseId = String(currentUser?.nurse_id || currentUser?.staff_id || sessionStorage.getItem('nurse_id') || 'guest_nurse').trim();
+  const nurseName = String(currentUser?.name || sessionStorage.getItem('nurse_name') || '自分').trim();
 
   // 1. 既存の「実施中 (progressing)」および「記録中 (record_start)」タスクを自動的に「中断中」へ一括切り替え
   const flat = flattenTasks(allTasks);
@@ -171,13 +234,15 @@ export const triggerNurseCallInterruption = async (options?: {
 
   // ログイン看護師のアクティブタスク患者情報を優先適用
   const firstActive = activeTasks[0];
-  const defaultPatientId = options?.patientId || firstActive?.patient_id || '';
-  const defaultPatientName = options?.patientName || firstActive?.patient_name || '';
-  const defaultRoomId = options?.roomId || firstActive?.room_id || '';
+  const defaultPatientId = String(options?.patientId || firstActive?.patient_id || '').trim();
+  const defaultPatientName = String(options?.patientName || firstActive?.patient_name || '').trim();
+  const defaultRoomId = String(options?.roomId || firstActive?.room_id || '').trim();
 
   // 2. 新規割り込みタスク（実績ドキュメント）の生成
   const taskId = `CALL_INTERRUPT_${Date.now()}`;
-  const taskTitle = options?.title || '📞 ナースコール対応';
+  const taskTitle = String(options?.title || '📞 ナースコール対応').trim();
+  const sosReasonText = String(options?.sosReason || '離床センサー検知・ナースコール緊急対応').trim();
+
   const newTask: any = {
     task_id: taskId,
     emr_order_id: taskId,
@@ -185,9 +250,9 @@ export const triggerNurseCallInterruption = async (options?: {
     patient_name: defaultPatientName,
     room_id: defaultRoomId,
     title: taskTitle,
-    details: `【突発割り込み実績】${options?.sosReason || '離床センサー検知・ナースコール緊急対応'} (対応開始: ${currentTimeStr})`,
+    details: `【突発割り込み実績】${sosReasonText} (対応開始: ${currentTimeStr})`,
     status: 'progressing', // 🔵 新規タスクを実施中にセット
-    scheduled_at: currentTimeStr,
+    scheduled_at: `${todayJST}T${currentTimeStr}:00`,
     initial_period: currentTimeStr,
     display_period: currentTimeStr,
     category: '処置',
@@ -198,13 +263,16 @@ export const triggerNurseCallInterruption = async (options?: {
     requiresAssist: false,
     is_additional: true, // 💡 臨時追加割り込みフラグ
     is_sos: false,
+    sos_reason: '',
     nurse_id: nurseId,
     nurse_name: nurseName,
     staff_id: nurseId,
     assigned_nurse_id: nurseId,
     isGroup: false,
     isChild: false,
-    target_date: store.selectedDate || getJSTDateString(),
+    parent_id: null,
+    target_date: store.selectedDate || todayJST,
+    is_guest: isGuestUser,
   };
 
   // 3. Store へ即時反映 (0秒 UI 反映) ＆ Firestore へ動的書き込み
@@ -212,12 +280,13 @@ export const triggerNurseCallInterruption = async (options?: {
 
   try {
     const taskRef = doc(db, 'tasks', taskId);
-    await setDoc(taskRef, {
+    const payload = cleanUndefinedFields({
       ...newTask,
       created_at: serverTimestamp(),
       updatedAt: serverTimestamp(),
     });
-    console.log("⚡ ナースコール割り込みタスクを動的追加・実施中に設定しました:", newTask);
+    await setDoc(taskRef, payload);
+    console.log("⚡ ナースコール割り込みタスクを動的追加・実施中に設定しました:", payload);
   } catch (err) {
     console.error("ナースコール割り込みタスクFirestore保存エラー:", err);
   }

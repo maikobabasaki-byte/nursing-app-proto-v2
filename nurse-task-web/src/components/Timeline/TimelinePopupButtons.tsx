@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import type { ExtendedTask, ExtendedTaskStatus } from '../../types/types';
 import { useTimelineStore } from '../../stores/useTimelineStore';
 
@@ -10,6 +10,7 @@ interface TimelinePopupButtonsProps {
 export const TimelinePopupButtons: React.FC<TimelinePopupButtonsProps> = ({ task, onStatusChange }) => {
   const currentStatus = task.status;
   const isReadOnly = useTimelineStore((state) => state.isReadOnly);
+  const [noRecordNeeded, setNoRecordNeeded] = useState(false);
 
   if (isReadOnly) {
     return (
@@ -33,15 +34,19 @@ export const TimelinePopupButtons: React.FC<TimelinePopupButtonsProps> = ({ task
     return undefined;
   };
 
-  const renderBtn = (status: ExtendedTaskStatus, label: string, colorClass: string) => {
+  const renderBtn = (status: ExtendedTaskStatus, label: string, colorClass: string, onClickHandler?: () => void) => {
     const btnId = getTourBtnId(status);
     return (
       <button 
         id={btnId}
         type="button" 
         onClick={(e) => {
-          e.stopPropagation(); // ★ここでイベントの伝播を確実に止める
-          onStatusChange(task, status);
+          e.stopPropagation();
+          if (onClickHandler) {
+            onClickHandler();
+          } else {
+            onStatusChange(task, status);
+          }
         }}
         className={`${btnBase} ${colorClass}`}
       >
@@ -62,7 +67,31 @@ export const TimelinePopupButtons: React.FC<TimelinePopupButtonsProps> = ({ task
         {currentStatus === 'progressing' && (
             <>
             {renderBtn('pending', '中断・保留', '!bg-orange-500 !text-white hover:bg-orange-600')}
-            {renderBtn('completed', '実施完了', '!bg-green-600 !text-white hover:bg-green-700')}
+
+            {/* 💡 「記録不要」チェックボックスと動的にテキスト/スタイルが変わる実施完了ボタン */}
+            <div className="!flex !flex-col !gap-2 !p-2.5 !bg-white !border-2 !border-slate-300 !rounded-xl !my-1 text-left !shadow-xs">
+              <label className="!flex !items-center !gap-2.5 !cursor-pointer !select-none !text-xs !font-black !text-slate-800 !px-1">
+                <input
+                  type="checkbox"
+                  checked={noRecordNeeded}
+                  onChange={(e) => setNoRecordNeeded(e.target.checked)}
+                  className="!w-5 !h-5 !rounded-md !border-2 !border-slate-500 !bg-white checked:!bg-emerald-600 checked:!border-emerald-600 !cursor-pointer !accent-emerald-600 shrink-0"
+                />
+                <span>記録不要（軽微な対応など）</span>
+              </label>
+
+              {renderBtn(
+                'completed',
+                noRecordNeeded ? '実施完了（記録なし）' : '実施完了',
+                noRecordNeeded
+                  ? '!bg-emerald-600 !text-white hover:!bg-emerald-700'
+                  : '!bg-green-600 !text-white hover:bg-green-700',
+                () => {
+                  onStatusChange(task, noRecordNeeded ? 'completed' : 'record_start');
+                }
+              )}
+            </div>
+
             {renderBtn('unexecuted', '未実施', '!bg-red-600 !text-white hover:bg-red-700')}
             {renderBtn('initial', '初期化', '!bg-gray-500 !text-white hover:bg-gray-600')}
             </>
@@ -77,7 +106,6 @@ export const TimelinePopupButtons: React.FC<TimelinePopupButtonsProps> = ({ task
         
         {currentStatus === 'completed' && (
             <>
-            {renderBtn('record_start', '記録開始', '!bg-blue-600 !text-white hover:bg-blue-700')} 
             {renderBtn('progressing', '実施中に戻す', '!bg-gray-400 !text-white hover:bg-gray-500')} 
             {renderBtn('initial', '初期化', '!bg-gray-500 !text-white hover:bg-gray-600')}
             </>

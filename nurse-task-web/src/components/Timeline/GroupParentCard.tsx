@@ -8,7 +8,7 @@ export const GroupParentCard = (props: GroupParentCardProps) => {
   const childCount = task.children?.length || 0;
 
   // 全ての子タスクが完了、またはこの親グループ自体が完了状態か判定
-  const isCompleted = task.status === 'record_complete';
+  const isCompleted = task.status === 'record_complete' || task.status === 'completed';
   const isCardDrag = Boolean(isSortMode);
 
   // ドラッグ＆ドロップ設定（isOverlayがtrueの時はフック登録を完全無効化）
