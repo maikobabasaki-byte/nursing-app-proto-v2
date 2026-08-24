@@ -238,11 +238,12 @@ export const reconstructGroups = (flatTasks: ExtendedTask[]): ExtendedTask[] => 
   Object.entries(groupsMap).forEach(([groupId, children]) => {
     if (children.length === 0) return;
 
-    // 💡 子タスクが1つだけ残った場合はグループを解体し、単体タスクに戻す
-    if (children.length === 1) {
+    // 💡 明示的に作成されたグループ（groupId指定あり）は一時的に1件になっても解体しない
+    const isExplicitGroup = Boolean(existingGroupNodes[groupId] || groupId.startsWith('group-'));
+
+    if (children.length === 1 && !isExplicitGroup) {
       const singleTask: ExtendedTask = {
         ...children[0],
-        parent_id: null,
         isChild: false,
         isGroup: false,
       };

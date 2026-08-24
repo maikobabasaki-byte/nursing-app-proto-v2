@@ -31,61 +31,6 @@ export const TimelinePopup: React.FC<TimelinePopupProps> = ({ task, onClose, ren
   const [isDuplicating, setIsDuplicating] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [patientsList, setPatientsList] = useState<any[]>([]);
-  const [recordNote, setRecordNote] = useState(task.details || '');
-  const [isSavingRecordNote, setIsSavingRecordNote] = useState(false);
-
-  React.useEffect(() => {
-    setRecordNote(task.details || '');
-  }, [task.task_id, task.details]);
-
-  const handleExecuteCompleteWithOption = async () => {
-    setIsSavingRecordNote(true);
-    try {
-      const { updateTask } = await import('../../hooks/useTaskUpdate');
-      const { getJSTDateString } = await import('../../utils/dateUtils');
-      const currentUser = useTimelineStore.getState().currentUser;
-      const userName = currentUser?.name || sessionStorage.getItem('nurse_name') || '看護師';
-      const nurseId = currentUser?.nurse_id || currentUser?.staff_id || sessionStorage.getItem('nurse_id') || '';
-      const completedByInfo = nurseId ? `${userName} (${nurseId})` : userName;
-      const nowStr = getJSTDateString() + 'T' + new Date().toTimeString().slice(0, 8);
-
-      const targetStatus: ExtendedTaskStatus = !recordNote.trim() ? 'completed' : 'record_complete';
-      const finalDetails = recordNote.trim();
-
-      const store = useTimelineStore.getState();
-      store.handleUpdateStatus(task.task_id, targetStatus);
-      
-      const updatedTasks = store.allTasks.map((t) => {
-        if (t.task_id === task.task_id) {
-          return {
-            ...t,
-            status: targetStatus,
-            details: finalDetails,
-            completed_at: nowStr,
-            completed_by: completedByInfo,
-            nurse_name: userName,
-          };
-        }
-        return t;
-      });
-      store.setTasks(updatedTasks);
-
-      await updateTask(task.task_id, {
-        status: targetStatus,
-        details: finalDetails,
-        completed_at: nowStr,
-        completed_by: completedByInfo,
-        nurse_name: userName,
-      });
-
-      onClose();
-    } catch (e) {
-      console.error("タスク完了処理に失敗しました:", e);
-      alert("タスク完了処理に失敗しました。");
-    } finally {
-      setIsSavingRecordNote(false);
-    }
-  };
 
   React.useEffect(() => {
     const fetchPatients = async () => {
@@ -156,7 +101,8 @@ export const TimelinePopup: React.FC<TimelinePopupProps> = ({ task, onClose, ren
     untouched: { bg: 'bg-gray-50', border: 'border-gray-200', text: 'text-gray-900' },
     progressing: { bg: 'bg-cyan-50', border: 'border-cyan-200', text: 'text-cyan-900' },
     pending: { bg: 'bg-orange-50', border: 'border-orange-200', text: 'text-orange-900' },
-    completed: { bg: 'bg-green-50', border: 'border-green-200', text: 'text-green-900' },
+    completed: { bg: 'bg-blue-50', border: 'border-blue-200', text: 'text-blue-900' },
+    no_record_completed: { bg: 'bg-emerald-50', border: 'border-emerald-200', text: 'text-emerald-900' },
     record_start: { bg: 'bg-blue-50', border: 'border-blue-200', text: 'text-blue-900' },
     record_pending: { bg: 'bg-orange-50', border: 'border-orange-200', text: 'text-orange-900' },
     record_complete: { bg: 'bg-purple-50', border: 'border-purple-200', text: 'text-purple-900' },
@@ -166,14 +112,16 @@ export const TimelinePopup: React.FC<TimelinePopupProps> = ({ task, onClose, ren
 
   // ステータスラベルのロジック
   const statusLabels: Partial<Record<ExtendedTaskStatus, string>> = {
-    progressing: '実施中', pending: '中断中', completed: '実施完了',
+    progressing: '実施中', pending: '中断中', completed: '実施完了（記録前）',
+    no_record_completed: '実施完了（記録不要）',
     record_start: '記録中', record_pending: '記録中断', record_complete: '記録完了',
     unexecuted: '未実施'
   };
 
   const statusBgClasses: Partial<Record<ExtendedTaskStatus, string>> = {
     progressing: 'bg-cyan-600 text-white', pending: 'bg-orange-500 text-white',
-    completed: 'bg-green-600 text-white', record_start: 'bg-blue-600 text-white',
+    completed: 'bg-blue-600 text-white', no_record_completed: 'bg-emerald-600 text-white',
+    record_start: 'bg-blue-600 text-white',
     record_pending: 'bg-orange-500 text-white', record_complete: 'bg-purple-600 text-white',
     unexecuted: 'bg-red-600 text-white'
   };
@@ -205,11 +153,19 @@ export const TimelinePopup: React.FC<TimelinePopupProps> = ({ task, onClose, ren
     }
   };
 
+  const isInterruptTask = Boolean(
+    task.title?.includes('ナースコール') ||
+    task.title?.includes('SOS') ||
+    task.title?.includes('割り込み') ||
+    task.title?.includes('緊急') ||
+    task.task_id?.startsWith('CALL_INTERRUPT_')
+  );
+
   return (
-    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-2 sm:p-4">
       <div 
         id={task.task_id === 'demo-task-tutorial' ? 'tour-status-modal' : undefined}
-        className={`relative ${colorSet.bg} ${colorSet.border} ${colorSet.text} border-2 rounded-xl shadow-2xl p-6 w-[380px]`}
+        className={`relative ${colorSet.bg} ${colorSet.border} ${colorSet.text} border-2 rounded-xl shadow-2xl p-4 sm:p-5 w-[360px] sm:w-[380px] max-h-[88vh] overflow-y-auto`}
       >
         <div className="absolute top-4 right-14 flex items-center gap-1.5">
           {task.is_additional && (
@@ -229,68 +185,64 @@ export const TimelinePopup: React.FC<TimelinePopupProps> = ({ task, onClose, ren
           &times;
         </button>
         <div className="pr-6">
-          {(() => {
-            const isInterruptTask = Boolean(task.title?.includes('ナースコール') || task.title?.includes('SOS') || task.task_id?.startsWith('CALL_INTERRUPT_'));
-            return (
-              <>
-                {task.room_id && task.room_id.trim() !== '' && (
-                  <div className="text-xs font-bold opacity-70 mb-0.5">{task.room_id}号室</div>
-                )}
-                {task.patient_name && task.patient_name.trim() !== '' && (
-                  <div className="text-xl font-black mb-2">{task.patient_name} 様</div>
-                )}
-                <div className="flex items-center gap-2 mb-2 flex-wrap">
-                  <div className="text-sm font-bold opacity-80">指示時間: {task.display_period}</div>
-                  {task.instruction_type === '看護指示' ? (
-                    <span className="bg-emerald-600 text-white text-xs px-2.5 py-0.5 rounded-full font-bold shadow-sm">
-                      看護指示
-                    </span>
-                  ) : task.instruction_type === '医師指示' && !isInterruptTask ? (
-                    <span className="bg-indigo-100 text-indigo-800 border border-indigo-200 text-xs px-2.5 py-0.5 rounded-full font-bold opacity-90">
-                      医師指示
-                    </span>
-                  ) : null}
-                </div>
-              </>
-            );
-          })()}
-          {/* 👤 患者の割り当て・変更ドロップダウン */}
-          <div className="mb-3 bg-sky-50/90 p-2.5 rounded-xl border border-sky-200 flex flex-col gap-1 text-left shadow-xs">
-            <label className="text-[11px] font-black text-sky-900 flex items-center justify-between">
-              <span>👤 対象患者の選択・変更</span>
-              {task.patient_name ? (
-                <span className="text-[10px] bg-sky-200 text-sky-900 font-bold px-1.5 py-0.5 rounded">
-                  現在: {task.patient_name} ({task.room_id ? `${task.room_id}号室` : ''})
-                </span>
-              ) : (
-                <span className="text-[10px] bg-amber-100 text-amber-900 font-bold px-1.5 py-0.5 rounded">
-                  未指定 (フリー応援)
-                </span>
-              )}
-            </label>
-            <select
-              value={task.patient_id || ''}
-              onChange={(e) => {
-                const targetVal = e.target.value;
-                if (!targetVal) {
-                  handleAssignPatient('', '', '');
-                  return;
-                }
-                const selectedP = patientsList.find((p) => p.patient_id === targetVal);
-                if (selectedP) {
-                  handleAssignPatient(selectedP.patient_id, selectedP.name, selectedP.room_id || '');
-                }
-              }}
-              className="w-full bg-white border border-sky-300 rounded-lg px-2.5 py-1.5 text-xs font-bold text-slate-800 focus:ring-2 focus:ring-sky-400 focus:outline-none cursor-pointer"
-            >
-              <option value="">（患者指定なし / フリー応援・ナースコール対応）</option>
-              {patientsList.map((p) => (
-                <option key={p.patient_id} value={p.patient_id}>
-                  {p.room_id ? `${p.room_id}号室 ` : ''}{p.name} 様 ({p.patient_id})
-                </option>
-              ))}
-            </select>
+          {task.room_id && task.room_id.trim() !== '' && (
+            <div className="text-xs font-bold opacity-70 mb-0.5">{task.room_id}号室</div>
+          )}
+          {task.patient_name && task.patient_name.trim() !== '' && (
+            <div className="text-xl font-black mb-2">{task.patient_name} 様</div>
+          )}
+          <div className="flex items-center gap-2 mb-2 flex-wrap">
+            <div className="text-sm font-bold opacity-80">指示時間: {task.display_period}</div>
+            {task.instruction_type === '看護指示' ? (
+              <span className="bg-emerald-600 text-white text-xs px-2.5 py-0.5 rounded-full font-bold shadow-sm">
+                看護指示
+              </span>
+            ) : task.instruction_type === '医師指示' && !isInterruptTask ? (
+              <span className="bg-indigo-100 text-indigo-800 border border-indigo-200 text-xs px-2.5 py-0.5 rounded-full font-bold opacity-90">
+                医師指示
+              </span>
+            ) : null}
           </div>
+
+          {/* 👤 ナースコール・緊急応援要請・割り込みタスクのみ「患者の割り当て・変更ドロップダウン」を表示 */}
+          {isInterruptTask && (
+            <div className="!mb-3 !bg-sky-50 !p-2.5 !rounded-xl !border !border-sky-300 !flex !flex-col !gap-1.5 !text-left !shadow-sm">
+              <label className="!text-[11px] !font-black !text-sky-900 !flex !items-center !justify-between">
+                <span>👤 対象患者の選択・変更</span>
+                {task.patient_name ? (
+                  <span className="!text-[10px] !bg-sky-200 !text-sky-950 !font-bold !px-1.5 !py-0.5 !rounded">
+                    現在: {task.patient_name} ({task.room_id ? `${task.room_id}号室` : ''})
+                  </span>
+                ) : (
+                  <span className="!text-[10px] !bg-amber-100 !text-amber-950 !font-bold !px-1.5 !py-0.5 !rounded">
+                    未指定 (フリー応援)
+                  </span>
+                )}
+              </label>
+              <select
+                value={task.patient_id || ''}
+                onChange={(e) => {
+                  const targetVal = e.target.value;
+                  if (!targetVal) {
+                    handleAssignPatient('', '', '');
+                    return;
+                  }
+                  const selectedP = patientsList.find((p) => p.patient_id === targetVal);
+                  if (selectedP) {
+                    handleAssignPatient(selectedP.patient_id, selectedP.name, selectedP.room_id || '');
+                  }
+                }}
+                className="!w-full !bg-white !border !border-sky-400 !rounded-lg !px-2.5 !py-1.5 !text-xs !font-bold !text-slate-800 focus:!ring-2 focus:!ring-sky-500 focus:!outline-none !cursor-pointer !shadow-inner"
+              >
+                <option value="">（患者指定なし / フリー応援・ナースコール対応）</option>
+                {patientsList.map((p) => (
+                  <option key={p.patient_id} value={p.patient_id}>
+                    {p.room_id ? `${p.room_id}号室 ` : ''}{p.name} 様 ({p.patient_id})
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
 
           <div className="text-base font-black mb-1">{task.title}</div>
           <div className="text-xs opacity-80 mb-3 min-h-[40px] whitespace-pre-wrap text-left">{task.details || '詳細はありません'}</div>
@@ -302,46 +254,33 @@ export const TimelinePopup: React.FC<TimelinePopupProps> = ({ task, onClose, ren
             </div>
           )}
 
-          {/* 📝 実施完了後の記録入力フォーム (SOAP / 特記事項) */}
-          {(currentStatus === 'record_start' || currentStatus === 'record_pending' || currentStatus === 'record_complete') && (
-            <div className="bg-sky-50/90 border-2 border-sky-300 rounded-xl p-3 mb-3.5 text-left shadow-xs flex flex-col gap-2 animate-fade-in">
+          {/* ⏱️ 実施完了（記録入力待ち）の場合の表示 */}
+          {currentStatus === 'completed' && (
+            <div className="bg-blue-50/90 border border-blue-300 rounded-xl p-3 mb-3.5 text-left shadow-xs flex flex-col gap-1">
               <div className="flex items-center justify-between">
-                <span className="text-xs font-black text-sky-900 flex items-center gap-1">
-                  <span>📝 実施完了後の記録・SOAP入力</span>
-                </span>
-                <span className="text-[10px] bg-sky-200 text-sky-900 font-extrabold px-2 py-0.5 rounded-full">
-                  {currentStatus === 'record_complete' ? '記録完了済み' : '記録入力中'}
+                <span className="text-xs font-black text-blue-900">⏱️ 実施完了（記録入力待ち）</span>
+                <span className="text-[10px] bg-blue-200 text-blue-900 font-bold px-2 py-0.5 rounded-full">
+                  {task.completed_by ? `実施者: ${task.completed_by}` : '記録待ち'}
                 </span>
               </div>
-              <textarea
-                value={recordNote}
-                onChange={(e) => setRecordNote(e.target.value)}
-                placeholder="SOAPや実施後の患者状態・特記事項を入力してください（例: S: 呼吸苦軽減 / O: SpO2 97% / A: 処置完了 / P: 経過観察）"
-                rows={3}
-                className="w-full bg-white border border-sky-300 rounded-lg p-2 text-xs font-medium text-slate-800 focus:ring-2 focus:ring-sky-400 focus:outline-none resize-none shadow-inner"
-              />
-              <div className="flex justify-end gap-2">
-                <button
-                  type="button"
-                  onClick={handleExecuteCompleteWithOption}
-                  disabled={isSavingRecordNote}
-                  className="!py-1.5 !px-3.5 !bg-purple-600 hover:!bg-purple-700 !text-white !font-bold !text-xs !rounded-lg !shadow-xs cursor-pointer transition-all disabled:opacity-50 border-none flex items-center gap-1 active:scale-98"
-                >
-                  <span>{isSavingRecordNote ? '保存中...' : '💾 記録を保存して完了'}</span>
-                </button>
-              </div>
+              <p className="text-[11px] text-blue-800 font-bold">
+                実施が完了しました。記録はするときは記録を入力するボタンを押してください。
+              </p>
             </div>
           )}
 
-          {/* 既に記録なしで完了済みの場合の表示 */}
-          {currentStatus === 'completed' && (
+          {/* ✅ 実施完了（記録不要）の場合の表示 */}
+          {currentStatus === 'no_record_completed' && (
             <div className="bg-emerald-50/90 border border-emerald-300 rounded-xl p-3 mb-3.5 text-left shadow-xs flex flex-col gap-1">
               <div className="flex items-center justify-between">
-                <span className="text-xs font-black text-emerald-900">実施完了（記録なし）</span>
+                <span className="text-xs font-black text-emerald-900">✅ 実施完了（記録不要）</span>
                 <span className="text-[10px] bg-emerald-200 text-emerald-900 font-bold px-2 py-0.5 rounded-full">
-                  {task.completed_by ? `対応: ${task.completed_by}` : '完了'}
+                  {task.completed_by ? `実施者: ${task.completed_by}` : '完了'}
                 </span>
               </div>
+              <p className="text-[11px] text-emerald-800 font-bold">
+                記録不要として実施完了済みです。
+              </p>
             </div>
           )}
 

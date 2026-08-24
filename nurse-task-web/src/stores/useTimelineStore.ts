@@ -72,7 +72,9 @@ interface TimelineStore {
   groupingMode: string | null;
   activeId: string | null;
   activePopupTaskId: string | null;
-  
+  activeScreen: string;
+  setActiveScreen: (screen: string) => void;
+
   timelineStartTime: string;
   timelineEndTime: string;
   setTimelineTimeRange: (start: string, end: string) => void;
@@ -216,23 +218,16 @@ export function mergeNurseData(
       const existing = deduplicatedRuntimes.get(key)!;
       const existingTime = getTimestampValue(existing);
       const newTime = getTimestampValue(rt);
-      const isSosActive = Boolean(rt.is_sos || existing.is_sos);
 
-      if (newTime >= existingTime || rt.is_sos) {
+      if (newTime >= existingTime) {
         deduplicatedRuntimes.set(key, {
           ...existing,
           ...rt,
-          is_sos: isSosActive,
-          sos_reason: rt.sos_reason || existing.sos_reason,
-          responder_name: rt.responder_name || existing.responder_name,
         });
       } else {
         deduplicatedRuntimes.set(key, {
           ...rt,
           ...existing,
-          is_sos: isSosActive,
-          sos_reason: existing.sos_reason || rt.sos_reason,
-          responder_name: existing.responder_name || rt.responder_name,
         });
       }
     }
@@ -339,6 +334,13 @@ export const useTimelineStore = create<TimelineStore>((set, get) => ({
   groupingMode: null,
   activeId: null,
   activePopupTaskId: null,
+  activeScreen: sessionStorage.getItem('currentScreen') || 'timeline',
+  setActiveScreen: (screen) => set(() => {
+    try {
+      sessionStorage.setItem('currentScreen', screen);
+    } catch (e) {}
+    return { activeScreen: screen };
+  }),
   
   timelineStartTime: '08:00',
   timelineEndTime: '17:00',
@@ -1010,7 +1012,69 @@ export const useTimelineStore = create<TimelineStore>((set, get) => ({
     return {};
   }),
 
-  setPatientSosList: (list) => set({ patientSosList: list }),
+  setPatientSosList: (list) => set((state) => {
+    const todayJST = getJSTDateString();
+    const now = new Date();
+    const currentTimeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+
+    let updatedTasks = [...state.allTasks];
+
+    list.forEach(p => {
+      if (!p || !p.patient_id) return;
+      const taskId = `patient-sos-${p.patient_id}`;
+      const exists = updatedTasks.some(t => t.task_id === taskId || (t.patient_id === p.patient_id && t.is_sos));
+      if (!exists) {
+        const patientTask: ExtendedTask = {
+          task_id: taskId,
+          emr_order_id: taskId,
+          patient_id: p.patient_id,
+          patient_name: p.patient_name || '患者',
+          room_id: p.room_id || '',
+          title: `📞 緊急患者SOS要請 (${p.patient_name || '患者'}様)`,
+          details: `【ナースコール・緊急応援】${p.reason || '緊急ボタン検知'} (要請時刻: ${currentTimeStr})`,
+          status: 'progressing',
+          scheduled_at: `${todayJST}T${currentTimeStr}:00`,
+          initial_period: currentTimeStr,
+          display_period: currentTimeStr,
+          category: '処置',
+          priority: 'high',
+          is_additional: true,
+          is_sos: true,
+          sos_reason: p.reason || 'ナースコール検知',
+          nurse_id: '',
+          nurse_name: '',
+          staff_id: '',
+          assigned_nurse_id: '',
+          requested_by_id: p.requested_by_id || p.patient_id || '',
+          requested_by_name: p.requested_by_name || p.patient_name || '',
+          isGroup: false,
+          isChild: false,
+          parent_id: null,
+          target_date: state.selectedDate || todayJST,
+        };
+        updatedTasks.push(patientTask);
+      }
+    });
+
+    return { patientSosList: list, allTasks: updatedTasks };
+  }),
+
+  respondToPatientSos: (patientId, responderName) => set((state) => {
+    const list = state.patientSosList || [];
+    const updatedList = list.filter(p => p.patient_id !== patientId);
+    const taskId = `patient-sos-${patientId}`;
+    const updatedTasks = state.allTasks.map(t => {
+      if (t.task_id === taskId) {
+        return { ...t, status: 'no_record_completed' as const, is_sos: false };
+      }
+      return t;
+    });
+
+    togglePatientSosInFirestore(patientId, '', '', false, '', responderName || '');
+    updateTask(taskId, { status: 'no_record_completed', is_sos: false });
+
+    return { patientSosList: updatedList, allTasks: updatedTasks };
+  }),
 
   togglePatientSos: (patientId, patientName, roomId) => set((state) => {
     const list = state.patientSosList || [];
@@ -1020,7 +1084,6 @@ export const useTimelineStore = create<TimelineStore>((set, get) => ({
     const currentUserId = state.currentUser?.nurse_id || sessionStorage.getItem('nurse_id') || '';
     const currentUserName = state.currentUser?.name || sessionStorage.getItem('nurse_name') || '';
 
-    // 📡 Firestoreにリアルタイム同期書き込み（全看護師端末に秒速ブロードキャスト通知）
     togglePatientSosInFirestore(
       patientId,
       patientName,
@@ -1049,13 +1112,6 @@ export const useTimelineStore = create<TimelineStore>((set, get) => ({
     }
 
     return { patientSosList: updatedList };
-  }),
-
-  respondToPatientSos: (patientId) => set((state) => {
-    togglePatientSosInFirestore(patientId, '', '', false);
-    return {
-      patientSosList: (state.patientSosList || []).filter(p => p.patient_id !== patientId)
-    };
   }),
 
   respondToTaskSos: (taskId, responderName) => set((state) => {
@@ -1111,6 +1167,56 @@ export const useTimelineStore = create<TimelineStore>((set, get) => ({
       sos_reason: nextReason,
     });
 
+    const todayJST = getJSTDateString();
+    const now = new Date();
+    const currentTimeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+
+    let updatedTasks = [...state.allTasks];
+    const sosTaskId = `NURSE_SOS_${nurseId}`;
+
+    if (nextIsSos) {
+      const newSosTask: ExtendedTask = {
+        task_id: sosTaskId,
+        emr_order_id: sosTaskId,
+        patient_id: '',
+        patient_name: '',
+        room_id: '',
+        title: `🚨 緊急SOS要請中 (${nurse?.name || '自分'})`,
+        details: `【緊急アシスト要請中】${nextReason} (要請時刻: ${currentTimeStr})`,
+        status: 'progressing',
+        scheduled_at: `${todayJST}T${currentTimeStr}:00`,
+        initial_period: currentTimeStr,
+        display_period: currentTimeStr,
+        category: '処置',
+        priority: 'high',
+        is_additional: true,
+        is_sos: true,
+        sos_reason: nextReason,
+        nurse_id: nurseId,
+        nurse_name: nurse?.name || '自分',
+        staff_id: nurseId,
+        assigned_nurse_id: nurseId,
+        requested_by_id: nurseId,
+        requested_by_name: nurse?.name || '自分',
+        isGroup: false,
+        isChild: false,
+        parent_id: null,
+        target_date: state.selectedDate || todayJST,
+      };
+
+      updatedTasks = updatedTasks.filter(t => t.task_id !== sosTaskId);
+      updatedTasks.push(newSosTask);
+      updateTask(sosTaskId, removeUndefined(newSosTask as any));
+    } else {
+      updatedTasks = updatedTasks.map(t => {
+        if (t.task_id === sosTaskId) {
+          return { ...t, status: 'no_record_completed' as const, is_sos: false };
+        }
+        return t;
+      });
+      updateTask(sosTaskId, { status: 'no_record_completed', is_sos: false });
+    }
+
     return {
       nurses: state.nurses.map((n) =>
         n.nurse_id === nurseId
@@ -1122,6 +1228,7 @@ export const useTimelineStore = create<TimelineStore>((set, get) => ({
             }
           : n
       ),
+      allTasks: updatedTasks,
     };
   }),
 
@@ -1135,6 +1242,15 @@ export const useTimelineStore = create<TimelineStore>((set, get) => ({
       responder_name: responderName,
     });
 
+    const sosTaskId = `NURSE_SOS_${nurseId}`;
+    const updatedTasks = state.allTasks.map(t => {
+      if (t.task_id === sosTaskId) {
+        return { ...t, status: 'no_record_completed' as const, is_sos: false, responder_name: responderName };
+      }
+      return t;
+    });
+    updateTask(sosTaskId, { status: 'no_record_completed', is_sos: false });
+
     return {
       nurses: state.nurses.map((n) =>
         n.nurse_id === nurseId
@@ -1146,6 +1262,7 @@ export const useTimelineStore = create<TimelineStore>((set, get) => ({
             }
           : n
       ),
+      allTasks: updatedTasks,
     };
   }),
 

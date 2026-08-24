@@ -408,6 +408,28 @@ export default function MapContainer({ selectedPatients }: MapContainerProps): R
   };
 
   const sosTasks = allTasks.filter((task) => {
+    // 🛡️ タスクSOSは患者に紐づくタスクのみ！患者ID・名が無いものは絶対除外（看護師SOSの誤混入・二重空表示を完全遮断）
+    if (!task.patient_id || task.patient_id.trim() === '' || !task.patient_name || task.patient_name.trim() === '') {
+      return false;
+    }
+
+    const taskId = String(task.task_id || '').toLowerCase();
+    const taskTitle = String(task.title || '').toLowerCase();
+
+    // 🛡️ 対応記録割り込みタスク、患者SOSタスク、看護師SOSタスクは専用判定ルートで処理するため100%除外
+    if (
+      (task as any).is_interruption === true || 
+      taskId.includes('interrupt') ||   // CALL_INTERRUPT_ などを包括的につかまえる
+      taskId.includes('patient-sos') || // patient-sos- などをつかまえる
+      taskId.includes('patient_sos') ||
+      taskId.includes('nurse_sos') ||   // NURSE_SOS_ などをつかまえる
+      taskId.includes('nurse-sos') ||
+      taskTitle.includes('緊急sos要請中') ||
+      taskTitle.includes('看護師sos対応')
+    ) {
+      return false;
+    }
+
     const isSosActive = task.is_sos === true || Boolean((task as any).sos_reason);
     if (!isSosActive) return false;
     const isTaskGuest = checkIsGuestSourceMap(

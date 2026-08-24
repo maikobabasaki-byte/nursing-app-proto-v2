@@ -202,6 +202,9 @@ export const triggerNurseCallInterruption = async (options?: {
   roomId?: string;
   sosReason?: string;
   title?: string;
+  requestedById?: string;
+  requestedByName?: string;
+  targetNurseIds?: string[];
 }) => {
   const now = new Date();
   const hh = String(now.getHours()).padStart(2, '0');
@@ -238,6 +241,11 @@ export const triggerNurseCallInterruption = async (options?: {
   const defaultPatientName = String(options?.patientName || firstActive?.patient_name || '').trim();
   const defaultRoomId = String(options?.roomId || firstActive?.room_id || '').trim();
 
+  // 対象ナースID（複数指定対応：要請者＋応答者、または応答者のみ）
+  const targetNurseIdString = options?.targetNurseIds && options.targetNurseIds.length > 0
+    ? options.targetNurseIds.filter(Boolean).join(',')
+    : nurseId;
+
   // 2. 新規割り込みタスク（実績ドキュメント）の生成
   const taskId = `CALL_INTERRUPT_${Date.now()}`;
   const taskTitle = String(options?.title || '📞 ナースコール対応').trim();
@@ -262,12 +270,15 @@ export const triggerNurseCallInterruption = async (options?: {
     isRestricted: false,
     requiresAssist: false,
     is_additional: true, // 💡 臨時追加割り込みフラグ
+    is_interruption: true, // 🛡️ 対応記録割り込みフラグ（連鎖通知発火防止）
     is_sos: false,
     sos_reason: '',
-    nurse_id: nurseId,
+    requested_by_id: options?.requestedById || '',
+    requested_by_name: options?.requestedByName || '',
+    nurse_id: targetNurseIdString,
     nurse_name: nurseName,
-    staff_id: nurseId,
-    assigned_nurse_id: nurseId,
+    staff_id: targetNurseIdString,
+    assigned_nurse_id: targetNurseIdString,
     isGroup: false,
     isChild: false,
     parent_id: null,

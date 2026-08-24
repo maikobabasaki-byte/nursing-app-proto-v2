@@ -48,11 +48,18 @@ export const LeaderTodoModal: React.FC<Props> = ({ patient, todoToEdit, onClose,
     todoToEdit && (todoToEdit.status === 'completed' || (todoToEdit.result_outcome && todoToEdit.result_outcome.trim() !== ''))
   );
 
+  const getCurrentTimeHHMM = (): string => {
+    const now = new Date();
+    const hours = String(now.getHours()).padStart(2, '0');
+    const minutes = String(now.getMinutes()).padStart(2, '0');
+    return `${hours}:${minutes}`;
+  };
+
   const [category, setCategory] = useState<LeaderTodoCategory>(todoToEdit?.category || '患者対応');
   const [priority, setPriority] = useState<LeaderTodoPriority>(todoToEdit?.priority || 'high');
   const [isCategoryOpen, setIsCategoryOpen] = useState<boolean>(false);
   const [isPriorityOpen, setIsPriorityOpen] = useState<boolean>(false);
-  const [scheduledAt, setScheduledAt] = useState<string>(todoToEdit?.scheduled_at || '14:00');
+  const [scheduledAt, setScheduledAt] = useState<string>(todoToEdit?.scheduled_at || getCurrentTimeHHMM());
   const [title, setTitle] = useState<string>(todoToEdit?.title || '');
   const [requiresDoubleCheck, setRequiresDoubleCheck] = useState<boolean>(todoToEdit?.requires_double_check || false);
   const [status] = useState<LeaderTodo['status']>(todoToEdit?.status || 'untouched');

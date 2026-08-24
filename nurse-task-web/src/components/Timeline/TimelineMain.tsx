@@ -67,15 +67,17 @@ export default function TimelineMain({
       return false;
     }
 
-    // ⚡ 練習用デモタスク・突発割り込み・ナースコール対応・臨時追加は患者選択フィルタをバイパスしてタイムラインに表示
-    const isInterrupt = Boolean(
+    // ⚡ 練習用デモタスク・突発割り込み・ナースコール対応は本人および担当患者ケアとして表示
+    const isInterruptOrSos = Boolean(
       task.task_id === 'demo-task-tutorial' ||
+      task.task_id?.includes('CALL_INTERRUPT_') ||
       task.title?.includes('ナースコール') || 
-      task.title?.includes('SOS') || 
-      task.task_id?.startsWith('CALL_INTERRUPT_') ||
-      task.is_additional
+      task.title?.includes('SOS')
     );
-    if (isInterrupt) return true;
+
+    if (isInterruptOrSos) {
+      return true; // 💡 SOS・ナースコール・突発割り込みは受け持ち関係なく全員のタイムラインに100%表示
+    }
 
     if (isPatientSelected(task.patient_id)) return true;
     if (task.isGroup && task.children && task.children.some(c => isPatientSelected(c.patient_id))) {
@@ -213,7 +215,12 @@ export default function TimelineMain({
   const deduplicatedExtendedTasks = useMemo(() => {
     const map = new Map<string, ExtendedTask>();
     extendedTasks.forEach((t: ExtendedTask) => {
-      const key = `${t.patient_id}_${t.title}_${t.display_period}`;
+      const isUniqueSosTask = Boolean(
+        t.task_id?.startsWith('CALL_INTERRUPT_') || 
+        t.task_id?.startsWith('NURSE_SOS_') || 
+        t.task_id?.startsWith('patient-sos-')
+      );
+      const key = isUniqueSosTask ? t.task_id : `${t.patient_id}_${t.title}_${t.display_period}`;
       const existing = map.get(key);
       if (!existing) {
         map.set(key, t);
@@ -228,7 +235,30 @@ export default function TimelineMain({
     return Array.from(map.values());
   }, [extendedTasks]);
 
-  const storeMemos = useTimelineStore((state) => state.memos);
+  const storeMemos = useTimelineStore((state) => state.memos || []);
+
+  const filteredMemos = useMemo(() => {
+    const myId = String(currentUser?.nurse_id || currentUser?.staff_id || sessionStorage.getItem('nurse_id') || '').trim();
+    const myName = String(currentUser?.name || sessionStorage.getItem('nurse_name') || '').trim().replace(/[\s　]+/g, '');
+
+    return storeMemos.filter((m) => {
+      if (m.is_completed) return false;
+
+      const isMemoGuest = Boolean((m as any).is_guest === true || m.id?.startsWith('GUEST-'));
+      if (isGuestUser !== isMemoGuest) return false;
+
+      // 🛡️ どのメモも他ユーザーとは一切共有しない（作成者本人以外の画面へは非表示）
+      const memoCreator = String((m as any).created_by || (m as any).nurse_name || (m as any).nurse_id || '').trim().replace(/[\s　]+/g, '');
+
+      if (memoCreator !== '') {
+        const isMyMemo = (myId !== '' && memoCreator === myId) || (myName !== '' && memoCreator === myName);
+        if (!isMyMemo) {
+          return false;
+        }
+      }
+      return true;
+    });
+  }, [storeMemos, currentUser, isGuestUser]);
   const activePopupTaskId = useTimelineStore((state) => state.activePopupTaskId);
   const setActivePopupTaskId = useTimelineStore((state) => state.setActivePopupTaskId);
 
@@ -605,6 +635,17 @@ export default function TimelineMain({
             status === 'pending' || status === 'progressing' || status === 'record_start' || status === 'record_pending';
 
           const filteredRowTasks = currentRows.filter(t => {
+            const isSosOrInterrupt = Boolean(
+              t.is_sos || 
+              (t as any).is_interruption === true || 
+              t.task_id?.startsWith('CALL_INTERRUPT_') || 
+              t.task_id?.startsWith('NURSE_SOS_') || 
+              t.task_id?.startsWith('patient-sos-') || 
+              t.title?.includes('SOS') ||
+              t.title?.includes('応援')
+            );
+            if (isSosOrInterrupt) return true;
+
             if (!t.isGroup && isPlaceholderStatus(t.status)) return false;
             if (t.isGroup && isPlaceholderStatus(t.status)) return false;   
             if (t.isChild && !t.isGroup) return false;              
@@ -624,7 +665,7 @@ export default function TimelineMain({
               expandedGroups={expandedGroups}
               toggleGroup={toggleGroup}
               setRowRef={(time, el) => rowRefs.current[time] = el}
-              timeMemos={storeMemos}
+              timeMemos={filteredMemos}
               isPastTime={isPastTime}
               isSortMode={isSortMode}
               activeId={activeId}
@@ -702,9 +743,10 @@ export default function TimelineMain({
                 }
 
                 const messages: Record<string, string> = {
-                  progressing: '実施を開始しました（前タスクは自動で中断・保留へ移動）',
-                  pending: '中断・保留しました',
-                  completed: '実施を完了しました（記録なし）',
+                  progressing: '実施を開始しました',
+                  pending: 'タスクを中断・保留にしました',
+                  completed: '実施完了しました（記録前）',
+                  no_record_completed: '実施完了しました（記録不要）',
                   record_start: '実施完了・記録を開始しました',
                   record_pending: '記録を一時中断しました',
                   record_complete: '記録を完了しました',

@@ -10,7 +10,11 @@ interface TimelinePopupButtonsProps {
 export const TimelinePopupButtons: React.FC<TimelinePopupButtonsProps> = ({ task, onStatusChange }) => {
   const currentStatus = task.status;
   const isReadOnly = useTimelineStore((state) => state.isReadOnly);
-  const [noRecordNeeded, setNoRecordNeeded] = useState(false);
+  const [showCompletionChoice, setShowCompletionChoice] = useState(false);
+
+  React.useEffect(() => {
+    setShowCompletionChoice(false);
+  }, [task.task_id, task.status]);
 
   if (isReadOnly) {
     return (
@@ -20,8 +24,8 @@ export const TimelinePopupButtons: React.FC<TimelinePopupButtonsProps> = ({ task
     );
   }
 
-  // ボタンの共通スタイルを定数化
-  const btnBase = "w-full flex justify-center !py-2.5 !font-bold !rounded-lg !text-lg !shadow cursor-pointer transition-colors";
+  // ボタンの共通スタイルを定数化（画面フィットのため高さ・文字サイズを最適化）
+  const btnBase = "w-full flex justify-center !py-2 !font-bold !rounded-lg !text-base !shadow cursor-pointer transition-colors";
   
   const getTourBtnId = (targetStatus: ExtendedTaskStatus) => {
     if (task.task_id !== 'demo-task-tutorial') return undefined;
@@ -66,34 +70,74 @@ export const TimelinePopupButtons: React.FC<TimelinePopupButtonsProps> = ({ task
         
         {currentStatus === 'progressing' && (
             <>
-            {renderBtn('pending', '中断・保留', '!bg-orange-500 !text-white hover:bg-orange-600')}
+            {showCompletionChoice ? (
+              <div className="!flex !flex-col !gap-2.5 !p-3 !bg-emerald-50/90 !border-2 !border-emerald-300 !rounded-xl text-left !shadow-sm animate-fade-in">
+                <div className="!flex !items-center !justify-between border-b border-emerald-200 pb-1.5">
+                  <span className="!text-xs !font-black !text-emerald-950">
+                    実施完了後の記録処理を選択
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setShowCompletionChoice(false)}
+                    className="!text-xs !text-slate-500 hover:!text-slate-800 !font-bold cursor-pointer"
+                  >
+                    ✕ 戻る
+                  </button>
+                </div>
 
-            {/* 💡 「記録不要」チェックボックスと動的にテキスト/スタイルが変わる実施完了ボタン */}
-            <div className="!flex !flex-col !gap-2 !p-2.5 !bg-white !border-2 !border-slate-300 !rounded-xl !my-1 text-left !shadow-xs">
-              <label className="!flex !items-center !gap-2.5 !cursor-pointer !select-none !text-xs !font-black !text-slate-800 !px-1">
-                <input
-                  type="checkbox"
-                  checked={noRecordNeeded}
-                  onChange={(e) => setNoRecordNeeded(e.target.checked)}
-                  className="!w-5 !h-5 !rounded-md !border-2 !border-slate-500 !bg-white checked:!bg-emerald-600 checked:!border-emerald-600 !cursor-pointer !accent-emerald-600 shrink-0"
-                />
-                <span>記録不要（軽微な対応など）</span>
-              </label>
+                <div className="!flex !flex-col !gap-2 !mt-1">
+                  {/* ① 記録なしで完了（記録不要） */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowCompletionChoice(false);
+                      onStatusChange(task, 'no_record_completed');
+                    }}
+                    className={`${btnBase} !bg-emerald-600 !text-white hover:!bg-emerald-700 !text-sm`}
+                  >
+                    記録なしで完了（記録不要）
+                  </button>
 
-              {renderBtn(
-                'completed',
-                noRecordNeeded ? '実施完了（記録なし）' : '実施完了',
-                noRecordNeeded
-                  ? '!bg-emerald-600 !text-white hover:!bg-emerald-700'
-                  : '!bg-green-600 !text-white hover:bg-green-700',
-                () => {
-                  onStatusChange(task, noRecordNeeded ? 'completed' : 'record_start');
-                }
-              )}
-            </div>
+                  {/* ② 今すぐ記録を入力 */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowCompletionChoice(false);
+                      onStatusChange(task, 'record_start');
+                    }}
+                    className={`${btnBase} !bg-purple-600 !text-white hover:!bg-purple-700 !text-sm`}
+                  >
+                    今すぐ記録を入力（記録開始）
+                  </button>
 
-            {renderBtn('unexecuted', '未実施', '!bg-red-600 !text-white hover:bg-red-700')}
-            {renderBtn('initial', '初期化', '!bg-gray-500 !text-white hover:bg-gray-600')}
+                  {/* ③ 後で記録を入力（実施完了にする） */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowCompletionChoice(false);
+                      onStatusChange(task, 'completed');
+                    }}
+                    className={`${btnBase} !bg-blue-600 !text-white hover:!bg-blue-700 !text-sm`}
+                  >
+                    後で記録を入力（実施完了にする）
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <>
+                {renderBtn('pending', '中断・保留', '!bg-orange-500 !text-white hover:bg-orange-600')}
+
+                {renderBtn(
+                  'completed',
+                  '実施完了',
+                  '!bg-green-600 !text-white hover:bg-green-700',
+                  () => setShowCompletionChoice(true)
+                )}
+
+                {renderBtn('unexecuted', '未実施', '!bg-red-600 !text-white hover:bg-red-700')}
+                {renderBtn('initial', '初期化', '!bg-gray-500 !text-white hover:bg-gray-600')}
+              </>
+            )}
             </>
         )}
 
@@ -106,6 +150,15 @@ export const TimelinePopupButtons: React.FC<TimelinePopupButtonsProps> = ({ task
         
         {currentStatus === 'completed' && (
             <>
+            {renderBtn('record_start', '記録を入力する', '!bg-blue-600 !text-white hover:bg-blue-700')} 
+            {renderBtn('progressing', '実施中に戻す', '!bg-gray-400 !text-white hover:bg-gray-500')} 
+            {renderBtn('initial', '初期化', '!bg-gray-500 !text-white hover:bg-gray-600')}
+            </>
+        )}
+
+        {currentStatus === 'no_record_completed' && (
+            <>
+            {renderBtn('record_start', '記録を入力する', '!bg-blue-600 !text-white hover:bg-blue-700')} 
             {renderBtn('progressing', '実施中に戻す', '!bg-gray-400 !text-white hover:bg-gray-500')} 
             {renderBtn('initial', '初期化', '!bg-gray-500 !text-white hover:bg-gray-600')}
             </>

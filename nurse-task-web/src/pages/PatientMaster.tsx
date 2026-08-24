@@ -37,8 +37,8 @@ export default function PatientMasterPage({ selectedIds }: DashboardProps) {
   const allTasks = useTimelineStore((state) => state.allTasks);
   const currentUser = useTimelineStore((state) => state.currentUser);
 
-  // 検索ワードを管理するStateを追加
   const [searchWord, setSearchWord] = useState('');
+  const [isDataLoaded, setIsDataLoaded] = useState(false);
 
   // 親グループを展開（フラット化）したタスク一覧を作成
   const flatTasks = useMemo(() => {
@@ -76,6 +76,21 @@ export default function PatientMasterPage({ selectedIds }: DashboardProps) {
     };
     loadData();
   }, []);
+
+  // ⏳ タスク・患者データの同期完了まで読み込み中（スピナー表示）を維持する制御ロジック
+  useEffect(() => {
+    if (rawPatients.length > 0) {
+      if (flatTasks.length > 0) {
+        setIsDataLoaded(true);
+      } else {
+        // 本日のタスクが元から0件の場合でも無限ロード状態にならないようフォールバック解除タイマーを設定
+        const timer = setTimeout(() => {
+          setIsDataLoaded(true);
+        }, 700);
+        return () => clearTimeout(timer);
+      }
+    }
+  }, [rawPatients, flatTasks]);
 
   // 2. リアルタイムのタスクデータと結合し、フィルタリング・ソートを行う
   const patients = useMemo(() => {
@@ -173,6 +188,20 @@ export default function PatientMasterPage({ selectedIds }: DashboardProps) {
     // ①か②のどちらかがヒットすれば画面に残す
     return matchPatientName || matchTaskTitle;
   });
+
+  if (!isDataLoaded) {
+    return (
+      <main className="flex-1 p-6 flex flex-col items-center justify-center min-h-[400px] bg-slate-300 text-slate-800 font-sans">
+        <div className="flex flex-col items-center gap-4 bg-white/80 backdrop-blur-sm p-8 rounded-2xl shadow-lg border border-slate-200 animate-fade-in">
+          <div className="w-10 h-10 border-4 border-cyan-600 border-t-transparent rounded-full animate-spin shadow-md"></div>
+          <div className="flex flex-col items-center gap-1 text-center">
+            <p className="text-sm font-bold text-slate-700">患者データ・本日タスクを読み込み中...</p>
+            <p className="text-xs text-slate-500">最新のタスク情報を同期しています</p>
+          </div>
+        </div>
+      </main>
+    );
+  }
 
   return (
     <main className="flex-1 p-6 flex flex-col gap-6 bg-slate-300 text-slate-800 font-sans overflow-y-auto">

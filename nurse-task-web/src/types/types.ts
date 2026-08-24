@@ -4,6 +4,7 @@ export type TaskStatus =
   | 'progressing'
   | 'pending'
   | 'completed'
+  | 'no_record_completed'
   | 'record_start'
   | 'record_pending'
   | 'record_complete'

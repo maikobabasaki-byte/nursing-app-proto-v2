@@ -323,8 +323,6 @@ export const respondToTaskSosWithTransaction = async (
         {
           is_sos: false,
           sos_reason: '',
-          requested_by_id: '',
-          requested_by_name: '',
           responder_name: responderName,
           updatedAt: serverTimestamp(),
         },

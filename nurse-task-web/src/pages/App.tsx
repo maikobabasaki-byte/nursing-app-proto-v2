@@ -49,22 +49,18 @@ export default function App() {
   const [isSyncingWithPC, setIsSyncingWithPC] = useState<boolean>(false);
   const setTasks = useTimelineStore((state) => state.setTasks);
 
-  // 1. sessionStorageから現在の画面状態を復元（タブごとの独立セッション対応）
-  const [currentScreen, setCurrentScreen] = useState<ScreenType>(() => {
-    const savedScreen = sessionStorage.getItem('currentScreen');
-    return (savedScreen as ScreenType) || 'login';
-  });
+  // 💡 Zustandストアの activeScreen を唯一の正解（Single Source of Truth）として一本化（無限ループ完全回避）
+  const storeActiveScreen = useTimelineStore((state) => state.activeScreen);
+  const currentScreen: ScreenType = (storeActiveScreen as ScreenType) || 'login';
+  const setCurrentScreen = (screen: ScreenType) => {
+    useTimelineStore.getState().setActiveScreen(screen);
+  };
 
   // 2. sessionStorageから選択患者リストを復元
   const [selectedPatients, setSelectedPatients] = useState<string[]>(() => {
     const savedPatients = sessionStorage.getItem('selectedPatients');
     return savedPatients ? JSON.parse(savedPatients) : [];
   });
-
-  // 画面が変わるたびにsessionStorageを更新
-  useEffect(() => {
-    sessionStorage.setItem('currentScreen', currentScreen);
-  }, [currentScreen]);
 
   // 患者リストが変わるたびにsessionStorageおよびZustandストアを同期更新
   useEffect(() => {
@@ -332,14 +328,25 @@ export default function App() {
         }
 
         const currentLocalTasks = useTimelineStore.getState().allTasks;
+        const localGroupNodes = currentLocalTasks.filter(lt => lt.isGroup);
 
         const mergedTasks = firestoreTasks.map((ft) => {
           const localMatch = currentLocalTasks.find(lt => lt.task_id === ft.task_id) ||
                              currentLocalTasks.flatMap(lt => lt.children || []).find(c => c.task_id === ft.task_id);
-          if (localMatch && localMatch.parent_id !== undefined) {
-            return { ...ft, parent_id: localMatch.parent_id };
+          if (localMatch) {
+            return { 
+              ...ft, 
+              parent_id: localMatch.parent_id !== undefined ? localMatch.parent_id : ft.parent_id,
+              isGroup: localMatch.isGroup || ft.isGroup,
+            };
           }
           return ft;
+        });
+
+        localGroupNodes.forEach(groupNode => {
+          if (!mergedTasks.some(t => t.task_id === groupNode.task_id)) {
+            mergedTasks.push(groupNode);
+          }
         });
 
         const reconstructed = reconstructGroups(mergedTasks);
@@ -458,21 +465,16 @@ export default function App() {
             const existing = deduplicatedMap.get(key)!;
             const existingTime = getTimestampValue(existing);
             const newTime = getTimestampValue(nurse);
-            const isSosActive = Boolean(nurse.is_sos || existing.is_sos);
 
-            if (newTime >= existingTime || nurse.is_sos) {
+            if (newTime >= existingTime) {
               deduplicatedMap.set(key, { 
                 ...existing, 
                 ...nurse,
-                is_sos: isSosActive,
-                sos_reason: nurse.sos_reason || existing.sos_reason || '',
               });
             } else {
               deduplicatedMap.set(key, { 
                 ...nurse, 
                 ...existing,
-                is_sos: isSosActive,
-                sos_reason: existing.sos_reason || nurse.sos_reason || '',
               });
             }
           }

@@ -86,9 +86,10 @@ export const TaskCard = (props: TaskCardPropsInner) => {
         
         {/* 2. ステータスアイコン（下段） */}
         <div className="flex items-center justify-center h-4 text-xs">
-          {(task.status === 'completed' || task.status === 'record_complete') && <span title="実施完了">✅</span>}
-          {task.status === 'record_start' && <span className="text-green-500" title="記録中">🟢</span>}
-          {task.status === 'record_pending' && <span className="text-orange-500" title="記録中断中">🟠</span>}
+          {(task.status === 'record_complete' || task.status === 'no_record_completed') && <span title="実施完了（記録不要・記録完了）">✅</span>}
+          {task.status === 'completed' && <span className="text-blue-500" title="実施完了（記録未入力）">🔵</span>}
+          {task.status === 'record_start' && <span className="text-blue-500" title="記録中">🔵</span>}
+          {task.status === 'record_pending' && <span className="text-orange-500" title="記録一時中断中">🟠</span>}
         </div>
         
       </div>

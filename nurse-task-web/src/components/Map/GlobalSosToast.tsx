@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useTimelineStore } from '../../stores/useTimelineStore';
 import { useUserName } from '../../hooks/useUserName';
 import { respondToNurseSosWithTransaction, respondToTaskSosWithTransaction } from '../../lib/firebase';
@@ -24,6 +24,39 @@ export const GlobalSosToast: React.FC = () => {
   const [dismissedIds, setDismissedIds] = useState<string[]>([]);
   const [conflictNotice, setConflictNotice] = useState<string | null>(null);
 
+  // 🔔 1. ブラウザ／OS標準の通知許可（Notification.requestPermission）の自動要求
+  useEffect(() => {
+    if (typeof window === 'undefined' || !('Notification' in window)) return;
+
+    const requestPermission = () => {
+      if (Notification.permission === 'default') {
+        Notification.requestPermission().catch((err) => {
+          console.error('通知許可リクエストエラー:', err);
+        });
+      }
+    };
+
+    // コンポーネントのマウント時に通知許可を要求
+    requestPermission();
+
+    // ブラウザのジェスチャー制限対策（ユーザーの初回操作時にも試行）
+    const handleUserInteraction = () => {
+      requestPermission();
+      window.removeEventListener('click', handleUserInteraction);
+      window.removeEventListener('keydown', handleUserInteraction);
+    };
+
+    if (Notification.permission === 'default') {
+      window.addEventListener('click', handleUserInteraction, { once: true });
+      window.addEventListener('keydown', handleUserInteraction, { once: true });
+    }
+
+    return () => {
+      window.removeEventListener('click', handleUserInteraction);
+      window.removeEventListener('keydown', handleUserInteraction);
+    };
+  }, []);
+
   const isGuestUser = Boolean(
     sessionStorage.getItem('is_guest_session') === 'true' ||
     currentUser?.isAnonymous === true
@@ -46,7 +79,14 @@ export const GlobalSosToast: React.FC = () => {
   const activeMemoToasts = storeMemos.filter((m) => {
     if (m.is_completed || dismissedIds.includes(`memo-${m.id}`)) return false;
     const isMemoGuest = checkIsGuestSource(m.id || m.target_room_id, (m as any).created_by);
-    if (!isGuestUser && isMemoGuest) return false;
+    if (isGuestUser !== isMemoGuest) return false;
+
+    // 🛡️ メモの他ユーザー共有を100%完全遮断（作成者本人以外の画面・通知には一切表示しない）
+    const memoCreator = String((m as any).created_by || (m as any).nurse_name || (m as any).nurse_id || '').trim().replace(/[\s　]+/g, '');
+    if (memoCreator !== '') {
+      const isMyMemo = (myNurseId !== '' && memoCreator === myNurseId) || (myNurseName !== '' && memoCreator === myNurseName);
+      if (!isMyMemo) return false;
+    }
     return true;
   });
 
@@ -84,21 +124,26 @@ export const GlobalSosToast: React.FC = () => {
         respondToNurseSos(data.nurseId, data.responderName || responderName);
         setDismissedIds((prev) => [...prev, `nurse-${data.nurseId}`]);
         if (data.responderName && data.responderName !== responderName) {
-          setConflictNotice(`【重複回避】${data.responderName} ナースが既に対応を開始しました！`);
+          const isRequester = (myNurseId !== '' && data.nurseId === myNurseId);
+          if (isRequester) {
+            setConflictNotice(`🤝 ${data.responderName} ナースがあなたのSOSに応答し、支援に入りました！`);
+          } else {
+            setConflictNotice(`【重複回避】${data.responderName} ナースが既に対応を開始しました！`);
+          }
           setTimeout(() => setConflictNotice(null), 4000);
         }
       } else if (data.type === 'TASK_SOS_RESPONDED') {
         respondToTaskSos(data.taskId, data.responderName || responderName);
         setDismissedIds((prev) => [...prev, `task-${data.taskId}`]);
         if (data.responderName && data.responderName !== responderName) {
-          setConflictNotice(`【重複回避】${data.responderName} ナースがタスク緊急要請の対応を開始しました！`);
+          setConflictNotice(`🤝 ${data.responderName} ナースがタスク緊急要請の応援対応に入りました！`);
           setTimeout(() => setConflictNotice(null), 4000);
         }
       } else if (data.type === 'PATIENT_SOS_RESPONDED') {
         respondToPatientSos(data.patientId, data.responderName || responderName);
         setDismissedIds((prev) => [...prev, `patient-${data.patientId}`]);
         if (data.responderName && data.responderName !== responderName) {
-          setConflictNotice(`【重複回避】${data.responderName} ナースが患者緊急要請の対応を開始しました！`);
+          setConflictNotice(`🤝 ${data.responderName} ナースが患者緊急要請の対応に入りました！`);
           setTimeout(() => setConflictNotice(null), 4000);
         }
       }
@@ -125,65 +170,101 @@ export const GlobalSosToast: React.FC = () => {
     ));
   }, [nurses, allTasks, patientSosList, storeMemos]);
 
-  // 🔍 デバッグ用: Store到達・全体のSOS保持状況の定期/評価時ログ
-  const rawSosNurses = nurses.filter((n) => n.is_sos === true);
-  if (rawSosNurses.length > 0) {
-    console.log(`[Store受信チェック] Store内に is_sos=true の看護師データが届いています (${rawSosNurses.length}件):`, rawSosNurses.map(n => ({ id: n.nurse_id, name: n.name })));
-  }
+  const normalizeStr = (str?: string) =>
+    String(str || '')
+      .toLowerCase()
+      .replace(/[\s　🚨📞🤝【】（）()!！:：]+/g, '')
+      .trim();
 
-  // 1. 他画面・他スタッフからの「看護師SOS」を抽出（本人画面およびゲスト要請の通常ユーザー遮断）
+  const isSelfSource = (id?: string, name?: string, senderSession?: string) => {
+    const sId = String(id || '').trim();
+    const sName = normalizeStr(name);
+    const sSession = String(senderSession || '').trim();
+
+    // 1. 同一セッションIDの一致（自タブ/自画面での自爆通知防止）
+    if (sSession !== '' && currentSessionId !== '' && sSession === currentSessionId) {
+      return true;
+    }
+
+    // 2. ナースIDの明確な一致判定
+    if (myNurseId !== '' && sId !== '' && myNurseId !== 'guest_nurse') {
+      const cleanMyId = myNurseId.replace(/^nurse-/, '');
+      const cleanSId = sId.replace(/^nurse-/, '');
+      if (cleanMyId === cleanSId) {
+        return true;
+      }
+    }
+
+    // 3. ナース名の明確な一致判定（※「自分」等の汎用名は本人判定に使用しない！）
+    const myNameNorm = normalizeStr(myNurseName);
+    if (
+      myNameNorm !== '' && 
+      sName !== '' && 
+      myNameNorm !== '自分' && 
+      sName !== '自分' &&
+      myNameNorm !== '要請ナース' && 
+      sName !== '要請ナース'
+    ) {
+      if (sName === myNameNorm) {
+        return true;
+      }
+    }
+
+    return false;
+  };
+
+  // 1. 他画面・他スタッフからの「看護師SOS」を抽出（本人画面へは通知・トースト非表示）
   const activeSosNurses = nurses.filter((nurse) => {
     if (nurse.is_sos !== true) return false;
+    if (dismissedIds.includes(`nurse-${nurse.nurse_id}`)) return false;
 
-    console.log(`[SOS検知] ${nurse.name}からのSOSを評価中...`);
-
-    if (dismissedIds.includes(`nurse-${nurse.nurse_id}`)) {
-      console.log(`  -> 却下: 既読（dismissedIdsに含まれています）`);
+    const senderSessionId = (nurse as any).sos_sender_session_id;
+    if (isSelfSource(nurse.nurse_id, nurse.name, senderSessionId)) {
       return false;
     }
 
     const isTargetGuest = checkIsGuestSource(nurse.nurse_id, nurse.name, (nurse as any).email) || (nurse as any).is_guest === true;
-    if (isGuestUser !== isTargetGuest) {
-      console.log(`  -> 却下: 受信者(${isGuestUser ? 'ゲスト' : '通常'})と発信者(${isTargetGuest ? 'ゲスト' : '通常'})の環境種別が不一致です`);
-      return false;
-    }
+    if (isGuestUser !== isTargetGuest) return false;
 
-    const targetNurseId = String(nurse.nurse_id || '').trim();
-    const targetNurseName = String(nurse.name || '').trim().replace(/[\s　]+/g, '');
-    const senderSessionId = (nurse as any).sos_sender_session_id;
-
-    if (senderSessionId && senderSessionId === currentSessionId) {
-      console.log(`  -> 却下: 同一セッション（同一タブ）からの発信です`);
-      return false;
-    }
-    if (myNurseId !== '' && targetNurseId === myNurseId) {
-      console.log(`  -> 却下: 自分自身（同一ID）からの発信です (myNurseId: ${myNurseId})`);
-      return false;
-    }
-    if (myNurseName !== '' && targetNurseName !== '' && targetNurseName === myNurseName) {
-      console.log(`  -> 却下: 自分自身（同一名）からの発信です (myNurseName: ${myNurseName})`);
-      return false;
-    }
-
-    console.log(`  => 【通過】画面に表示します！`);
     return true;
   });
 
-  // 🔍 デバッグ用: Store到達・全体のタスクSOS保持状況の定期/評価時ログ
-  const rawSosTasks = flattenTasks(allTasks).filter((t) => t.is_sos === true || (t as any).sos_reason);
-  if (rawSosTasks.length > 0) {
-    console.log(`[Store受信チェック] Store内に is_sos=true/sos_reason 有りのタスクSOSデータが届いています (${rawSosTasks.length}件):`, rawSosTasks.map(t => ({ id: t.task_id, title: t.title })));
-  }
-
-  // 2. フラット化した全タスクからアクティブな「タスクSOS」を抽出（本人画面およびゲスト要請の通常ユーザー遮断）
+  // 2. フラット化した全タスクからアクティブな「タスクSOS」を抽出（本人画面へは通知・トースト非表示）
   const activeSosTasks = flattenTasks(allTasks).filter((task) => {
-    if (task.is_sos !== true && !(task as any).sos_reason) return false;
-
-    console.log(`[SOS検知] タスク「${task.title}」からのSOSを評価中...`);
-
-    if (dismissedIds.includes(`task-${task.task_id}`)) {
-      console.log(`  -> 却下: 既読（dismissedIdsに含まれています）`);
+    // 🛡️ タスクSOSは患者に紐づくタスクのみ！患者ID・名が無いものは絶対にタスクSOSではない（看護師SOS等の誤混入・2重空表示を100%遮断）
+    if (!task.patient_id || task.patient_id.trim() === '' || !task.patient_name || task.patient_name.trim() === '') {
       return false;
+    }
+
+    const taskId = String(task.task_id || '').toLowerCase();
+    const taskTitle = String(task.title || '').toLowerCase();
+
+    // 🛡️ 対応記録割り込みタスク、患者SOSタスク、看護師SOSタスクは専用ルートで処理するため100%除外（二重表示・空項目発生を完全防止）
+    if (
+      (task as any).is_interruption === true || 
+      taskId.includes('interrupt') ||   // CALL_INTERRUPT_ などを包括的につかまえる
+      taskId.includes('patient-sos') || // patient-sos- などをつかまえる
+      taskId.includes('patient_sos') ||
+      taskId.includes('nurse_sos') ||   // NURSE_SOS_ などをつかまえる
+      taskId.includes('nurse-sos') ||
+      taskTitle.includes('緊急sos要請中') ||
+      taskTitle.includes('看護師sos対応')
+    ) {
+      return false;
+    }
+
+    if (task.is_sos !== true && !(task as any).sos_reason) return false;
+    if (dismissedIds.includes(`task-${task.task_id}`)) return false;
+
+    const reqId = String(task.requested_by_id || '').trim();
+    const reqName = String(task.requested_by_name || '').trim();
+    const senderSessionId = (task as any).sos_sender_session_id;
+
+    // 🛡️ 担当者(nurse_id)への誤フォールバックを排除し、実際にボタンを押した要請者のみで本人判定
+    if (reqId !== '' || reqName !== '' || senderSessionId) {
+      if (isSelfSource(reqId, reqName, senderSessionId)) {
+        return false;
+      }
     }
 
     const isTargetGuest = checkIsGuestSource(
@@ -191,34 +272,20 @@ export const GlobalSosToast: React.FC = () => {
       task.requested_by_name || task.nurse_name,
       (task as any).email
     ) || (task as any).is_guest === true;
-    if (isGuestUser !== isTargetGuest) {
-      console.log(`  -> 却下: 受信者(${isGuestUser ? 'ゲスト' : '通常'})と発信者(${isTargetGuest ? 'ゲスト' : '通常'})の環境種別が不一致です`);
-      return false;
-    }
+    if (isGuestUser !== isTargetGuest) return false;
 
-    const reqId = String(task.requested_by_id || '').trim();
-    const reqName = String(task.requested_by_name || '').trim().replace(/[\s　]+/g, '');
-    const senderSessionId = (task as any).sos_sender_session_id;
-
-    if (senderSessionId && senderSessionId === currentSessionId) {
-      console.log(`  -> 却下: 同一セッション（同一タブ）からの発信です`);
-      return false;
-    }
-    if (reqId !== '' && myNurseId !== '' && reqId === myNurseId) {
-      console.log(`  -> 却下: 自分自身（同一ID）からの発信です (myNurseId: ${myNurseId})`);
-      return false;
-    }
-    if (reqName !== '' && myNurseName !== '' && reqName === myNurseName) {
-      console.log(`  -> 却下: 自分自身（同一名）からの発信です (myNurseName: ${myNurseName})`);
-      return false;
-    }
-
-    console.log(`  => 【通過】画面に表示します！`);
     return true;
   });
 
-  // 💡 修正：ボタンを押した瞬間に0秒でUIを更新（楽観的更新）し、全端末へブロードキャスト送信
+  // 💡 修正：ボタンを押した瞬間に0秒でUIを更新（楽観的更新）し、全端末へブロードキャスト送信＆マップ画面へ自動切替
   const handleRespondNurse = async (nurseId: string) => {
+    // 🗺️ 応援に応じた瞬間に0秒でマップ画面（'map'）へ自動遷移
+    useTimelineStore.getState().setActiveScreen('map');
+
+    const targetNurse = nurses.find((n) => n.nurse_id === nurseId);
+    setConflictNotice(`🏃 ${targetNurse?.name || '要請ナース'} さんの元へ向かってください！`);
+    setTimeout(() => setConflictNotice(null), 5000);
+
     // 1. 即座にローカルストアと画面表示をクリア（0秒で反応・ブロッキング排除）
     respondToNurseSos(nurseId, responderName);
     setDismissedIds((prev) => [...prev, `nurse-${nurseId}`]);
@@ -233,9 +300,9 @@ export const GlobalSosToast: React.FC = () => {
       });
     }
 
-    // 3. バックグラウンドで割り込みタスクの作成
+    // 3. バックグラウンドで割り込みタスクの作成（要件4-A: 発信者本人＋応援者の両方のタイムラインへ作成）
     try {
-      const targetNurse = nurses.find((n) => n.nurse_id === nurseId);
+      const reqId = targetNurse?.nurse_id || nurseId;
       const { triggerNurseCallInterruption } = await import('../../hooks/useTaskUpdate');
       await triggerNurseCallInterruption({
         patientId: '',
@@ -243,18 +310,23 @@ export const GlobalSosToast: React.FC = () => {
         roomId: '',
         sosReason: targetNurse?.sos_reason || `${targetNurse?.name || '他スタッフ'}からの緊急SOS対応要請`,
         title: `🚨 看護師SOS対応 (${targetNurse?.name || '他スタッフ'}の応援)`,
+        requestedById: reqId,
+        requestedByName: targetNurse?.name || '要請スタッフ',
+        targetNurseIds: [reqId, myNurseId].filter(Boolean),
       });
     } catch (e) {
       console.error("看護師SOSタスク作成エラー:", e);
     }
 
-    // 4. バックグラウンドで Firestore トランザクション通信
+    // 4. バックグラウンドで Firestore トランザクション通信（要件3: 自分自身なら重複警告を出さない）
     try {
       const result = await respondToNurseSosWithTransaction(nurseId, responderName);
       if (result && result.alreadyResponded) {
         const responder = result.responderName || '別のスタッフ';
-        setConflictNotice(`🚨 【対応重複】すでに ${responder} さんが対応に向かっています！`);
-        setTimeout(() => setConflictNotice(null), 4000);
+        if (responder !== responderName && !responder.includes(responderName)) {
+          setConflictNotice(`🚨 【対応重複】すでに ${responder} さんが対応に向かっています！`);
+          setTimeout(() => setConflictNotice(null), 4000);
+        }
       }
     } catch (error) {
       console.error("看護師SOS対応エラー:", error);
@@ -262,6 +334,14 @@ export const GlobalSosToast: React.FC = () => {
   };
 
   const handleRespondTask = async (taskId: string) => {
+    // 🗺️ 応援に応じた瞬間に0秒でマップ画面（'map'）へ自動遷移
+    useTimelineStore.getState().setActiveScreen('map');
+
+    const { flattenTasks } = await import('../../utils/taskLogic');
+    const targetTask = flattenTasks(allTasks).find((t) => t.task_id === taskId);
+    setConflictNotice(`🏃 ${targetTask?.nurse_name || '要請ナース'} さんの「${targetTask?.title || 'タスク'}」の場所へ向かってください！`);
+    setTimeout(() => setConflictNotice(null), 5000);
+
     // 1. 即座にローカルストアと画面表示をクリア（0秒で反応・ブロッキング排除）
     respondToTaskSos(taskId, responderName);
     setDismissedIds((prev) => [...prev, `task-${taskId}`]);
@@ -276,10 +356,9 @@ export const GlobalSosToast: React.FC = () => {
       });
     }
 
-    // 3. バックグラウンドで割り込みタスクの作成
+    // 3. バックグラウンドで割り込みタスクの作成（要件4-B: 応援者のみのタイムラインへ作成）
     try {
-      const { flattenTasks } = await import('../../utils/taskLogic');
-      const targetTask = flattenTasks(allTasks).find((t) => t.task_id === taskId);
+      const reqId = targetTask?.requested_by_id || targetTask?.nurse_id || '';
       const { triggerNurseCallInterruption } = await import('../../hooks/useTaskUpdate');
       await triggerNurseCallInterruption({
         patientId: targetTask?.patient_id || '',
@@ -287,18 +366,23 @@ export const GlobalSosToast: React.FC = () => {
         roomId: targetTask?.room_id || '',
         sosReason: targetTask ? `「${targetTask.title}」支援応援対応` : 'タスク支援要請への応援対応',
         title: `🚨 タスクSOS支援対応 (${targetTask?.patient_name ? `${targetTask.patient_name}様` : '要請'})`,
+        requestedById: reqId,
+        requestedByName: targetTask?.requested_by_name || targetTask?.nurse_name || '',
+        targetNurseIds: [myNurseId].filter(Boolean),
       });
     } catch (e) {
       console.error("タスクSOSタスク作成エラー:", e);
     }
 
-    // 4. バックグラウンドで Firestore トランザクション通信
+    // 4. バックグラウンドで Firestore トランザクション通信（要件3: 自分自身なら重複警告を出さない）
     try {
       const result = await respondToTaskSosWithTransaction(taskId, responderName);
       if (result && result.alreadyResponded) {
         const responder = result.responderName || '別のスタッフ';
-        setConflictNotice(`🚨 【対応重複】すでに ${responder} さんがこのタスクのサポートに入っています！`);
-        setTimeout(() => setConflictNotice(null), 4000);
+        if (responder !== responderName && !responder.includes(responderName)) {
+          setConflictNotice(`🚨 【対応重複】すでに ${responder} さんがこのタスクのサポートに入っています！`);
+          setTimeout(() => setConflictNotice(null), 4000);
+        }
       }
     } catch (error) {
       console.error("タスクSOS対応エラー:", error);
@@ -306,6 +390,12 @@ export const GlobalSosToast: React.FC = () => {
   };
 
   const handleRespondPatient = async (patientId: string, patientName: string, roomId?: string, reason?: string) => {
+    // 🗺️ 応援に応じた瞬間に0秒でマップ画面（'map'）へ自動遷移
+    useTimelineStore.getState().setActiveScreen('map');
+
+    setConflictNotice(`🏃 ${roomId ? `${roomId}号室 ` : ''}${patientName || '患者'}様の元へ向かってください！`);
+    setTimeout(() => setConflictNotice(null), 5000);
+
     // 1. 即座にローカルストアおよびFirestoreの患者SOSをクリア（0秒で反応・ブロッキング排除）
     respondToPatientSos(patientId, responderName);
     setDismissedIds((prev) => [...prev, `patient-${patientId}`]);
@@ -320,8 +410,10 @@ export const GlobalSosToast: React.FC = () => {
       });
     }
 
-    // 3. バックグラウンドで割り込みタスクの作成
+    // 3. バックグラウンドで割り込みタスクの作成（要件4-A: 発信者/担当者＋応援者の両方のタイムラインへ作成）
     try {
+      const targetPatient = patientSosList.find((p) => p.patient_id === patientId);
+      const reqId = targetPatient?.requested_by_id || '';
       const { triggerNurseCallInterruption } = await import('../../hooks/useTaskUpdate');
       await triggerNurseCallInterruption({
         patientId: patientId || '',
@@ -329,6 +421,9 @@ export const GlobalSosToast: React.FC = () => {
         roomId: roomId || '病室',
         sosReason: reason || `${patientName || '患者'}様 (${roomId ? `${roomId}号室` : ''}) への緊急応援要請`,
         title: `🤝 緊急応援要請対応 (${patientName || '患者'}様)`,
+        requestedById: reqId,
+        requestedByName: targetPatient?.requested_by_name || '',
+        targetNurseIds: [reqId, myNurseId].filter(Boolean),
       });
     } catch (e) {
       console.error("患者SOS対応割り込み作成エラー:", e);
@@ -341,39 +436,98 @@ export const GlobalSosToast: React.FC = () => {
   }
 
   const activeSosPatients = patientSosList.filter((p) => {
-    console.log(`[SOS検知] 患者 ${p.patient_name}様からのSOSを評価中...`);
-
     if (dismissedIds.includes(p.patient_id) || dismissedIds.includes(`patient-${p.patient_id}`)) {
-      console.log(`  -> 却下: 既読（dismissedIdsに含まれています）`);
       return false;
     }
 
     const isTargetGuest = checkIsGuestSource(p.patient_id || p.requested_by_id, p.requested_by_name) || (p as any).is_guest === true;
-    if (isGuestUser !== isTargetGuest) {
-      console.log(`  -> 却下: 受信者(${isGuestUser ? 'ゲスト' : '通常'})と発信者(${isTargetGuest ? 'ゲスト' : '通常'})の環境種別が不一致です`);
-      return false;
-    }
+    if (isGuestUser !== isTargetGuest) return false;
 
-    const reqId = String(p.requested_by_id || '').trim();
-    const reqName = String(p.requested_by_name || '').trim().replace(/[\s　]+/g, '');
-    const senderSessionId = (p as any).sos_sender_session_id;
-
-    if (senderSessionId && senderSessionId === currentSessionId) {
-      console.log(`  -> 却下: 同一セッション（同一タブ）からの発信です`);
-      return false;
-    }
-    if (myNurseId !== '' && reqId === myNurseId) {
-      console.log(`  -> 却下: 自分自身（同一ID）からの発信です (myNurseId: ${myNurseId})`);
-      return false;
-    }
-    if (myNurseName !== '' && reqName !== '' && reqName === myNurseName) {
-      console.log(`  -> 却下: 自分自身（同一名）からの発信です (myNurseName: ${myNurseName})`);
-      return false;
-    }
-
-    console.log(`  => 【通過】画面に表示します！`);
     return true;
   });
+
+  const notifiedSosIdsRef = useRef<Set<string>>(new Set());
+
+  // 🔔 2. 新規SOS検知時のネイティブ通知（OS / ブラウザ Notification API）発火
+  useEffect(() => {
+    if (typeof window === 'undefined' || !('Notification' in window)) return;
+    if (Notification.permission !== 'granted') return;
+
+    const currentActiveKeys = new Set<string>();
+
+    // ① 看護師SOSのネイティブ通知
+    activeSosNurses.forEach((nurse) => {
+      const key = `nurse-${nurse.nurse_id}`;
+      currentActiveKeys.add(key);
+      if (!notifiedSosIdsRef.current.has(key)) {
+        notifiedSosIdsRef.current.add(key);
+        try {
+          const notification = new Notification('🚨 緊急SOS要請', {
+            body: `${nurse.name} さんが緊急アシストを要請しています！${nurse.sos_reason ? `\n理由: ${nurse.sos_reason}` : ''}`,
+            icon: '/pwa-192x192.png',
+            requireInteraction: true,
+          });
+          notification.onclick = () => {
+            window.focus();
+            notification.close();
+          };
+        } catch (err) {
+          console.error('ネイティブ通知発火エラー (看護師SOS):', err);
+        }
+      }
+    });
+
+    // ② タスクSOSのネイティブ通知
+    activeSosTasks.forEach((task) => {
+      const key = `task-${task.task_id}`;
+      currentActiveKeys.add(key);
+      if (!notifiedSosIdsRef.current.has(key)) {
+        notifiedSosIdsRef.current.add(key);
+        try {
+          const notification = new Notification('🚨 タスクSOS要請', {
+            body: `${task.patient_name || '患者'}様 (${task.room_id || ''}号室) の「${task.title}」でタスク応援要請が届きました！${task.sos_reason ? `\n理由: ${task.sos_reason}` : ''}`,
+            icon: '/pwa-192x192.png',
+            requireInteraction: true,
+          });
+          notification.onclick = () => {
+            window.focus();
+            notification.close();
+          };
+        } catch (err) {
+          console.error('ネイティブ通知発火エラー (タスクSOS):', err);
+        }
+      }
+    });
+
+    // ③ 患者SOSのネイティブ通知
+    activeSosPatients.forEach((p) => {
+      const key = `patient-${p.patient_id}`;
+      currentActiveKeys.add(key);
+      if (!notifiedSosIdsRef.current.has(key)) {
+        notifiedSosIdsRef.current.add(key);
+        try {
+          const notification = new Notification('🚨 患者緊急応援要請', {
+            body: `${p.patient_name} 様 ${p.room_id ? `(${p.room_id}号室)` : ''} から緊急応援要請が届きました！${p.reason ? `\n理由: ${p.reason}` : ''}`,
+            icon: '/pwa-192x192.png',
+            requireInteraction: true,
+          });
+          notification.onclick = () => {
+            window.focus();
+            notification.close();
+          };
+        } catch (err) {
+          console.error('ネイティブ通知発火エラー (患者SOS):', err);
+        }
+      }
+    });
+
+    // 解消・応答済みのSOSキーを記録用Setから削除
+    notifiedSosIdsRef.current.forEach((id) => {
+      if (!currentActiveKeys.has(id)) {
+        notifiedSosIdsRef.current.delete(id);
+      }
+    });
+  }, [activeSosNurses, activeSosTasks, activeSosPatients]);
 
   if (activeSosNurses.length === 0 && activeSosTasks.length === 0 && activeSosPatients.length === 0 && !conflictNotice) {
     return null;
