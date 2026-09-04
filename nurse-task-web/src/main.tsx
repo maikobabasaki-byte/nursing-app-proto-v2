@@ -1,6 +1,6 @@
 import React from 'react'
 import ReactDOM from 'react-dom/client'
-import App from './pages/App'
+import App from './features/staff/pages/App'
 // 共通CSSをここでインポート
 import './styles/destyle.css' 
 import './styles/index.css'

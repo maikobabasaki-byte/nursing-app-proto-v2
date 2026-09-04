@@ -1,0 +1,229 @@
+{
+  "shiftDate": "2026-09-04",
+  "shiftType": "日勤",
+  "wardId": "WARD_A",
+  "tabsData": {
+    "1_structureAnalysis": {
+      "roomDensity": [
+        {
+          "roomId": "202",
+          "roomName": "202号室（4人部屋・一部介助/観察強化）",
+          "hourlyDensity": [
+            {
+              "hour": "09",
+              "taskCount": 4,
+              "densityLevel": "medium",
+              "status": "normal",
+              "conflictDetails": "朝の点滴投与および体温測定。巡回ルート上の標準的なタスク密度。"
+            },
+            {
+              "hour": "10",
+              "taskCount": 6,
+              "densityLevel": "high",
+              "status": "warning",
+              "conflictDetails": "10:15 吸入指示と定期バイタルが重複。介助者1名で対応可能な範囲だが、10:40検体採取が重なると遅延リスクあり。"
+            },
+            {
+              "hour": "11",
+              "taskCount": 3,
+              "densityLevel": "low",
+              "status": "normal",
+              "conflictDetails": "昼食前の配薬準備。競合なし。"
+            },
+            {
+              "hour": "14",
+              "taskCount": 5,
+              "densityLevel": "medium",
+              "status": "normal",
+              "conflictDetails": "午後の検温および点滴抜針。予定通り進行可能。"
+            }
+          ]
+        },
+        {
+          "roomId": "203",
+          "roomName": "203号室（個室/全介助重症患者）",
+          "hourlyDensity": [
+            {
+              "hour": "09",
+              "taskCount": 3,
+              "densityLevel": "medium",
+              "status": "normal",
+              "conflictDetails": "モーニングケアおよび定期吸入。"
+            },
+            {
+              "hour": "10",
+              "taskCount": 9,
+              "densityLevel": "critical",
+              "status": "overcrowded",
+              "conflictDetails": "10:00〜11:00 全介助患者2名の定期体位変換(2名介助要)、抗生剤点滴更新(10:00厳守)、および創傷保護ドレッシング交換(T018)が集中。単独配置では確定的なスケジュール競合・タスク過密が発生。"
+            },
+            {
+              "hour": "11",
+              "taskCount": 4,
+              "densityLevel": "medium",
+              "status": "warning",
+              "conflictDetails": "10時台過密からのタスク押し出しによる11:00検温・処置完了チェックのずれ込みリスク。"
+            },
+            {
+              "hour": "14",
+              "taskCount": 6,
+              "densityLevel": "high",
+              "status": "normal",
+              "conflictDetails": "午後の定期創傷チェックおよびリハビリ同行。"
+            }
+          ]
+        }
+      ],
+      "staffGapTrends": [
+        {
+          "staffId": "nurse_001",
+          "staffName": "佐藤 典子 (中堅/リーダー)",
+          "experienceYears": 6,
+          "gapIndexTrends": {
+            "AM": {
+              "objectiveWorkload": 82,
+              "subjectiveFatigue": 70,
+              "gapIndex": 12
+            },
+            "PM": {
+              "objectiveWorkload": 88,
+              "subjectiveFatigue": 78,
+              "gapIndex": 10
+            }
+          },
+          "blockerBreakdown": {
+            "structural": 35,
+            "extrinsic": 50,
+            "intrinsic": 15
+          },
+          "comment": "10:30の205室急変（他律的要因）へのプライマリ対応およびドクターコール調停にリソースを集中割当。"
+        },
+        {
+          "staffId": "nurse_002",
+          "staffName": "田中 葵 (新人ナース)",
+          "experienceYears": 1,
+          "gapIndexTrends": {
+            "AM": {
+              "objectiveWorkload": 65,
+              "subjectiveFatigue": 92,
+              "gapIndex": 27
+            },
+            "PM": {
+              "objectiveWorkload": 70,
+              "subjectiveFatigue": 88,
+              "gapIndex": 18
+            }
+          },
+          "blockerBreakdown": {
+            "structural": 20,
+            "extrinsic": 30,
+            "intrinsic": 50
+          },
+          "comment": "203室創傷処置時のアセスメント判断（滲出液・肉芽形成の評価）に迷いが生じ、自己記録・振り返りに著しい精神的負荷と遅れが発生。"
+        }
+      ],
+      "monthlyTrendData": [
+        {
+          "month": "2026-07",
+          "structuralDelayRate": 24.5,
+          "nurse002GapIndex": 38.2,
+          "totalIncidents": 14
+        },
+        {
+          "month": "2026-08",
+          "structuralDelayRate": 19.8,
+          "nurse002GapIndex": 31.5,
+          "totalIncidents": 11
+        },
+        {
+          "month": "2026-09",
+          "structuralDelayRate": 14.2,
+          "nurse002GapIndex": 22.5,
+          "totalIncidents": 8
+        }
+      ]
+    },
+    "2_ojtAndTraining": {
+      "clinicalReflections": [
+        {
+          "reflectionId": "refl_20260904_001",
+          "staffId": "nurse_002",
+          "staffName": "田中 葵",
+          "taskId": "T018",
+          "taskName": "創傷処置（203室 A様）",
+          "stepId": "s2",
+          "stepName": "創部の観察・アセスメント（サイズ・滲出液・発赤の判定）",
+          "status": "needs_review",
+          "reflectionText": "滲出液の性状が漿液性からやや白濁色に変化しており、局所感染の兆候か良性肉芽の滲出液増多かの判断に迷いました。被覆材を同種継続するか変更すべきか自己判断できず、指導者確認まで処置手順を一時中断しました。",
+          "timestamp": "2026-09-04T10:42:00+09:00",
+          "mentorFeedback": {
+            "reviewerId": "nurse_001",
+            "reviewerName": "佐藤 典子 (指導責任者)",
+            "reviewBadge": "Review Completed",
+            "feedbackCategory": "Clinical Assessment & Patient Safety",
+            "comment": "白濁所見に対して安易に独断せず、中断して観察所見を言語化・相談できた判断は非常に適切です。次回は創周囲の発赤・熱感の有無をセットで記録し、デブリードマンが必要か否かの視点も一緒に学びましょう。"
+          }
+        }
+      ],
+      "efficiencyStats": {
+        "staffId": "nurse_002",
+        "staffName": "田中 葵",
+        "movementEfficiencyScore": 78,
+        "routeBonusEarned": true,
+        "routeBonusDetails": {
+          "bonusTitle": "203室周辺マルチタスク・クラスタリング動線ボーナス",
+          "achievedCount": 3,
+          "targetCount": 3,
+          "savedSteps": 420,
+          "description": "203室の点滴確認、創傷観察物品準備、体位変換用クッションの事前配置を1回の訪室ルートに集約。無駄な病室・ステーション往復を削減できました。"
+        }
+      }
+    },
+    "3_insightsAndInterventions": {
+      "currentHints": [
+        {
+          "optionId": "OPTION_A",
+          "title": "オプションA: 10:00〜11:00 203室エリアへのフリー担当重点配置",
+          "description": "203室の全介助重複タスク（体位変換・点滴更新・創傷処置）に対してフリーナース1名を10:00-11:00枠で局所投入。構造的遅延を即座に吸収する。",
+          "expectedImpact": "203室の構造的タスク競合遅延率 85%削減。新人ナース(nurse_002)の現場サポート環境確保。",
+          "riskFactor": "他室での急変・突発的ドクターコール（他律的要因）発生時、フリーナースが急変対応に引っ張られてサポートが途中中断するリスク。"
+        },
+        {
+          "optionId": "OPTION_B",
+          "title": "オプションB: 10時台処置の時間分散（11:30へのシフト）",
+          "description": "医師協議の上、203室の創傷処置(T018)の指定時刻を10:00から11:30へ分散変更する。",
+          "expectedImpact": "10時台のピーク平準化。追加人員なしで過密状態を緩和。",
+          "riskFactor": "昼食配膳・血糖測定タスク（11:45〜）との新たな時間競合を引き起こす懸念。"
+        }
+      ],
+      "continuousAdaptationLog": {
+        "logId": "cal_20260904_001",
+        "shiftDate": "2026-09-04",
+        "actionTaken": {
+          "actionType": "重点人員配置（フリー担当の10時台203室集中投入）",
+          "appliedAt": "2026-09-04T09:45:00+09:00",
+          "actionDescription": "前日データで判明していた10:00-11:00の203室（全介助）におけるスケジュール競合に対し、フリー担当（nurse_005）を203室周辺へ重点配置し、2名介助・点滴更新のタイムリー実行をサポート。"
+        },
+        "observedFacts": {
+          "structuralDelay": {
+            "status": "Resolved",
+            "delayTimeMinutes": 0,
+            "factSummary": "10:00-11:00の203室における構造的要因によるタスク遅延は0件（完全回避）。フリー配置により体位変換と点滴更新の競合が解消された。"
+          },
+          "extrinsicDelay": {
+            "status": "Newly Occurred",
+            "delayTimeMinutes": 35,
+            "factSummary": "10:30に205室にて患者急変（SpO2低下・意識レベル低下）が発生。他律的要因によりリーダーナースおよびサポート枠の足止めが発生し、病棟全体の関連業務が遅延。"
+          },
+          "overallGapIndex": {
+            "value": 24.5,
+            "status": "High (Stagnant)",
+            "factSummary": "構造的遅延の解消には成功したものの、急変（他律的要因）の発生と新人(nurse_002)のアセスメント迷いによる認知負荷（内律的要因）が重なり、全体のGapIndexは高止まり推移となった。"
+          }
+        },
+        "nextChallengeIdentified": "構造的競合を解消しても、突発的急変（他律的要因）発生時にフリー人員が吸収され、新人へのアセスメント指導・フォロー体制が途絶して精神的負荷(GapIndex)が増大する「二次的リソース不足」が浮き彫りになった。",
+        "managerMemo": "「采配の正解を探すのではなく、適応し続けること」。本日の介入で構造的遅延（203室過密）が解消できる証明は得られた。次なる課題は『急変時のバックアップフォールバックルールの明文化』および『nurse_002に対する創傷アセスメントの事前チェックリスト化による内律的迷いの軽減』である。明日以降、急変発生時のセカンドリーダー動員プロトコルを検証する。"
+      }
+    }
+  }
+}

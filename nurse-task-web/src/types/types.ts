@@ -204,6 +204,8 @@ export interface Memo {
   scheduledAt?: string;
   target_room_id?: string;
   is_completed?: boolean;
+  priority?: 'red' | 'high' | 'medium' | 'low';
+  is_anchor?: boolean;
 }
 
 export type LeaderTodoCategory = '患者対応' | '家族対応' | '医師への連絡' | '検査・処置' | 'その他';
