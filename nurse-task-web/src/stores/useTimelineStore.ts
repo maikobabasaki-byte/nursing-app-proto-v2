@@ -1,12 +1,12 @@
 import { create } from 'zustand';
-import type { ExtendedTask, Memo, ExtendedTaskStatus, LeaderTodo } from '../types/types';
+import type { ExtendedTask, Memo, ExtendedTaskStatus, LeaderTodo, ProgressLog } from '../types/types';
 import { reconstructGroups, flattenTasks } from '../utils/taskLogic';
 import { addSingleTaskToGAS, resetAdditionalTasksInGAS } from '../services/gasService';
 import { updateTask } from '../hooks/useTaskUpdate';
 import { doc, setDoc, deleteDoc } from "firebase/firestore";
 import { getJSTDateString } from '../utils/dateUtils';
 import { getTaskTimeSlot } from '../utils/validateTaskGrouping';
-import { db, updateNurseSos, updateNurseAssignedPatients, toggleTaskSosInFirestore, togglePatientSosInFirestore, saveLeaderTodoInFirestore, updateLeaderTodoInFirestore, deleteLeaderTodoInFirestore } from "../lib/firebase";
+import { db, updateNurseSos, updateNurseAssignedPatients, toggleTaskSosInFirestore, togglePatientSosInFirestore, saveLeaderTodoInFirestore, updateLeaderTodoInFirestore, deleteLeaderTodoInFirestore, toggleHandoverInFirestore, pullTaskFromHandoverInFirestore, addProgressLogInFirestore } from "../lib/firebase";
 
 export interface NurseMaster {
   nurse_id: string;
@@ -74,6 +74,8 @@ interface TimelineStore {
   activePopupTaskId: string | null;
   activeScreen: string;
   setActiveScreen: (screen: string) => void;
+  handoverTeamTab: string;
+  setHandoverTeamTab: (tab: string) => void;
 
   timelineStartTime: string;
   timelineEndTime: string;
@@ -130,6 +132,9 @@ interface TimelineStore {
   deleteTask: (taskId: string) => Promise<void>;
   resetAdditionalTasks: () => Promise<number>;
   resetStoreData: () => void;
+  toggleHandover: (taskId: string) => void;
+  pullTaskFromHandover: (taskId: string, currentUserName: string) => void;
+  addProgressLog: (taskId: string, author: string, text: string) => void;
 }
 
 const removeUndefined = (obj: any): any => {
@@ -341,6 +346,8 @@ export const useTimelineStore = create<TimelineStore>((set, get) => ({
     } catch (e) {}
     return { activeScreen: screen };
   }),
+  handoverTeamTab: 'all',
+  setHandoverTeamTab: (tab) => set({ handoverTeamTab: tab }),
   
   timelineStartTime: '08:00',
   timelineEndTime: '17:00',
@@ -363,6 +370,136 @@ export const useTimelineStore = create<TimelineStore>((set, get) => ({
     activeMemoTime: null,
     editingMemo: null,
   }),
+
+  toggleHandover: async (taskId: string) => {
+    const targetTodo = get().leaderTodos.find((t) => t.todo_id === taskId) ||
+                       get().allTasks.find((t) => t.task_id === taskId);
+    const newIsHandover = !targetTodo?.isHandover;
+
+    // 1. ローカルZustand状態の即時更新（共有BOXへ入れる時は担当者assigneeをリセット）
+    set((state) => ({
+      leaderTodos: state.leaderTodos.map((todo) =>
+        todo.todo_id === taskId
+          ? {
+              ...todo,
+              isHandover: newIsHandover,
+              ...(newIsHandover ? { assignee: null } : {}),
+            }
+          : todo
+      ),
+      allTasks: state.allTasks.map((task) =>
+        task.task_id === taskId
+          ? {
+              ...task,
+              isHandover: newIsHandover,
+              ...(newIsHandover ? { assignee: null } : {}),
+            }
+          : task
+      ),
+    }));
+
+    // 2. Firestoreの該当ドキュメントを updateDoc で同期更新
+    await toggleHandoverInFirestore(taskId, newIsHandover);
+  },
+
+  pullTaskFromHandover: async (taskId: string, currentUserName: string) => {
+    const now = new Date();
+    const timeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+    const userName = currentUserName.trim() || '看護師';
+
+    const state = get();
+    const currentNurseId = state.currentUser?.nurse_id || state.currentUser?.email || '';
+    const targetTodo = state.leaderTodos.find((t) => t.todo_id === taskId) ||
+                       state.allTasks.find((t) => t.task_id === taskId);
+    
+    const isAlreadyAssignedToMe = targetTodo?.assignee === userName;
+    const newAssignee = isAlreadyAssignedToMe ? null : userName;
+    // 💡 引き受ける場合は共有申し送りBOXから外し(isHandover: false)未対応TODOに移動！解除時は共有BOXに戻す(isHandover: true)
+    const newIsHandover = isAlreadyAssignedToMe ? true : false;
+    // 💡 引き受ける場合はステータスを未対応('untouched')に確実設定し、未対応TODOリストへ配置
+    const newStatus: LeaderTodo['status'] = 'untouched';
+
+    const pullLog: ProgressLog = {
+      id: `log-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+      time: timeStr,
+      author: 'システム通知',
+      text: isAlreadyAssignedToMe
+        ? `📤 ${userName} が担当を解除し、共有BOXへ戻しました`
+        : `📥 ${userName} が担当を引き受けました（未対応TODOへ移動）`,
+    };
+
+    // 1. ローカルZustand状態の即時更新
+    set((state) => ({
+      leaderTodos: state.leaderTodos.map((todo) =>
+        todo.todo_id === taskId
+          ? {
+              ...todo,
+              assignee: newAssignee,
+              isHandover: newIsHandover,
+              status: newStatus,
+              completed_at: null,
+              completed_by: undefined,
+              ...(currentNurseId ? { nurse_id: currentNurseId, user_id: currentNurseId } : {}),
+              updated_by: userName,
+              progressLogs: [...(todo.progressLogs || []), pullLog],
+            }
+          : todo
+      ),
+      allTasks: state.allTasks.map((task) =>
+        task.task_id === taskId
+          ? {
+              ...task,
+              assignee: newAssignee,
+              isHandover: newIsHandover,
+              status: newStatus as any,
+              completed_at: undefined,
+              completed_by: undefined,
+              progressLogs: [...(task.progressLogs || []), pullLog],
+            }
+          : task
+      ),
+    }));
+
+    // 2. Firestoreの assignee, isHandover, status, および arrayUnion(progressLogs) 同期更新
+    await pullTaskFromHandoverInFirestore(taskId, newAssignee, newIsHandover, pullLog, currentNurseId, newStatus);
+  },
+
+  addProgressLog: async (taskId: string, author: string, text: string) => {
+    const trimmedText = text.trim();
+    if (!trimmedText) return;
+
+    const now = new Date();
+    const timeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+    const newLog: ProgressLog = {
+      id: `log-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+      time: timeStr,
+      author: author.trim() || '看護師',
+      text: trimmedText,
+    };
+
+    // 1. ローカルZustand状態の即時更新
+    set((state) => ({
+      leaderTodos: state.leaderTodos.map((todo) =>
+        todo.todo_id === taskId
+          ? {
+              ...todo,
+              progressLogs: [...(todo.progressLogs || []), newLog],
+            }
+          : todo
+      ),
+      allTasks: state.allTasks.map((task) =>
+        task.task_id === taskId
+          ? {
+              ...task,
+              progressLogs: [...(task.progressLogs || []), newLog],
+            }
+          : task
+      ),
+    }));
+
+    // 2. Firestoreの progressLogs 配列へ arrayUnion で追記同期
+    await addProgressLogInFirestore(taskId, newLog);
+  },
 
   addDemoTask: () => {
     const demoTask: ExtendedTask = {
@@ -407,7 +544,24 @@ export const useTimelineStore = create<TimelineStore>((set, get) => ({
   }),
   setTasks: (tasks) => set({ allTasks: tasks }),
   setMemos: (memos) => set({ memos }),
-  setCurrentUser: (user) => set({ currentUser: user }),
+  setCurrentUser: (user) => {
+    const userId = user ? (user.nurse_id || user.staff_id || user.email || '').trim() : '';
+    const userName = user ? (user.name || '').trim().replace(/[\s　]+/g, '') : '';
+    set((state) => {
+      if (!user) {
+        return { currentUser: null, memos: [] };
+      }
+      // ユーザーが設定されたら、そのユーザー作成のメモのみをフィルターしてセット
+      const userMemos = state.memos.filter((m) => {
+        const creator = String(m.created_by || (m as any).nurse_name || (m as any).nurse_id || '').trim().replace(/[\s　]+/g, '');
+        if (creator !== '') {
+          return (userId !== '' && creator === userId) || (userName !== '' && creator === userName);
+        }
+        return false;
+      });
+      return { currentUser: user, memos: userMemos };
+    });
+  },
   setSelectedPatients: (list) => {
     try {
       sessionStorage.setItem('selectedPatients', JSON.stringify(list));
@@ -1167,56 +1321,6 @@ export const useTimelineStore = create<TimelineStore>((set, get) => ({
       sos_reason: nextReason,
     });
 
-    const todayJST = getJSTDateString();
-    const now = new Date();
-    const currentTimeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
-
-    let updatedTasks = [...state.allTasks];
-    const sosTaskId = `NURSE_SOS_${nurseId}`;
-
-    if (nextIsSos) {
-      const newSosTask: ExtendedTask = {
-        task_id: sosTaskId,
-        emr_order_id: sosTaskId,
-        patient_id: '',
-        patient_name: '',
-        room_id: '',
-        title: `🚨 緊急SOS要請中 (${nurse?.name || '自分'})`,
-        details: `【緊急アシスト要請中】${nextReason} (要請時刻: ${currentTimeStr})`,
-        status: 'progressing',
-        scheduled_at: `${todayJST}T${currentTimeStr}:00`,
-        initial_period: currentTimeStr,
-        display_period: currentTimeStr,
-        category: '処置',
-        priority: 'high',
-        is_additional: true,
-        is_sos: true,
-        sos_reason: nextReason,
-        nurse_id: nurseId,
-        nurse_name: nurse?.name || '自分',
-        staff_id: nurseId,
-        assigned_nurse_id: nurseId,
-        requested_by_id: nurseId,
-        requested_by_name: nurse?.name || '自分',
-        isGroup: false,
-        isChild: false,
-        parent_id: null,
-        target_date: state.selectedDate || todayJST,
-      };
-
-      updatedTasks = updatedTasks.filter(t => t.task_id !== sosTaskId);
-      updatedTasks.push(newSosTask);
-      updateTask(sosTaskId, removeUndefined(newSosTask as any));
-    } else {
-      updatedTasks = updatedTasks.map(t => {
-        if (t.task_id === sosTaskId) {
-          return { ...t, status: 'no_record_completed' as const, is_sos: false };
-        }
-        return t;
-      });
-      updateTask(sosTaskId, { status: 'no_record_completed', is_sos: false });
-    }
-
     return {
       nurses: state.nurses.map((n) =>
         n.nurse_id === nurseId
@@ -1228,7 +1332,6 @@ export const useTimelineStore = create<TimelineStore>((set, get) => ({
             }
           : n
       ),
-      allTasks: updatedTasks,
     };
   }),
 
@@ -1273,13 +1376,25 @@ export const useTimelineStore = create<TimelineStore>((set, get) => ({
   }),
 
   handleSaveMemo: (memoToSave) => set((state) => {
-    const isEdit = state.memos.some(m => m.id === memoToSave.id);
+    const userId = state.currentUser ? (state.currentUser.nurse_id || state.currentUser.staff_id || state.currentUser.email || '').trim() : (sessionStorage.getItem('nurse_id') || '');
+    const userName = state.currentUser ? (state.currentUser.name || '').trim().replace(/[\s　]+/g, '') : (sessionStorage.getItem('nurse_name') || '');
+    const creator = userId || userName || 'self';
+
+    const memoWithCreator = {
+      ...memoToSave,
+      created_by: memoToSave.created_by || creator,
+    };
+
+    const isEdit = state.memos.some(m => m.id === memoWithCreator.id);
     const updatedMemos = isEdit
-      ? state.memos.map(m => m.id === memoToSave.id ? memoToSave : m)
-      : [...state.memos, memoToSave];
+      ? state.memos.map(m => m.id === memoWithCreator.id ? memoWithCreator : m)
+      : [...state.memos, memoWithCreator];
     
     try {
       localStorage.setItem('timeline_memos', JSON.stringify(updatedMemos));
+      if (creator && creator !== 'self') {
+        localStorage.setItem(`timeline_memos_${creator}`, JSON.stringify(updatedMemos));
+      }
     } catch (e) {}
 
     return { 
@@ -1291,9 +1406,16 @@ export const useTimelineStore = create<TimelineStore>((set, get) => ({
   }),
 
   handleDeleteMemo: (memoId) => set((state) => {
+    const userId = state.currentUser ? (state.currentUser.nurse_id || state.currentUser.staff_id || state.currentUser.email || '').trim() : (sessionStorage.getItem('nurse_id') || '');
+    const userName = state.currentUser ? (state.currentUser.name || '').trim().replace(/[\s　]+/g, '') : (sessionStorage.getItem('nurse_name') || '');
+    const creator = userId || userName || 'self';
+
     const updatedMemos = state.memos.filter(m => m.id !== memoId);
     try {
       localStorage.setItem('timeline_memos', JSON.stringify(updatedMemos));
+      if (creator && creator !== 'self') {
+        localStorage.setItem(`timeline_memos_${creator}`, JSON.stringify(updatedMemos));
+      }
     } catch (e) {}
 
     return {

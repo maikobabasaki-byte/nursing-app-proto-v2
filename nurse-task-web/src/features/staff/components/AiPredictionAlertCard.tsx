@@ -23,7 +23,7 @@ interface AiPredictionAlertCardProps {
   time?: string; // 例: "16:00"
 }
 
-export const AiPredictionAlertCard: React.FC<AiPredictionAlertCardProps> = ({ time = '16:00' }) => {
+export const AiPredictionAlertCard: React.FC<AiPredictionAlertCardProps> = ({ time: _time = '16:00' }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [checkedIds, setCheckedIds] = useState<string[]>(() =>
     SUGGESTIONS.filter((s) => s.defaultChecked).map((s) => s.id)

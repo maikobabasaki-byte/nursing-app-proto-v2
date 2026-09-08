@@ -440,6 +440,12 @@ export const GlobalSosToast: React.FC = () => {
       return false;
     }
 
+    const senderSessionId = (p as any).sos_sender_session_id;
+    // 🛡️ 本人（要請を発信した看護師自身）の画面・端末へはトースト・要請通知を出さない
+    if (isSelfSource(p.requested_by_id, p.requested_by_name, senderSessionId)) {
+      return false;
+    }
+
     const isTargetGuest = checkIsGuestSource(p.patient_id || p.requested_by_id, p.requested_by_name) || (p as any).is_guest === true;
     if (isGuestUser !== isTargetGuest) return false;
 

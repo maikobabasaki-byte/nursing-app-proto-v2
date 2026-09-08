@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useTimelineStore } from '../../../stores/useTimelineStore';
 import { checkIsLeader } from '../../../utils/userUtils';
 import type { LeaderTodo, LeaderTodoPriority } from '../../../types/types';
@@ -13,18 +13,78 @@ interface PatientItem {
   name: string;
   room_id: string;
   gender?: string;
+  team?: string;
 }
 
 export const LeaderTodoPage: React.FC = () => {
   const leaderTodos = useTimelineStore((state) => state.leaderTodos);
   const setLeaderTodos = useTimelineStore((state) => state.setLeaderTodos);
   const currentUser = useTimelineStore((state) => state.currentUser);
+  const toggleHandover = useTimelineStore((state) => state.toggleHandover);
+  const pullTaskFromHandover = useTimelineStore((state) => state.pullTaskFromHandover);
+  const addProgressLog = useTimelineStore((state) => state.addProgressLog);
+  const handoverTeamTab = useTimelineStore((state) => state.handoverTeamTab);
+  const setHandoverTeamTab = useTimelineStore((state) => state.setHandoverTeamTab);
+
+  const [expandedHandoverIds, setExpandedHandoverIds] = useState<Record<string, boolean>>({});
+  const [logInputText, setLogInputText] = useState<Record<string, string>>({});
+
+  // 🤝 中央カラム: 申し送りBOXと未対応TODOパネルの可変高さリサイズ用state & イベント (初期150px)
+  const [handoverBoxHeight, setHandoverBoxHeight] = useState<number>(150);
+  const [isResizingHandover, setIsResizingHandover] = useState<boolean>(false);
+  const startYRef = useRef<number>(0);
+  const startHeightRef = useRef<number>(0);
+
+  const handleMouseDownResizer = (e: React.MouseEvent) => {
+    e.preventDefault();
+    setIsResizingHandover(true);
+    startYRef.current = e.clientY;
+    startHeightRef.current = handoverBoxHeight;
+  };
+
+  useEffect(() => {
+    if (!isResizingHandover) return;
+
+    const handleMouseMove = (e: MouseEvent) => {
+      const deltaY = e.clientY - startYRef.current;
+      const newHeight = Math.max(0, startHeightRef.current + deltaY);
+      setHandoverBoxHeight(newHeight);
+    };
+
+    const handleMouseUp = () => {
+      setIsResizingHandover(false);
+    };
+
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseup', handleMouseUp);
+
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [isResizingHandover]);
+
+  const toggleHandoverExpand = (todoId: string) => {
+    setExpandedHandoverIds((prev) => ({
+      ...prev,
+      [todoId]: !prev[todoId],
+    }));
+  };
+
+  const handleAddProgressLog = (todoId: string) => {
+    const text = logInputText[todoId];
+    if (!text || !text.trim()) return;
+    const author = currentUser?.name || 'リーダー';
+    addProgressLog(todoId, author, text);
+    setLogInputText((prev) => ({ ...prev, [todoId]: '' }));
+  };
 
   const [patients, setPatients] = useState<PatientItem[]>([]);
   const [selectedPatientForModal, setSelectedPatientForModal] = useState<{
     patient_id: string;
     name: string;
     room_id: string;
+    team?: string;
   } | null>(null);
 
   const [editingTodo, setEditingTodo] = useState<LeaderTodo | null>(null);
@@ -80,6 +140,7 @@ export const LeaderTodoPage: React.FC = () => {
                 name: p.name || p.patient_name || '患者',
                 room_id: p.room_id || String(p.room || '000'),
                 gender: p.gender,
+                team: p.team,
               }))
             );
             return;
@@ -89,6 +150,84 @@ export const LeaderTodoPage: React.FC = () => {
     };
     loadData();
   }, []);
+
+  // 💡 チーム名正規化ヘルパー ('A', 'B')
+  const normalizeTeam = (t?: string): string => {
+    if (!t) return '';
+    const clean = t.trim().toUpperCase();
+    if (clean.includes('A')) return 'A';
+    if (clean.includes('B')) return 'B';
+    return clean;
+  };
+
+  // 💡 部屋番号の数値パース（ソート・チーム判定用）
+  const parseRoomNumber = (roomId?: string): number => {
+    if (!roomId) return 9999;
+    const num = parseInt(roomId.replace(/\D/g, ''), 10);
+    return isNaN(num) ? 9999 : num;
+  };
+
+  // 💡 患者マスターマップ (IDおよび部屋番号でのチーム検索用)
+  const patientMap = useMemo(() => {
+    const map = new Map<string, PatientItem>();
+    patients.forEach((p) => {
+      map.set(p.patient_id, p);
+      if (p.room_id) map.set(`room-${p.room_id}`, p);
+    });
+    return map;
+  }, [patients]);
+
+  // 💡 タスク所属チーム判定ヘルパー
+  const getTodoTeam = (todo: LeaderTodo): string => {
+    if (todo.team) return normalizeTeam(todo.team);
+    const p = patientMap.get(todo.patient_id) || patientMap.get(`room-${todo.room_id}`);
+    if (p && p.team) return normalizeTeam(p.team);
+    const roomNum = parseRoomNumber(todo.room_id);
+    if (roomNum <= 206) return 'A';
+    return 'B';
+  };
+
+  // 💡 タイムスタンプ（Firestore ServerTimestamp, Date, String, Number）の数値変換
+  const getTimestampValue = (item: any): number => {
+    if (!item) return 0;
+    const ts = item.updatedAt || item.updated_at || item.created_at || item;
+    if (ts?.toDate && typeof ts.toDate === 'function') {
+      return ts.toDate().getTime();
+    }
+    if (ts?.seconds) {
+      return ts.seconds * 1000;
+    }
+    if (typeof ts === 'string' || typeof ts === 'number') {
+      const parsed = new Date(ts).getTime();
+      if (!isNaN(parsed) && parsed > 0) return parsed;
+    }
+    return 0;
+  };
+
+  // 💡 自動ソート第1ソート用: タスクの最新タイムスタンプ値（ミリ秒）取得ヘルパー
+  const getTodoNewestTimeValue = (todo: LeaderTodo): number => {
+    if (todo.updated_at) {
+      const ts = getTimestampValue(todo.updated_at);
+      if (ts > 0) return ts;
+    }
+    const rawDate = todo.targetDate || todo.target_date;
+    if (rawDate && rawDate.trim()) {
+      const cleanDate = rawDate.trim().replace(/\//g, '-');
+      const timeStr = todo.scheduled_at && todo.scheduled_at.match(/^\d{1,2}:\d{2}$/) ? todo.scheduled_at : '00:00';
+      const isoStr = `${cleanDate}T${timeStr}:00`;
+      const parsed = new Date(isoStr).getTime();
+      if (!isNaN(parsed) && parsed > 0) return parsed;
+    }
+    if (todo.progressLogs && todo.progressLogs.length > 0) {
+      const lastLog = todo.progressLogs[todo.progressLogs.length - 1];
+      if (lastLog.id && lastLog.id.includes('log-')) {
+        const parts = lastLog.id.split('-');
+        const num = parseInt(parts[1], 10);
+        if (!isNaN(num) && num > 0) return num;
+      }
+    }
+    return 0;
+  };
 
   // 💡 時刻文字列 (14:00 や ISO 形式) を数値（分）に変換するヘルパー関数
   const parseTimeToMinutes = (timeStr?: string): number => {
@@ -109,6 +248,7 @@ export const LeaderTodoPage: React.FC = () => {
 
     if (currentUser) {
       list = list.filter((t) => {
+        if (t.assignee && t.assignee === currentUser.name) return true;
         if (t.nurse_id || t.user_id) {
           return t.nurse_id === currentUser.nurse_id || 
                  t.user_id === currentUser.nurse_id || 
@@ -138,9 +278,69 @@ export const LeaderTodoPage: React.FC = () => {
     return allMyTodos.filter((t) => t.status !== 'completed');
   }, [allMyTodos]);
 
-  // 🎯 右カラム用: 本日対応済み（完了・結果記録済み）TODOリスト
+  // 🤝 共有申し送りBOX全件抽出＆チーム別集計
+  const rawHandoverTodos = useMemo(() => {
+    return leaderTodos.filter((t) => !t.is_deleted && t.status !== 'deleted' && t.isHandover === true);
+  }, [leaderTodos]);
+
+  const teamCounts = useMemo(() => {
+    let countA = 0;
+    let countB = 0;
+    rawHandoverTodos.forEach((todo) => {
+      const team = getTodoTeam(todo);
+      if (team === 'A') countA++;
+      else if (team === 'B') countB++;
+    });
+    return {
+      all: rawHandoverTodos.length,
+      A: countA,
+      B: countB,
+    };
+  }, [rawHandoverTodos, patientMap]);
+
+  const [handoverSearchQuery, setHandoverSearchQuery] = useState<string>('');
+
+  // 🤝 共有申し送りBOX表示用: 選択中のチームタブ・患者名/部屋番号検索クエリでフィルタ＆第1ソート(新しい順)・第2ソート(部屋番号昇順)で自動並び替え
+  const handoverTodos = useMemo(() => {
+    let filteredList = rawHandoverTodos.filter((todo) => {
+      if (handoverTeamTab === 'all') return true;
+      return getTodoTeam(todo) === handoverTeamTab;
+    });
+
+    // 🔍 患者名・部屋番号・キーワードでのリアルタイム検索フィルター
+    if (handoverSearchQuery.trim()) {
+      const query = handoverSearchQuery.trim().toLowerCase().replace(/[\s　]+/g, '');
+      filteredList = filteredList.filter((todo) => {
+        const nameMatch = (todo.patient_name || '').toLowerCase().replace(/[\s　]+/g, '').includes(query);
+        const roomMatch = (todo.room_id || '').toLowerCase().replace(/[\s{]+/g, '').includes(query);
+        const titleMatch = (todo.title || '').toLowerCase().includes(query);
+        const patientIdMatch = (todo.patient_id || '').toLowerCase().includes(query);
+        return nameMatch || roomMatch || titleMatch || patientIdMatch;
+      });
+    }
+
+    return filteredList.sort((a, b) => {
+      // 第1ソート: 日付・作成時間の新しい順（降順）
+      const timeA = getTodoNewestTimeValue(a);
+      const timeB = getTodoNewestTimeValue(b);
+      if (timeA !== timeB) {
+        return timeB - timeA;
+      }
+
+      // 第2ソート: 同じ日時の中では、部屋番号の昇順（201, 202, 203…）
+      const roomA = parseRoomNumber(a.room_id);
+      const roomB = parseRoomNumber(b.room_id);
+      if (roomA !== roomB) {
+        return roomA - roomB;
+      }
+
+      return (a.title || '').localeCompare(b.title || '');
+    });
+  }, [rawHandoverTodos, handoverTeamTab, handoverSearchQuery, patientMap]);
+
+  // 🎯 右カラム用: 本日対応済み（実施完了）TODOリスト
   const completedTodos = useMemo(() => {
-    return allMyTodos.filter((t) => t.status === 'completed' || (t.result_outcome && t.result_outcome.trim() !== ''));
+    return allMyTodos.filter((t) => t.status === 'completed');
   }, [allMyTodos]);
 
   // 📊 タイムライン計画時間を加味した進捗率算出
@@ -270,9 +470,286 @@ export const LeaderTodoPage: React.FC = () => {
     </div>
   );
 
+  // 対象日・作成日 (targetDate) の YYYY/MM/DD フォーマット文字列取得ヘルパー
+  const getFormatTargetDate = (todo: { targetDate?: string; target_date?: string }): string => {
+    const raw = todo.targetDate || todo.target_date;
+    if (raw && raw.trim() !== '') {
+      const clean = raw.trim().replace(/-/g, '/');
+      if (clean.match(/^\d{4}\/\d{2}\/\d{2}$/)) return clean;
+      if (clean.match(/^\d{4}\/\d{1,2}\/\d{1,2}$/)) {
+        const parts = clean.split('/');
+        return `${parts[0]}/${parts[1].padStart(2, '0')}/${parts[2].padStart(2, '0')}`;
+      }
+    }
+    const now = new Date();
+    const yyyy = now.getFullYear();
+    const mm = String(now.getMonth() + 1).padStart(2, '0');
+    const dd = String(now.getDate()).padStart(2, '0');
+    return `${yyyy}/${mm}/${dd}`;
+  };
+
+  // 📜 スレッド型経過履歴＆追記フォームのレンダラー
+  const renderProgressLogsSection = (todo: LeaderTodo) => {
+    const isExpanded = Boolean(expandedHandoverIds[todo.todo_id]);
+    const logs = todo.progressLogs || [];
+    if (!isExpanded) return null;
+
+    return (
+      <div className="mt-1 pt-2.5 border-t border-amber-200/80 flex flex-col gap-2.5 bg-white/90 p-2.5 rounded-xl border border-amber-200 shadow-inner animate-fade-in" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center justify-between">
+          <span className="text-[11px] font-extrabold text-amber-950 flex items-center gap-1">
+            <span>📜 経過記録タイムライン・申し送り履歴</span>
+          </span>
+          <span className="text-[9px] text-gray-500 font-bold">時系列で全ログ保持</span>
+        </div>
+
+        {/* ログ一覧 */}
+        <div className="flex flex-col gap-2 max-h-48 overflow-y-auto pr-1">
+          {logs.length === 0 ? (
+            <div className="text-[11px] font-medium text-gray-400 bg-gray-50 p-2 rounded-lg text-center border border-gray-100">
+              まだ経過記録の追記はありません。下のフォームから追記できます。
+            </div>
+          ) : (
+            logs.map((log) => (
+              <div
+                key={log.id}
+                className="bg-amber-50/70 border border-amber-200/80 rounded-lg p-2 flex flex-col gap-1 shadow-2xs"
+              >
+                <div className="flex items-center justify-between text-[10px] font-black">
+                  <span className="text-indigo-900 bg-indigo-50 px-1.5 py-0.2 rounded border border-indigo-100">
+                    👤 {log.author}
+                  </span>
+                  <span className="text-gray-500 font-mono">
+                    ⏰ {log.time}
+                  </span>
+                </div>
+                <p className="text-xs text-gray-800 font-medium leading-relaxed whitespace-pre-wrap pl-1">
+                  {log.text}
+                </p>
+              </div>
+            ))
+          )}
+        </div>
+
+        {/* 追記入力フォーム */}
+        <div className="pt-1 flex items-center gap-2 border-t border-gray-100">
+          <input
+            type="text"
+            placeholder="経過情報・確認結果を追記..."
+            value={logInputText[todo.todo_id] || ''}
+            onChange={(e) =>
+              setLogInputText((prev) => ({
+                ...prev,
+                [todo.todo_id]: e.target.value,
+              }))
+            }
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && !e.nativeEvent.isComposing) {
+                e.preventDefault();
+                handleAddProgressLog(todo.todo_id);
+              }
+            }}
+            className="flex-1 bg-white border border-amber-300 focus:border-amber-500 rounded-lg px-2.5 py-1.5 text-xs text-gray-900 focus:outline-none focus:ring-2 focus:ring-amber-400 font-medium shadow-2xs"
+          />
+          <button
+            type="button"
+            onClick={() => handleAddProgressLog(todo.todo_id)}
+            disabled={!logInputText[todo.todo_id]?.trim()}
+            className="!bg-amber-700 !hover:bg-amber-800 !disabled:opacity-40 !text-white !font-extrabold !text-xs !px-3 !py-1.5 !rounded-lg !shadow-xs !transition-colors !shrink-0 !cursor-pointer"
+          >
+            追記する
+          </button>
+        </div>
+      </div>
+    );
+  };
+
+  // 🤝 共有申し送りBOXパネル (スレッド型履歴＆チームタブ＆自動ソート機能付き)
+  const renderHandoverBox = () => {
+    const hasItems = handoverTodos.length > 0;
+
+    return (
+      <div id="leader-todo-handover-box" className="w-full bg-amber-50/90 rounded-2xl border border-amber-300 shadow-sm flex flex-col overflow-hidden shrink-0 transition-all">
+        {/* 🤝 ヘッダー ＆ 👥 チーム別切り替えタブ ＆ 🔍 患者検索バー */}
+        <div className="bg-amber-100/95 px-3 py-2 flex flex-col gap-2 shrink-0 border-b border-amber-200 shadow-2xs">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <h2 className="font-extrabold text-xs text-amber-950 flex items-center gap-1.5">
+                <span>🤝 共有申し送りBOX</span>
+                <span className={`text-[10px] font-black px-2 py-0.5 rounded-full ${
+                  hasItems ? 'bg-amber-300 text-amber-950 border border-amber-400' : 'bg-gray-200 text-gray-600'
+                }`}>
+                  {handoverTodos.length}件
+                </span>
+              </h2>
+              <span className="text-[9px] text-amber-800 font-bold hidden md:inline">次シフト引き継ぎ・ヘルプ用</span>
+            </div>
+
+            {/* 👥 チーム別切り替えタブバー */}
+            <div className="!flex !items-center !gap-1 !bg-amber-200/90 !p-0.5 !rounded-xl !border !border-amber-300/80 !shadow-2xs !shrink-0">
+              {[
+                { key: 'all', label: '全体', count: teamCounts.all },
+                { key: 'A', label: 'チームA', count: teamCounts.A },
+                { key: 'B', label: 'チームB', count: teamCounts.B },
+              ].map((tab) => (
+                <button
+                  key={tab.key}
+                  type="button"
+                  onClick={() => setHandoverTeamTab(tab.key)}
+                  className={`!text-[11px] !font-extrabold !px-2.5 !py-1 !rounded-lg !transition-all !cursor-pointer !flex !items-center !gap-1.5 ${
+                    handoverTeamTab === tab.key
+                      ? '!bg-amber-700 !text-white shadow-xs font-black'
+                      : '!bg-transparent !text-amber-950 hover:!bg-amber-300/80'
+                  }`}
+                >
+                  <span>{tab.label}</span>
+                  <span className={`text-[9px] font-black px-1.5 py-0.1 rounded-full ${
+                    handoverTeamTab === tab.key ? 'bg-amber-900 text-amber-100' : 'bg-amber-300 text-amber-950'
+                  }`}>
+                    {tab.count}
+                  </span>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* 🔍 患者名・部屋番号リアルタイム検索インプット */}
+          <div className="relative w-full">
+            <input
+              type="text"
+              placeholder="🔍患者名・部屋番号 (例: 山田, 201) で申し送り検索..."
+              value={handoverSearchQuery}
+              onChange={(e) => setHandoverSearchQuery(e.target.value)}
+              className="w-full bg-white border border-amber-300 focus:border-amber-500 rounded-lg pl-7 pr-7 py-1 text-xs text-gray-900 font-bold placeholder-amber-800/50 focus:outline-none focus:ring-2 focus:ring-amber-400 shadow-2xs"
+            />
+            {handoverSearchQuery && (
+              <button
+                type="button"
+                onClick={() => setHandoverSearchQuery('')}
+                className="absolute inset-y-0 right-0 pr-2.5 flex items-center text-xs font-bold text-amber-800/70 hover:text-amber-950 cursor-pointer"
+              >
+                ✕
+              </button>
+            )}
+          </div>
+        </div>
+
+        {!hasItems ? (
+          <div className="w-full bg-white/90 p-4 text-center text-xs text-amber-900 font-bold border-b border-amber-200">
+            {handoverSearchQuery
+              ? `「${handoverSearchQuery}」に一致する共有申し送りタスクはありません。`
+              : handoverTeamTab === 'all'
+              ? '現在、共有申し送りBOXにタスクはありません。'
+              : `チーム${handoverTeamTab} の共有申し送りタスクはありません。`}
+          </div>
+        ) : (
+          <div
+            className="w-full bg-white/90 p-2 overflow-y-auto min-h-0 flex flex-col gap-2.5 select-none"
+            style={{ height: `${handoverBoxHeight}px`, resize: 'vertical' }}
+          >
+            {handoverTodos.map((todo) => {
+              const isExpanded = Boolean(expandedHandoverIds[todo.todo_id]);
+              const logs = todo.progressLogs || [];
+              const todoTeam = getTodoTeam(todo);
+
+              return (
+                <div
+                  key={`handover-${todo.todo_id}`}
+                  onClick={() => setEditingTodo(todo)}
+                  className="bg-amber-50/90 hover:bg-amber-100/60 border border-amber-300 rounded-xl p-3 shadow-xs flex flex-col gap-2 transition-all cursor-pointer"
+                >
+                  {/* カード上部サマリー行 */}
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex flex-col gap-1 min-w-0 flex-1">
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        {getStatusBadge(todo.status)}
+                        {/* 👥 チームバッジ */}
+                        <span className="bg-indigo-100 text-indigo-900 border border-indigo-200 font-black text-[10px] px-1.5 py-0.2 rounded">
+                          チーム{todoTeam}
+                        </span>
+                        {/* YYYY/MM/DD 日付ラベル */}
+                        <span className="bg-amber-200 text-amber-950 font-black text-[10px] px-1.5 py-0.2 rounded border border-amber-300">
+                          {getFormatTargetDate(todo)}
+                        </span>
+                        <span className="bg-amber-200 text-amber-900 font-black text-[10px] px-1.5 py-0.2 rounded">
+                          ⏰ {todo.scheduled_at || '随時'}
+                        </span>
+                        <span className="font-extrabold text-xs text-gray-900 truncate">
+                          {todo.patient_name} 様 ({todo.room_id}号室)
+                        </span>
+                        {getPriorityBadge(todo.priority)}
+                      </div>
+                      <p className="text-xs text-gray-800 font-bold leading-normal">
+                        {todo.title}
+                      </p>
+                    </div>
+
+                    <div className="flex items-center gap-1.5 shrink-0 flex-wrap justify-end">
+                      {/* 🙋 自分が引き受ける / 解除する トグルボタン */}
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          pullTaskFromHandover(todo.todo_id, currentUser?.name || 'リーダー');
+                        }}
+                        className={`!text-[10px] !font-extrabold !px-2.5 !py-1 !rounded-md !border !transition-all !cursor-pointer !flex !items-center !gap-1 !shadow-xs ${
+                          todo.assignee === currentUser?.name
+                            ? '!bg-emerald-600 hover:!bg-emerald-700 !text-white !border-emerald-700 shadow-sm'
+                            : todo.assignee
+                            ? '!bg-indigo-100 !text-indigo-900 !border-indigo-300 hover:!bg-indigo-200'
+                            : '!bg-emerald-600 hover:!bg-emerald-700 !text-white !border-emerald-700 !ring-2 !ring-emerald-300/80'
+                        }`}
+                      >
+                        <span>
+                          {todo.assignee === currentUser?.name
+                            ? '✓ 担当中 (解除する)'
+                            : todo.assignee
+                            ? `👤 担当:${todo.assignee}`
+                            : '🙋 自分が引き受ける'}
+                        </span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          toggleHandoverExpand(todo.todo_id);
+                        }}
+                        className={`!text-[10px] !font-extrabold !px-2 !py-1 !rounded-md !border !transition-all !cursor-pointer !flex !items-center !gap-1 ${
+                          isExpanded
+                            ? '!bg-amber-600 !text-white !border-amber-700 !shadow-xs'
+                            : '!bg-white !text-amber-900 !border-amber-300 hover:!bg-amber-100'
+                        }`}
+                      >
+                        <span>経過ログ ({logs.length}) {isExpanded ? '▲' : '▼'}</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          toggleHandover(todo.todo_id);
+                        }}
+                        className="!bg-white hover:!bg-red-50 !text-red-700 hover:!text-red-800 !border !border-amber-300 hover:!border-red-300 !text-[10px] !font-extrabold !px-2 !py-1 !rounded-md !transition-all !cursor-pointer !shadow-xs"
+                      >
+                        外す ✕
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* 展開時: スレッド型タイムライン経過履歴 & 追記フォーム */}
+                  {renderProgressLogsSection(todo)}
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    );
+  };
+
   const renderActiveTodosColumn = () => (
-    <div id="leader-todo-active-list" className="w-full h-full bg-white rounded-2xl border border-gray-200 shadow-sm flex flex-col overflow-hidden">
-      <div id="leader-todo-active-header" className="bg-gray-50 border-b border-gray-200 p-3.5 flex items-center justify-between">
+    <div id="leader-todo-active-list" className="w-full flex-1 min-h-0 bg-white rounded-2xl border border-gray-200 shadow-sm flex flex-col overflow-hidden">
+      <div id="leader-todo-active-header" className="bg-gray-50 border-b border-gray-200 p-3.5 flex items-center justify-between shrink-0">
         <h2 className="font-extrabold text-sm text-gray-800 flex items-center gap-1.5">
           <span>⏱️ 未対応・対応中TODO</span>
           <span className="text-xs bg-indigo-100 text-indigo-800 font-black px-2 py-0.5 rounded-full">
@@ -294,12 +771,19 @@ export const LeaderTodoPage: React.FC = () => {
             return (
               <div
                 key={todo.todo_id}
-                onClick={() => setResultModalTodo(todo)}
-                className="border-2 border-gray-200 hover:border-indigo-400 bg-white hover:bg-indigo-50/40 rounded-xl p-3.5 transition-all cursor-pointer flex flex-col gap-2 relative shadow-xs hover:shadow-md group"
+                onClick={() => setEditingTodo(todo)}
+                className={`border-2 rounded-xl p-3.5 transition-all cursor-pointer flex flex-col gap-2 relative shadow-xs hover:shadow-md group ${
+                  todo.isHandover
+                    ? 'border-amber-400 bg-amber-50/30 hover:bg-amber-50/60'
+                    : 'border-gray-200 hover:border-indigo-400 bg-white hover:bg-indigo-50/40'
+                }`}
               >
                 {/* カードヘッダー */}
                 <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="bg-indigo-950 text-indigo-100 font-extrabold text-[10px] px-2 py-0.5 rounded border border-indigo-700">
+                      {getFormatTargetDate(todo)}
+                    </span>
                     <span className="bg-indigo-900 text-white font-extrabold text-xs px-2.5 py-0.5 rounded-md">
                       ⏰ {todo.scheduled_at || '随時'}
                     </span>
@@ -307,6 +791,11 @@ export const LeaderTodoPage: React.FC = () => {
                       {todo.category}
                     </span>
                     {getPriorityBadge(todo.priority)}
+                    {todo.assignee && (
+                      <span className="bg-emerald-100 text-emerald-900 border border-emerald-300 text-[10px] font-black px-2 py-0.5 rounded-md flex items-center gap-1">
+                        👤 担当: {todo.assignee}
+                      </span>
+                    )}
                   </div>
 
                   <div className="flex items-center gap-2">
@@ -347,12 +836,45 @@ export const LeaderTodoPage: React.FC = () => {
                 </div>
 
                 {/* アクション呼び出しフッターボタン */}
-                <div className="pt-1 flex items-center justify-end">
+                <div className="pt-1 flex items-center justify-between gap-1.5 flex-wrap">
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        toggleHandover(todo.todo_id);
+                      }}
+                      className={`!text-xs !font-extrabold !px-3 !py-1.5 !rounded-lg !border !transition-all !cursor-pointer !flex !items-center !gap-1.5 ${
+                        todo.isHandover
+                          ? '!bg-amber-500 hover:!bg-amber-600 !text-white !border-amber-600 !shadow-sm'
+                          : '!bg-amber-50 hover:!bg-amber-100 !text-amber-900 !border-amber-300'
+                      }`}
+                    >
+                      <span>🤝</span>
+                      <span>{todo.isHandover ? '申し送り中' : '共有BOXへ送る'}</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        toggleHandoverExpand(todo.todo_id);
+                      }}
+                      className={`!text-xs !font-extrabold !px-2.5 !py-1.5 !rounded-lg !border !transition-all !cursor-pointer !flex !items-center !gap-1 ${
+                        expandedHandoverIds[todo.todo_id]
+                          ? '!bg-amber-600 !text-white !border-amber-700 !shadow-xs'
+                          : '!bg-gray-100 !text-gray-700 !border-gray-300 hover:!bg-gray-200'
+                      }`}
+                    >
+                      <span>経過 ({(todo.progressLogs || []).length}) {expandedHandoverIds[todo.todo_id] ? '▲' : '▼'}</span>
+                    </button>
+                  </div>
+
                   <button
                     type="button"
                     onClick={(e) => {
                       e.stopPropagation();
-                      setResultModalTodo(todo);
+                      setEditingTodo(todo);
                     }}
                     className="!bg-indigo-700 group-hover:!bg-indigo-800 !text-white !font-extrabold !text-xs !px-3.5 !py-1.5 !rounded-lg !shadow-sm hover:!shadow !transition-all !cursor-pointer !flex !items-center !gap-1.5"
                   >
@@ -360,6 +882,8 @@ export const LeaderTodoPage: React.FC = () => {
                     <span>対応入力・結果記録</span>
                   </button>
                 </div>
+
+                {renderProgressLogsSection(todo)}
               </div>
             );
           })
@@ -391,19 +915,28 @@ export const LeaderTodoPage: React.FC = () => {
           completedTodos.map((todo) => (
             <div
               key={todo.todo_id}
-              className="bg-white border border-emerald-200 rounded-xl p-3 shadow-xs flex flex-col gap-2 relative hover:border-emerald-400 transition-all"
+              onClick={() => setEditingTodo(todo)}
+              className="bg-white border border-emerald-200 rounded-xl p-3 shadow-xs flex flex-col gap-2 relative hover:border-emerald-400 transition-all cursor-pointer"
             >
               <div className="flex items-center justify-between">
-                <span className="bg-emerald-100 text-emerald-950 font-extrabold text-[11px] px-2 py-0.5 rounded">
-                  🟢 実施完了
-                </span>
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  <span className="bg-emerald-100 text-emerald-950 font-extrabold text-[11px] px-2 py-0.5 rounded">
+                    🟢 実施完了
+                  </span>
+                  <span className="bg-emerald-200 text-emerald-950 font-black text-[10px] px-1.5 py-0.2 rounded border border-emerald-300">
+                    {getFormatTargetDate(todo)}
+                  </span>
+                </div>
                 <div className="flex items-center gap-1.5">
                   <span className="text-[11px] font-black text-gray-600 bg-gray-100 px-2 py-0.5 rounded">
                     ⏰ {todo.scheduled_at || '随時'}
                   </span>
                   <button
                     type="button"
-                    onClick={() => setResultModalTodo(todo)}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setEditingTodo(todo);
+                    }}
                     className="!bg-emerald-50 hover:!bg-emerald-100 !text-emerald-800 !border !border-emerald-200 !text-[10px] !font-bold !px-2 !py-0.5 !rounded !cursor-pointer !transition-colors"
                   >
                     ✏️ 記録再編集
@@ -433,6 +966,42 @@ export const LeaderTodoPage: React.FC = () => {
                   <span className="leading-relaxed">{todo.doctor_instructions}</span>
                 </div>
               )}
+
+              {/* 🤝 完了済みカードフッター */}
+              <div className="pt-1.5 border-t border-emerald-100 flex items-center justify-between gap-1.5">
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    toggleHandoverExpand(todo.todo_id);
+                  }}
+                  className={`!text-[10px] !font-extrabold !px-2 !py-1 !rounded-md !border !transition-all !cursor-pointer !flex !items-center !gap-1 ${
+                    expandedHandoverIds[todo.todo_id]
+                      ? '!bg-amber-600 !text-white !border-amber-700 !shadow-xs'
+                      : '!bg-white !text-amber-900 !border-amber-300 hover:!bg-amber-100'
+                  }`}
+                >
+                  <span>経過ログ ({(todo.progressLogs || []).length}) {expandedHandoverIds[todo.todo_id] ? '▲' : '▼'}</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    toggleHandover(todo.todo_id);
+                  }}
+                  className={`!text-[11px] !font-extrabold !px-2.5 !py-1 !rounded-lg !border !transition-all !cursor-pointer !flex !items-center !gap-1.5 ${
+                    todo.isHandover
+                      ? '!bg-amber-500 hover:!bg-amber-600 !text-white !border-amber-600 !shadow-sm'
+                      : '!bg-amber-50 hover:!bg-amber-100 !text-amber-900 !border-amber-300'
+                  }`}
+                >
+                  <span>🤝</span>
+                  <span>{todo.isHandover ? '申し送り中' : '共有BOXへ送る'}</span>
+                </button>
+              </div>
+
+              {renderProgressLogsSection(todo)}
             </div>
           ))
         )}
@@ -576,7 +1145,22 @@ export const LeaderTodoPage: React.FC = () => {
         <div className={`h-full ${activeTodoTab === 'patients' ? 'flex-1 lg:flex-none lg:w-[28%]' : 'hidden lg:block lg:w-[28%]'}`}>
           {renderPatientsColumn()}
         </div>
-        <div className={`h-full ${activeTodoTab === 'active' ? 'flex-1 lg:flex-none lg:w-[44%]' : 'hidden lg:block lg:w-[44%]'}`}>
+        <div className={`h-full flex flex-col gap-1 min-h-0 ${activeTodoTab === 'active' ? 'flex-1 lg:flex-none lg:w-[44%]' : 'hidden lg:block lg:w-[44%]'}`}>
+          {renderHandoverBox()}
+
+          {/* 🤝 申し送りBOXと未対応TODOパネルの境界ドラッグリサイザーハンドル */}
+          {handoverTodos.length > 0 && (
+            <div
+              onMouseDown={handleMouseDownResizer}
+              className={`w-full h-3 rounded-full my-0.5 cursor-row-resize flex items-center justify-center transition-all shrink-0 select-none group ${
+                isResizingHandover ? 'bg-amber-400 ring-2 ring-amber-300 shadow-sm' : 'bg-amber-200/80 hover:bg-amber-300'
+              }`}
+              title="上下にドラッグして共有申し送りBOXと未対応TODOの高さを調整"
+            >
+              <div className="w-10 h-1 bg-amber-600/80 group-hover:bg-amber-900 rounded-full" />
+            </div>
+          )}
+
           {renderActiveTodosColumn()}
         </div>
         <div className={`h-full ${activeTodoTab === 'completed' ? 'flex-1 lg:flex-none lg:w-[28%]' : 'hidden lg:block lg:w-[28%]'}`}>

@@ -69,7 +69,7 @@ export default function PatientSelect({ onSelectComplete }: PatientSelectProps) 
               });
               setPatients(sortedData);
 
-              // 💡 画面表示時は前回の選択を毎回リセットし、所属チームのデフォルト選択に初期化
+              // 💡 画面表示時は前回の選択をリセットし、チェック無しの状態に初期化
               try {
                 sessionStorage.removeItem('selectedPatients');
                 useTimelineStore.getState().setSelectedPatients([]);
@@ -77,17 +77,8 @@ export default function PatientSelect({ onSelectComplete }: PatientSelectProps) 
                 console.error("患者リセットエラー:", e);
               }
 
-              // 🎯 【チーム選択の適用】ログインユーザーの所属チーム（例: Aチーム）の全患者をデフォルトで自動チェック
-              const defaultTeamPatients = sortedData
-                .filter(p => normalizeTeamName(p.team) === normalizedUserTeam)
-                .map(p => p.patient_id);
-
-              if (defaultTeamPatients.length > 0) {
-                setSelectedPatientIds(defaultTeamPatients);
-              } else {
-                // 万が一該当チームがいない場合は最初の病室の患者を選択
-                setSelectedPatientIds(sortedData.slice(0, 6).map(p => p.patient_id));
-              }
+              // 🎯 画面表示時はすべてチェックなし（未選択状態）に初期化
+              setSelectedPatientIds([]);
 
               return;
             }

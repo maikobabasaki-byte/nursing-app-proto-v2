@@ -12,6 +12,7 @@ export const MemoPopup = () => {
   const handleSaveMemo = useTimelineStore((state) => state.handleSaveMemo);
   const handleDeleteMemo = useTimelineStore((state) => state.handleDeleteMemo);
   const closeMemoPopup = useTimelineStore((state) => state.closeMemoPopup);
+  const currentUser = useTimelineStore((state) => state.currentUser);
   
   // ⚡ 解決策：ポップアップが開いたタイミングで、ローカル状態を確実にリセット・同期する！
   const [editingText, setEditingText] = useState("");
@@ -237,7 +238,9 @@ export const MemoPopup = () => {
                 alert("⚠️ メモ内容は200文字以内で入力してください。");
                 return;
               }
+              const currentUserId = currentUser?.nurse_id || currentUser?.email || sessionStorage.getItem('nurse_id') || 'self';
               const isRed = priority === 'red';
+              // 💡 優先度（red/high含め）に関わらず、メモは他ユーザーと共有せず個人のプライベート管理とする
               const memoToSave = editingMemo 
                 ? { 
                     ...editingMemo, 
@@ -247,7 +250,8 @@ export const MemoPopup = () => {
                     target_room_id: targetRoomId || undefined,
                     is_completed: isCompleted,
                     priority: priority,
-                    is_anchor: isRed
+                    is_anchor: isRed,
+                    created_by: editingMemo.created_by || currentUserId,
                   }
                 : { 
                     id: Date.now().toString(), 
@@ -257,7 +261,8 @@ export const MemoPopup = () => {
                     target_room_id: targetRoomId || undefined,
                     is_completed: isCompleted,
                     priority: priority,
-                    is_anchor: isRed
+                    is_anchor: isRed,
+                    created_by: currentUserId,
                   };
               
               handleSaveMemo(memoToSave);

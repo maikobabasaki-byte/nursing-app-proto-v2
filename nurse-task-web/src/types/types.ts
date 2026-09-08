@@ -51,6 +51,7 @@ export interface Task {
   groupType?: 'patient' | 'task'; // ハイブリッド対応
   children?: Task[]; // グループ内のタスク
   isChild?: boolean; // グループ内のタスクであることのフラグ
+  isHandover?: boolean; // 申し送り対象フラグ
 }
 
 // 1. 基本となるタスクステータスの拡張
@@ -93,6 +94,10 @@ export interface TaskDocument {
   updated_by?: string;
   category?: string;
   target_date?: string;
+  targetDate?: string;
+  isHandover?: boolean;
+  progressLogs?: ProgressLog[];
+  assignee?: string | null;
 }
 
 export interface Patient {
@@ -206,10 +211,19 @@ export interface Memo {
   is_completed?: boolean;
   priority?: 'red' | 'high' | 'medium' | 'low';
   is_anchor?: boolean;
+  created_by?: string;
+  is_private?: boolean;
 }
 
 export type LeaderTodoCategory = '患者対応' | '家族対応' | '医師への連絡' | '検査・処置' | 'その他';
 export type LeaderTodoPriority = 'highest' | 'high' | 'medium' | 'low';
+
+export interface ProgressLog {
+  id: string;
+  time: string;
+  author: string;
+  text: string;
+}
 
 export interface LeaderTodo {
   todo_id: string;
@@ -218,11 +232,17 @@ export interface LeaderTodo {
   patient_id: string;
   patient_name: string;
   room_id: string;
+  team?: string; // チーム名 ('A', 'B', 'チームA'等)
   category: LeaderTodoCategory;
   title: string;
   scheduled_at: string;
   priority: LeaderTodoPriority;
   requires_double_check: boolean;
+  isHandover?: boolean; // 申し送り対象フラグ
+  progressLogs?: ProgressLog[]; // スレッド型経過記録履歴
+  assignee?: string | null; // 担当看護師名
+  targetDate?: string; // 対象日・作成日 (例: "9/8")
+  target_date?: string;
   status: 'untouched' | 'in_progress' | 'completed' | 'pending' | 'deleted';
   is_deleted?: boolean;
   deleted_at?: string | null;

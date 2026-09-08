@@ -15,8 +15,7 @@ import { useUserName } from '../../../../hooks/useUserName';
 import { checkIsLeader } from '../../../../utils/userUtils';
 import { getJSTDateString } from '../../../../utils/dateUtils';
 import { PoolTaskCard } from './PoolTaskCard';
-import { AiPredictionAlertCard } from './AiPredictionAlertCard';
-import { normalizeToHHMM, normalizeTeamName, isTaskInLeaderTeam, extractUserProgressingTasks, isTimeInSlot } from '../../../../utils/taskLogic';
+import { normalizeToHHMM, normalizeTeamName, isTaskInLeaderTeam, extractUserProgressingTasks, isTimeInSlot, isEmergencyTaskOutdated } from '../../../../utils/taskLogic';
 import { useIsMobile } from '../../../../hooks/useIsMobile';
 
 export default function TimelineMain({ 
@@ -53,7 +52,7 @@ export default function TimelineMain({
     ? selectedPatients
     : storeSelectedPatients;
 
-  // 💡 判定関数：患者が指定されていない（0件）場合は全タスクを表示し、PC画面消失を自動防止
+  // 💡 判定関数：患者が指定されていない（0件）場合は全タスクを表示し、画面消失を自動防止
   const isPatientSelected = (patientId: string) => {
     if (!effectiveSelectedPatients || effectiveSelectedPatients.length === 0) {
       return true;
@@ -93,6 +92,11 @@ export default function TimelineMain({
       return false;
     }
 
+    const currentTargetDate = storeSelectedDate || getJSTDateString();
+    if (isEmergencyTaskOutdated(task, currentTargetDate)) {
+      return false;
+    }
+
     if (isGuestUser) {
       const isGuestTask = task.task_id?.startsWith('GUEST-') || (task as any).is_guest === true || task.nurse_id === currentUser?.nurse_id || task.assigned_nurse_id === currentUser?.nurse_id;
       if (!isGuestTask) return false;
@@ -114,10 +118,6 @@ export default function TimelineMain({
       if (!isTaskInLeaderTeam(task, leaderTeam, nurseMaster)) {
         return false;
       }
-      const isHighPriority = task.priority === 'high';
-      if (!isHighPriority && !showLowPriority && task.priority === 'low') {
-        return false;
-      }
       return true;
     }
     return isTaskForSelectedPatient(task);
@@ -129,9 +129,9 @@ export default function TimelineMain({
       return false;
     }
 
-    // 📅 過去日付のナースコール割り込みタスクのみ異日付を除外
+    // 📅 緊急要請・ナースコール対応・SOSタスクはその日（選択日付/本日）のみタイムライン表示（異日付のものは完全除外）
     const currentTargetDate = storeSelectedDate || getJSTDateString();
-    if (task.task_id?.startsWith('CALL_INTERRUPT_') && task.target_date && task.target_date !== currentTargetDate) {
+    if (isEmergencyTaskOutdated(task, currentTargetDate)) {
       return false;
     }
 
@@ -165,44 +165,19 @@ export default function TimelineMain({
 
     // 💡 リーダー参照モード (isLeader === true) の場合
     if (isLeader) {
-      // 1. 低優先度表示フィルタ
-      if (!showLowPriority && task.priority === 'low') {
-        return false;
-      }
-
-      // 2. 選択患者リスト（`effectiveSelectedPatients`）が存在する場合は受け持ち・選択患者のみ抽出
+      // 1. 選択患者リスト（`effectiveSelectedPatients`）が存在する場合は選択患者のみ抽出
       if (effectiveSelectedPatients && effectiveSelectedPatients.length > 0) {
         if (!isTaskForSelectedPatient(task)) {
           return false;
         }
       }
 
-      // 3. チーム名の不一致チェック（他チームのタスクは完全除外）
+      // 2. チーム名の不一致チェック（他チーム指定のタスクのみ明確に除外）
       const normalizedLeaderTeam = normalizeTeamName(leaderTeam);
       const normalizedTaskTeam = normalizeTeamName(task.team);
 
       if (normalizedTaskTeam !== '' && normalizedLeaderTeam !== '' && normalizedTaskTeam !== normalizedLeaderTeam) {
         return false;
-      }
-
-      const tNurseName = (task.nurse_name || '').replace(/[\s　]+/g, '');
-      const tNurseId = (task.nurse_id || task.staff_id || task.assigned_nurse_id || '').trim();
-      if (tNurseName || tNurseId) {
-        const assignedNurse = nurseMaster.find(n => {
-          const nName = (n.name || '').replace(/[\s　]+/g, '');
-          const nId = (n.nurse_id || '').trim();
-          return (
-            (nId !== '' && (nId === tNurseId || nId === tNurseName)) ||
-            (nName !== '' && (nName === tNurseName || nName === tNurseId || tNurseName.includes(nName) || nName.includes(tNurseName)))
-          );
-        });
-
-        if (assignedNurse && assignedNurse.team) {
-          const normalizedNurseTeam = normalizeTeamName(assignedNurse.team);
-          if (normalizedNurseTeam !== '' && normalizedLeaderTeam !== '' && normalizedNurseTeam !== normalizedLeaderTeam) {
-            return false;
-          }
-        }
       }
 
       return true;
@@ -248,12 +223,17 @@ export default function TimelineMain({
       const isMemoGuest = Boolean((m as any).is_guest === true || m.id?.startsWith('GUEST-'));
       if (isGuestUser !== isMemoGuest) return false;
 
-      // 🛡️ どのメモも他ユーザーとは一切共有しない（作成者本人以外の画面へは非表示）
-      const memoCreator = String((m as any).created_by || (m as any).nurse_name || (m as any).nurse_id || '').trim().replace(/[\s　]+/g, '');
+      // 🛡️ メモは完全非共有。作成者本人の画面（タイムライン）にのみ表示する
+      const memoCreator = String(m.created_by || (m as any).nurse_name || (m as any).nurse_id || '').trim().replace(/[\s　]+/g, '');
 
       if (memoCreator !== '') {
         const isMyMemo = (myId !== '' && memoCreator === myId) || (myName !== '' && memoCreator === myName);
         if (!isMyMemo) {
+          return false; // 他メンバーや作成者が異なるメモはリーダー等の他者タイムラインへ一切表示しない
+        }
+      } else {
+        // created_by が未指定の古いメモ等は他ユーザー画面への混入を防止するため遮断
+        if (myId !== '' || myName !== '') {
           return false;
         }
       }

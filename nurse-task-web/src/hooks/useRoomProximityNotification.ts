@@ -72,6 +72,9 @@ export function useRoomProximityNotification(rooms: RoomLocation[]) {
     const nursePxX = ((myNurse.x_percent ?? 50) / 100) * SVG_WIDTH;
     const nursePxY = ((myNurse.y_percent ?? 45) / 100) * SVG_HEIGHT;
 
+    const myNurseId = String(currentUser?.nurse_id || currentUser?.staff_id || sessionStorage.getItem('nurse_id') || '').trim();
+    const myNurseName = String(currentUser?.name || sessionStorage.getItem('nurse_name') || '').trim().replace(/[\s　]+/g, '');
+
     rooms.forEach((room) => {
       // ピンと部屋の中心点間の直線距離を計算
       const dist = Math.sqrt(
@@ -79,9 +82,18 @@ export function useRoomProximityNotification(rooms: RoomLocation[]) {
       );
 
       const isAlreadyNotified = notifiedRoomsRef.current.has(room.room_id);
-      const targetMemos = memos.filter(
-        (m) => m.target_room_id === room.room_id && !m.is_completed
-      );
+      // 💡 優先度（red/high含む）に関わらず、メモは他ユーザー共有しない（自分のメモのみ判定対象）
+      const targetMemos = memos.filter((m) => {
+        if (m.is_completed) return false;
+        if (m.target_room_id !== room.room_id) return false;
+
+        const memoCreator = String((m as any).created_by || (m as any).nurse_name || (m as any).nurse_id || '').trim().replace(/[\s　]+/g, '');
+        if (memoCreator !== '') {
+          const isMyMemo = (myNurseId !== '' && memoCreator === myNurseId) || (myNurseName !== '' && memoCreator === myNurseName);
+          if (!isMyMemo) return false;
+        }
+        return true;
+      });
 
       if (dist <= PROXIMITY_THRESHOLD_PX) {
         if (!isAlreadyNotified && targetMemos.length > 0) {

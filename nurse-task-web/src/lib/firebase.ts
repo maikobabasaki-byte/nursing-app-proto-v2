@@ -11,15 +11,16 @@ import {
   setDoc, 
   getDoc,
   deleteDoc,
+  updateDoc,
   runTransaction, 
   collection, 
   serverTimestamp,
   arrayUnion
 } from "firebase/firestore"; 
-import type { TaskStatus, LeaderTodo } from '../types/types';
+import type { TaskStatus, LeaderTodo, ProgressLog } from '../types/types';
 
-// 💡 複数タブ起動時のプライマリーリース取得情報ログ（Failed to obtain primary lease）を抑制
-setLogLevel('error');
+// 💡 複数タブ起動時・HMR再読み込み時のプライマリーリース内部ログ（Failed to obtain primary lease）を抑制
+setLogLevel('silent');
 
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,                                                                                                                                                  
@@ -392,6 +393,84 @@ export const deleteLeaderTodoInFirestore = async (todoId: string): Promise<void>
   } catch (error) {
     console.error('リーダーTODOの論理削除に失敗しました:', error);
     throw error;
+  }
+};
+
+// 💡 申し送りBOX（isHandover）のFirestoreリアルタイム更新関数
+export const toggleHandoverInFirestore = async (taskId: string, isHandover: boolean): Promise<void> => {
+  try {
+    const todoRef = doc(db, 'leader_todos', taskId);
+    const updatePayload: any = {
+      isHandover,
+      updated_at: serverTimestamp(),
+    };
+    if (isHandover) {
+      updatePayload.assignee = null;
+    }
+    await updateDoc(todoRef, updatePayload).catch(async () => {
+      await setDoc(todoRef, updatePayload, { merge: true });
+    });
+  } catch (error) {
+    console.error('isHandoverのFirestore更新に失敗しました:', error);
+  }
+};
+
+// 💡 共有BOXからの引き込み（assignee, isHandover, arrayUnion(progressLogs)）のFirestore更新関数
+export const pullTaskFromHandoverInFirestore = async (
+  taskId: string,
+  assignee: string | null,
+  isHandover: boolean,
+  pullLog: ProgressLog,
+  currentNurseId?: string,
+  status?: string
+): Promise<void> => {
+  try {
+    const todoRef = doc(db, 'leader_todos', taskId);
+    const updatePayload: any = {
+      assignee,
+      isHandover,
+      updated_by: assignee || '看護師',
+      progressLogs: arrayUnion(pullLog),
+      updated_at: serverTimestamp(),
+    };
+    if (status) {
+      updatePayload.status = status;
+      if (status === 'untouched') {
+        updatePayload.completed_at = null;
+        updatePayload.completed_by = null;
+      }
+    }
+    if (currentNurseId) {
+      updatePayload.nurse_id = currentNurseId;
+      updatePayload.user_id = currentNurseId;
+    }
+    await updateDoc(todoRef, updatePayload).catch(async () => {
+      await setDoc(todoRef, updatePayload, { merge: true });
+    });
+  } catch (error) {
+    console.error('pullTaskFromHandoverのFirestore更新に失敗しました:', error);
+  }
+};
+
+// 💡 経過記録（progressLogs）のFirestore配列追記関数 (arrayUnion)
+export const addProgressLogInFirestore = async (taskId: string, newLog: ProgressLog): Promise<void> => {
+  try {
+    const todoRef = doc(db, 'leader_todos', taskId);
+    await updateDoc(todoRef, {
+      progressLogs: arrayUnion(newLog),
+      updated_at: serverTimestamp(),
+    }).catch(async () => {
+      await setDoc(
+        todoRef,
+        {
+          progressLogs: arrayUnion(newLog),
+          updated_at: serverTimestamp(),
+        },
+        { merge: true }
+      );
+    });
+  } catch (error) {
+    console.error('addProgressLogのFirestore追記に失敗しました:', error);
   }
 };
 

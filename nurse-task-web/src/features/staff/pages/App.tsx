@@ -4,7 +4,7 @@ import type { User } from 'firebase/auth';
 import { getJSTDateString } from '../../../utils/dateUtils';
 import { auth, db, registerActiveDateInFirestore, upsertNurseOnLogin } from '../../../lib/firebase';
 import { collection, getDocs, onSnapshot, query, where, doc, getDoc } from 'firebase/firestore';
-import { reconstructGroups } from '../../../utils/taskLogic';
+import { reconstructGroups, isEmergencyTaskOutdated } from '../../../utils/taskLogic';
 import { useTimelineStore, getTimestampValue } from '../../../stores/useTimelineStore';
 import type { NurseMaster, NursePin } from '../../../stores/useTimelineStore';
 import type { ExtendedTask, LeaderTodo } from '../../../types/types';
@@ -269,24 +269,11 @@ export default function App() {
             return;
           }
 
-          // 📅 ナースコール・割り込みタスクのみ異日付を除外（通常指示タスクはシード/初期日付でも表示保持）
-          if (taskId.startsWith('CALL_INTERRUPT_')) {
-            let taskTargetDate = data.target_date;
-            if (!taskTargetDate) {
-              if (data.created_at?.toDate) {
-                const dt = data.created_at.toDate();
-                taskTargetDate = `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`;
-              } else {
-                const ts = Number(taskId.replace('CALL_INTERRUPT_', ''));
-                if (!isNaN(ts) && ts > 0) {
-                  const dt = new Date(ts);
-                  taskTargetDate = `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`;
-                }
-              }
-            }
-            if (taskTargetDate && taskTargetDate !== selectedDate) {
-              return;
-            }
+          // 📅 緊急要請・ナースコール対応・SOS・割り込みタスクは選択日付（本日）以外の場合完全に除外（日付が変わって残らないようにする）
+          const candidateTask = { ...data, task_id: taskId };
+          const currentTargetDate = selectedDate || getJSTDateString();
+          if (isEmergencyTaskOutdated(candidateTask, currentTargetDate)) {
+            return;
           }
 
           // 🛡️ 通常ユーザーとゲストユーザーのタスク混入を100%完全遮断

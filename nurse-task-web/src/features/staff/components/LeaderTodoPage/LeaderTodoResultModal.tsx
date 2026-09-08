@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import type { LeaderTodo } from '../../../../types/types';
+import type { LeaderTodo, ProgressLog } from '../../../../types/types';
 import { useTimelineStore } from '../../../../stores/useTimelineStore';
 import { CharCounter } from '../CharCounter';
 
@@ -24,8 +24,9 @@ export const LeaderTodoResultModal: React.FC<Props> = ({ todo, onClose, onSucces
     todo.status === 'untouched' ? 'completed' : todo.status
   );
   const [isStatusOpen, setIsStatusOpen] = useState<boolean>(false);
-  const [resultOutcome, setResultOutcome] = useState<string>(todo.result_outcome || '');
-  const [doctorInstructions, setDoctorInstructions] = useState<string>(todo.doctor_instructions || '');
+  // 💡 入力フォームは空にリセットし、前回の入力内容はポップアップ下部に表示
+  const [resultOutcome, setResultOutcome] = useState<string>('');
+  const [doctorInstructions, setDoctorInstructions] = useState<string>('');
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -43,11 +44,35 @@ export const LeaderTodoResultModal: React.FC<Props> = ({ todo, onClose, onSucces
 
     setIsSubmitting(true);
     try {
+      const now = new Date();
+      const timeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+      const author = currentUser?.name || 'リーダー';
+      const updatedLogs: ProgressLog[] = [...(todo.progressLogs || [])];
+
+      if (resultOutcome.trim()) {
+        updatedLogs.push({
+          id: `log-${Date.now()}-res-${Math.random().toString(36).substring(2, 5)}`,
+          time: timeStr,
+          author: author,
+          text: `💡 対応結果: ${resultOutcome.trim()}`,
+        });
+      }
+
+      if (doctorInstructions.trim()) {
+        updatedLogs.push({
+          id: `log-${Date.now()}-doc-${Math.random().toString(36).substring(2, 5)}`,
+          time: timeStr,
+          author: author,
+          text: `🩺 医師指示: ${doctorInstructions.trim()}`,
+        });
+      }
+
       await updateLeaderTodo(todo.todo_id, {
         status,
-        result_outcome: resultOutcome.trim(),
-        doctor_instructions: doctorInstructions.trim(),
-        updated_by: currentUser?.name || 'リーダー',
+        result_outcome: resultOutcome.trim() || todo.result_outcome || '',
+        doctor_instructions: doctorInstructions.trim() || todo.doctor_instructions || '',
+        progressLogs: updatedLogs,
+        updated_by: author,
       });
       if (onSuccess) onSuccess();
       onClose();
@@ -117,7 +142,7 @@ export const LeaderTodoResultModal: React.FC<Props> = ({ todo, onClose, onSucces
               </span>
             </button>
 
-            {/* 🎯 浮動ドロップダウンメニュー枠（親要素の幅を超えない w-full max-w-full left-0 right-0 ＆ 複数行折り返し whitespace-normal break-words） */}
+            {/* 🎯 浮動ドロップダウンメニュー枠 */}
             {isStatusOpen && (
               <>
                 <div className="fixed inset-0 z-[101]" onClick={() => setIsStatusOpen(false)} />
@@ -146,7 +171,7 @@ export const LeaderTodoResultModal: React.FC<Props> = ({ todo, onClose, onSucces
             )}
           </div>
 
-          {/* 方向性（方針）入力フォーム */}
+          {/* 新規 方向性（方針）入力フォーム (リセット状態) */}
           <div>
             <div className="flex items-center justify-between mb-1">
               <label className="block text-xs font-black text-gray-800">
@@ -156,15 +181,15 @@ export const LeaderTodoResultModal: React.FC<Props> = ({ todo, onClose, onSucces
             </div>
             <textarea
               maxLength={200}
-              rows={4}
-              placeholder="例: 主治医相談の結果、明日朝より降圧剤を1錠追加変更。ICはご家族到着を待って15時開始決定。"
+              rows={3}
+              placeholder="新規の対応結果・方針を入力..."
               value={resultOutcome}
               onChange={(e) => setResultOutcome(e.target.value)}
-              className="w-full bg-gray-50 border border-gray-300 rounded-xl p-3 text-xs text-gray-900 font-medium focus:outline-none focus:ring-2 focus:ring-indigo-500 leading-relaxed"
+              className="w-full bg-white border border-gray-300 focus:border-indigo-500 rounded-xl p-3 text-xs text-gray-900 font-medium focus:outline-none focus:ring-2 focus:ring-indigo-500 leading-relaxed shadow-2xs"
             />
           </div>
 
-          {/* 医師指示・申し送りメモ */}
+          {/* 新規 医師指示・申し送りメモ (リセット状態) */}
           <div>
             <div className="flex items-center justify-between mb-1">
               <label className="block text-xs font-black text-gray-800">
@@ -174,13 +199,77 @@ export const LeaderTodoResultModal: React.FC<Props> = ({ todo, onClose, onSucces
             </div>
             <textarea
               maxLength={200}
-              rows={3}
-              placeholder="例: Dr.佐藤より指示あり。SpO2 93%未満の場合は酸素1L開始のこと。"
+              rows={2}
+              placeholder="新規の医師指示・連絡メモを入力..."
               value={doctorInstructions}
               onChange={(e) => setDoctorInstructions(e.target.value)}
-              className="w-full bg-gray-50 border border-gray-300 rounded-xl p-3 text-xs text-gray-900 font-medium focus:outline-none focus:ring-2 focus:ring-indigo-500 leading-relaxed"
+              className="w-full bg-white border border-gray-300 focus:border-indigo-500 rounded-xl p-3 text-xs text-gray-900 font-medium focus:outline-none focus:ring-2 focus:ring-indigo-500 leading-relaxed shadow-2xs"
             />
           </div>
+
+          {/* 📜 ポップアップ下部：過去の入力内容 ＆ 経過履歴の参照エリア */}
+          {(todo.result_outcome || todo.doctor_instructions || (todo.progressLogs && todo.progressLogs.length > 0)) && (
+            <div className="pt-3.5 border-t-2 border-indigo-100 flex flex-col gap-2.5 bg-slate-50 p-3.5 rounded-xl border border-slate-200 shadow-inner">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-black text-indigo-950 flex items-center gap-1.5">
+                  <span>📜 過去の入力内容 ＆ 経過履歴</span>
+                  <span className="text-[10px] bg-indigo-100 text-indigo-900 px-2 py-0.5 rounded-full font-bold">
+                    振り返り参照用
+                  </span>
+                </span>
+                <span className="text-[10px] text-gray-500 font-bold">過去の入力は下部に保持されます</span>
+              </div>
+
+              {/* 前回の対応結果・方針 */}
+              {todo.result_outcome && (
+                <div className="bg-white border border-emerald-300/80 rounded-lg p-2.5 flex flex-col gap-0.5 text-xs shadow-2xs">
+                  <span className="text-[10px] font-black text-emerald-800 flex items-center gap-1">
+                    <span>💡 前回の対応結果・方針:</span>
+                  </span>
+                  <p className="text-xs text-gray-800 font-bold leading-relaxed whitespace-pre-wrap pl-1">
+                    {todo.result_outcome}
+                  </p>
+                </div>
+              )}
+
+              {/* 前回の医師指示メモ */}
+              {todo.doctor_instructions && (
+                <div className="bg-white border border-indigo-300/80 rounded-lg p-2.5 flex flex-col gap-0.5 text-xs shadow-2xs">
+                  <span className="text-[10px] font-black text-indigo-800 flex items-center gap-1">
+                    <span>🩺 前回の医師指示メモ:</span>
+                  </span>
+                  <p className="text-xs text-gray-800 font-bold leading-relaxed whitespace-pre-wrap pl-1">
+                    {todo.doctor_instructions}
+                  </p>
+                </div>
+              )}
+
+              {/* タイムライン経過ログ一覧 */}
+              {todo.progressLogs && todo.progressLogs.length > 0 && (
+                <div className="flex flex-col gap-1.5 mt-1">
+                  <span className="text-[10px] font-bold text-gray-600">全経過ログ ({todo.progressLogs.length}件):</span>
+                  <div className="flex flex-col gap-1.5 max-h-40 overflow-y-auto pr-1">
+                    {todo.progressLogs.map((log) => (
+                      <div
+                        key={log.id}
+                        className="bg-white border border-amber-200/90 rounded-lg p-2 flex flex-col gap-0.5 text-[11px] shadow-2xs"
+                      >
+                        <div className="flex items-center justify-between font-black text-[10px]">
+                          <span className="text-indigo-900 bg-indigo-50 px-1.5 py-0.2 rounded border border-indigo-100">
+                            👤 {log.author}
+                          </span>
+                          <span className="text-gray-500 font-mono">⏰ {log.time}</span>
+                        </div>
+                        <p className="text-xs text-gray-800 font-medium leading-relaxed whitespace-pre-wrap pl-0.5">
+                          {log.text}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
 
           {/* フッターアクションボタン */}
           <div className="pt-3 flex items-center justify-end gap-3 border-t border-gray-100">

@@ -387,3 +387,76 @@ export const sortTasksChronologically = <T extends { display_period?: string; in
     return timeA.localeCompare(timeB);
   });
 };
+
+/**
+ * 緊急要請・ナースコール対応・SOS・割り込みタスクであるか判定する
+ */
+export const isEmergencyOrSosTask = (task: any): boolean => {
+  if (!task) return false;
+  const taskId = String(task.task_id || '').trim();
+  const title = String(task.title || '').trim();
+
+  // 🛡️ 明確な緊急SOS・ナースコール割り込みタスクのみを対象とし、通常の看護指示・処置タスクの誤除外を防止
+  return (
+    taskId.startsWith('CALL_INTERRUPT_') ||
+    taskId.startsWith('patient-sos-') ||
+    taskId.startsWith('NURSE_SOS_') ||
+    task.is_sos === true ||
+    task.is_patient_sos === true ||
+    task.is_interruption === true ||
+    Boolean(task.sos_reason) ||
+    title.includes('ナースコール') ||
+    title.startsWith('🚨')
+  );
+};
+
+/**
+ * タスクの対象日付 (YYYY-MM-DD) を取得する
+ */
+export const getTaskTargetDate = (task: any): string | null => {
+  if (!task) return null;
+  if (task.target_date && typeof task.target_date === 'string') {
+    const trimmed = task.target_date.trim();
+    if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) return trimmed;
+  }
+  if (task.scheduled_at) {
+    const datePart = String(task.scheduled_at).split('T')[0].trim();
+    if (/^\d{4}-\d{2}-\d{2}$/.test(datePart)) {
+      return datePart;
+    }
+  }
+  if (task.created_at) {
+    if (task.created_at?.toDate && typeof task.created_at.toDate === 'function') {
+      const dt = task.created_at.toDate();
+      return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`;
+    }
+    if (typeof task.created_at === 'string') {
+      const datePart = task.created_at.split('T')[0].trim();
+      if (/^\d{4}-\d{2}-\d{2}$/.test(datePart)) {
+        return datePart;
+      }
+    }
+  }
+  const id = String(task.task_id || '');
+  const tsMatch = id.match(/_(\d{13})$/);
+  if (tsMatch) {
+    const ts = Number(tsMatch[1]);
+    if (!isNaN(ts) && ts > 0) {
+      const dt = new Date(ts);
+      return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`;
+    }
+  }
+  return null;
+};
+
+/**
+ * 緊急要請・ナースコール対応タスクが、指定された日付（選択日/本日）以外の日のものであるか判定する
+ */
+export const isEmergencyTaskOutdated = (task: any, targetDate: string): boolean => {
+  if (!isEmergencyOrSosTask(task)) return false;
+  const taskDate = getTaskTargetDate(task);
+  if (taskDate && targetDate && taskDate !== targetDate) {
+    return true;
+  }
+  return false;
+};

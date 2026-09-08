@@ -184,7 +184,7 @@ export const TimelinePopup: React.FC<TimelinePopupProps> = ({ task, onClose, ren
         >
           &times;
         </button>
-        <div className="pr-6">
+        <div className="pr-6 pt-6">
           {task.room_id && task.room_id.trim() !== '' && (
             <div className="text-xs font-bold opacity-70 mb-0.5">{task.room_id}号室</div>
           )}

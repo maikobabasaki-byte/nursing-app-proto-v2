@@ -1,4 +1,4 @@
-import { EMRTask, UserMemo, AnchorCluster, TimelineOptimizationResult } from '../../../types/anchorMemo';
+import type { EMRTask, UserMemo, AnchorCluster, TimelineOptimizationResult } from '../../../types/anchorMemo';
 
 /**
  * 部屋の隣接判定マップ（簡易版）
