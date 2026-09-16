@@ -1,7 +1,7 @@
 {
   "shiftDate": "2026-09-04",
   "shiftType": "日勤",
-  "wardId": "WARD_A",
+  "wardId": "2階病棟",
   "tabsData": {
     "1_structureAnalysis": {
       "roomDensity": [

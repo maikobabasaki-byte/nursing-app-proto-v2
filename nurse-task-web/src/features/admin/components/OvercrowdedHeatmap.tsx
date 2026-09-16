@@ -200,13 +200,13 @@ export const OvercrowdedHeatmap: React.FC<OvercrowdedHeatmapProps> = ({
 
       {/* ホバー時の詳細ツールチップポップアップ（件数・過密理由コメント付き） */}
       {activeCell && (
-        <div className="absolute bottom-1 right-2 bg-gray-900/95 text-white backdrop-blur p-2.5 rounded-xl shadow-2xl border border-gray-700 z-30 pointer-events-none text-xs space-y-1 max-w-xs animate-fade-in">
-          <div className="flex items-center justify-between font-bold border-b border-gray-700 pb-1 gap-3">
-            <span>
+        <div className="absolute top-7 right-2 bg-slate-900/95 text-white backdrop-blur-md p-3 rounded-xl shadow-2xl border border-slate-700 z-50 pointer-events-none text-xs space-y-1.5 max-w-sm animate-fade-in">
+          <div className="flex items-center justify-between font-bold border-b border-slate-700 pb-1.5 gap-3">
+            <span className="text-xs lg:text-sm">
               📅 {activeCell.day}曜日 {activeCell.item.hour}
             </span>
             <span
-              className={`px-1.5 py-0.5 rounded text-[9px] font-black ${getBadgeColor(
+              className={`px-2 py-0.5 rounded text-[10px] lg:text-xs font-black text-white ${getBadgeColor(
                 activeCell.item.intensity
               )}`}
             >
@@ -216,15 +216,15 @@ export const OvercrowdedHeatmap: React.FC<OvercrowdedHeatmapProps> = ({
 
           {/* 平均タスク件数表示 */}
           {activeCell.item.taskCount !== undefined && (
-            <div className="text-[10px] text-gray-300">
-              平均タスク発生: <span className="font-bold text-white">{activeCell.item.taskCount}件</span>
+            <div className="text-xs text-slate-300 font-medium">
+              平均タスク発生: <span className="font-extrabold text-white">{activeCell.item.taskCount}件</span>
             </div>
           )}
 
           {/* なぜ過密なのかのコメント・理由メモ */}
           {activeCell.item.riskFactor && (
-            <div className="text-[10px] text-red-300 font-medium pt-1 border-t border-gray-800 leading-snug">
-              ⚠️ {activeCell.item.riskFactor}
+            <div className="text-xs text-red-300 font-bold pt-1.5 border-t border-slate-800 leading-relaxed break-words">
+              ⚠️ 要因: {activeCell.item.riskFactor}
             </div>
           )}
         </div>

@@ -2,7 +2,7 @@
   "shiftInfo": {
     "shiftDate": "2026-09-04",
     "shiftType": "日勤",
-    "wardId": "WARD_A"
+    "wardId": "2階病棟"
   },
   "trendData": [
     { "date": "06/02", "gapIndex": 45, "hasIntervention": false },
