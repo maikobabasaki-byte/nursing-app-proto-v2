@@ -22,6 +22,7 @@ const Timeline = lazy(() => import('./Timeline'));
 const MapContainer = lazy(() => import('./Map'));
 const LeaderTodoPage = lazy(() => import('./LeaderTodoPage').then((module) => ({ default: module.LeaderTodoPage })));
 const Settings = lazy(() => import('./Settings'));
+const AdminDashboard = lazy(() => import('../../../features/admin/pages/AdminDashboard'));
 
 // 🎨 画面読み込み用の上質スピナーコンポーネント
 const PageLoadingFallback = () => (
@@ -35,7 +36,7 @@ const PageLoadingFallback = () => (
 
 import { ensureTodayTasksSynced } from '../../../services/taskSyncService';
 
-type ScreenType = 'login' | 'patientSelect' | 'timeline' | 'patientMaster' | 'map' | 'leaderTodo' | 'settings';
+type ScreenType = 'login' | 'patientSelect' | 'timeline' | 'patientMaster' | 'map' | 'leaderTodo' | 'settings' | 'adminDashboard';
 
 import { GlobalSosToast } from '../components/Map/GlobalSosToast';
 import OfflineIndicator from '../components/OfflineIndicator';
@@ -665,6 +666,12 @@ export default function App() {
             <Footer />
           </>
         )
+      )}
+      {/* ─── 【C：管理者用ダッシュボード（拡張版）】 ─── */}
+      {currentScreen === 'adminDashboard' && (
+        <Suspense fallback={<PageLoadingFallback />}>
+          <AdminDashboard />
+        </Suspense>
       )}
 
     </div>

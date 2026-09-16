@@ -1,0 +1,172 @@
+{
+  "shiftInfo": {
+    "shiftDate": "2026-09-04",
+    "shiftType": "日勤",
+    "wardId": "WARD_A"
+  },
+  "trendData": [
+    { "date": "06/02", "gapIndex": 45, "hasIntervention": false },
+    { "date": "06/09", "gapIndex": 58, "hasIntervention": false },
+    { "date": "06/16", "gapIndex": 78, "hasIntervention": true, "interventionNote": "夜勤フリーナース1名緊急補テン" },
+    { "date": "06/23", "gapIndex": 52, "hasIntervention": false },
+    { "date": "06/30", "gapIndex": 64, "hasIntervention": false },
+    { "date": "07/07", "gapIndex": 85, "hasIntervention": true, "interventionNote": "203室全介助タスクを14時台へ時間分散" },
+    { "date": "07/14", "gapIndex": 61, "hasIntervention": false },
+    { "date": "07/21", "gapIndex": 49, "hasIntervention": false },
+    { "date": "07/28", "gapIndex": 80, "hasIntervention": true, "interventionNote": "リーダー業務集約＆病棟クラーク連携強化" },
+    { "date": "08/04", "gapIndex": 44, "hasIntervention": false },
+    { "date": "08/11", "gapIndex": 39, "hasIntervention": false },
+    { "date": "08/18", "gapIndex": 72, "hasIntervention": true, "interventionNote": "配膳・搬送サポート助手を2名常駐化" },
+    { "date": "08/25", "gapIndex": 32, "hasIntervention": false },
+    { "date": "09/01", "gapIndex": 28, "hasIntervention": false }
+  ],
+  "blockerData": [
+    { "name": "構造的競合", "value": 60, "color": "#EF4444" },
+    { "name": "他律的要因", "value": 30, "color": "#F59E0B" },
+    { "name": "自律的要因", "value": 10, "color": "#3B82F6" }
+  ],
+  "heatmapData": [
+    {
+      "day": "月",
+      "hours": [
+        { "hour": "8時", "intensity": 25, "taskCount": 4 },
+        { "hour": "9時", "intensity": 75, "taskCount": 14, "riskFactor": "定期検温・与薬と巡視の重複" },
+        { "hour": "10時", "intensity": 95, "taskCount": 22, "riskFactor": "全介助入浴・処置・医師回診のトリプル競合" },
+        { "hour": "11時", "intensity": 85, "taskCount": 18, "riskFactor": "昼前注射・検体提出" },
+        { "hour": "12時", "intensity": 60, "taskCount": 12, "riskFactor": "配膳・食事介助" },
+        { "hour": "13時", "intensity": 40, "taskCount": 8 },
+        { "hour": "14時", "intensity": 80, "taskCount": 17, "riskFactor": "午後処置・検査搬送" },
+        { "hour": "15時", "intensity": 50, "taskCount": 10 },
+        { "hour": "16時", "intensity": 35, "taskCount": 7 },
+        { "hour": "17時", "intensity": 65, "taskCount": 13, "riskFactor": "夕方申し送り準備" },
+        { "hour": "18時", "intensity": 45, "taskCount": 9 },
+        { "hour": "19時", "intensity": 20, "taskCount": 3 },
+        { "hour": "20時", "intensity": 10, "taskCount": 2 }
+      ]
+    },
+    {
+      "day": "火",
+      "hours": [
+        { "hour": "8時", "intensity": 20, "taskCount": 3 },
+        { "hour": "9時", "intensity": 65, "taskCount": 12 },
+        { "hour": "10時", "intensity": 90, "taskCount": 20, "riskFactor": "手術前処置と点滴開始の競合" },
+        { "hour": "11時", "intensity": 70, "taskCount": 15 },
+        { "hour": "12時", "intensity": 55, "taskCount": 11 },
+        { "hour": "13時", "intensity": 30, "taskCount": 6 },
+        { "hour": "14時", "intensity": 75, "taskCount": 16, "riskFactor": "退院指導・検査出し" },
+        { "hour": "15時", "intensity": 45, "taskCount": 9 },
+        { "hour": "16時", "intensity": 30, "taskCount": 5 },
+        { "hour": "17時", "intensity": 60, "taskCount": 11 },
+        { "hour": "18時", "intensity": 40, "taskCount": 8 },
+        { "hour": "19時", "intensity": 15, "taskCount": 2 },
+        { "hour": "20時", "intensity": 10, "taskCount": 1 }
+      ]
+    },
+    {
+      "day": "水",
+      "hours": [
+        { "hour": "8時", "intensity": 30, "taskCount": 5 },
+        { "hour": "9時", "intensity": 80, "taskCount": 16, "riskFactor": "水曜カンファレンスとモーニングケア" },
+        { "hour": "10時", "intensity": 88, "taskCount": 19, "riskFactor": "清拭・シーツ交換の集中" },
+        { "hour": "11時", "intensity": 65, "taskCount": 13 },
+        { "hour": "12時", "intensity": 50, "taskCount": 10 },
+        { "hour": "13時", "intensity": 35, "taskCount": 7 },
+        { "hour": "14時", "intensity": 60, "taskCount": 12 },
+        { "hour": "15時", "intensity": 40, "taskCount": 8 },
+        { "hour": "16時", "intensity": 25, "taskCount": 4 },
+        { "hour": "17時", "intensity": 55, "taskCount": 10 },
+        { "hour": "18時", "intensity": 35, "taskCount": 6 },
+        { "hour": "19時", "intensity": 15, "taskCount": 2 },
+        { "hour": "20時", "intensity": 5, "taskCount": 1 }
+      ]
+    },
+    {
+      "day": "木",
+      "hours": [
+        { "hour": "8時", "intensity": 25, "taskCount": 4 },
+        { "hour": "9時", "intensity": 70, "taskCount": 13 },
+        { "hour": "10時", "intensity": 92, "taskCount": 21, "riskFactor": "木曜各種検査ラッシュ・移送重複" },
+        { "hour": "11時", "intensity": 80, "taskCount": 17 },
+        { "hour": "12時", "intensity": 60, "taskCount": 12 },
+        { "hour": "13時", "intensity": 40, "taskCount": 8 },
+        { "hour": "14時", "intensity": 82, "taskCount": 18, "riskFactor": "リハビリ連携・午後与薬" },
+        { "hour": "15時", "intensity": 50, "taskCount": 10 },
+        { "hour": "16時", "intensity": 35, "taskCount": 6 },
+        { "hour": "17時", "intensity": 65, "taskCount": 12 },
+        { "hour": "18時", "intensity": 45, "taskCount": 8 },
+        { "hour": "19時", "intensity": 20, "taskCount": 3 },
+        { "hour": "20時", "intensity": 10, "taskCount": 2 }
+      ]
+    },
+    {
+      "day": "金",
+      "hours": [
+        { "hour": "8時", "intensity": 35, "taskCount": 6 },
+        { "hour": "9時", "intensity": 85, "taskCount": 18, "riskFactor": "週末入院受け入れ準備・検査" },
+        { "hour": "10時", "intensity": 98, "taskCount": 25, "riskFactor": "🚨 最大過密: 手術・退院・急変対応の集中" },
+        { "hour": "11時", "intensity": 90, "taskCount": 20, "riskFactor": "週末薬処方確認・点滴再開" },
+        { "hour": "12時", "intensity": 65, "taskCount": 13 },
+        { "hour": "13時", "intensity": 45, "taskCount": 9 },
+        { "hour": "14時", "intensity": 85, "taskCount": 19, "riskFactor": "週末用指示変更・サマリー作成" },
+        { "hour": "15時", "intensity": 60, "taskCount": 12 },
+        { "hour": "16時", "intensity": 40, "taskCount": 8 },
+        { "hour": "17時", "intensity": 70, "taskCount": 14 },
+        { "hour": "18時", "intensity": 50, "taskCount": 9 },
+        { "hour": "19時", "intensity": 25, "taskCount": 4 },
+        { "hour": "20時", "intensity": 15, "taskCount": 2 }
+      ]
+    },
+    {
+      "day": "土",
+      "hours": [
+        { "hour": "8時", "intensity": 15, "taskCount": 2 },
+        { "hour": "9時", "intensity": 45, "taskCount": 8 },
+        { "hour": "10時", "intensity": 60, "taskCount": 11, "riskFactor": "少人数体制での定期ケア" },
+        { "hour": "11時", "intensity": 50, "taskCount": 9 },
+        { "hour": "12時", "intensity": 45, "taskCount": 8 },
+        { "hour": "13時", "intensity": 25, "taskCount": 4 },
+        { "hour": "14時", "intensity": 40, "taskCount": 7, "riskFactor": "面会対応・与薬" },
+        { "hour": "15時", "intensity": 30, "taskCount": 5 },
+        { "hour": "16時", "intensity": 20, "taskCount": 3 },
+        { "hour": "17時", "intensity": 45, "taskCount": 8 },
+        { "hour": "18時", "intensity": 35, "taskCount": 6 },
+        { "hour": "19時", "intensity": 15, "taskCount": 2 },
+        { "hour": "20時", "intensity": 5, "taskCount": 1 }
+      ]
+    },
+    {
+      "day": "日",
+      "hours": [
+        { "hour": "8時", "intensity": 10, "taskCount": 2 },
+        { "hour": "9時", "intensity": 40, "taskCount": 7 },
+        { "hour": "10時", "intensity": 55, "taskCount": 10 },
+        { "hour": "11時", "intensity": 45, "taskCount": 8 },
+        { "hour": "12時", "intensity": 40, "taskCount": 7 },
+        { "hour": "13時", "intensity": 20, "taskCount": 3 },
+        { "hour": "14時", "intensity": 35, "taskCount": 6 },
+        { "hour": "15時", "intensity": 25, "taskCount": 4 },
+        { "hour": "16時", "intensity": 20, "taskCount": 3 },
+        { "hour": "17時", "intensity": 40, "taskCount": 7 },
+        { "hour": "18時", "intensity": 30, "taskCount": 5 },
+        { "hour": "19時", "intensity": 10, "taskCount": 1 },
+        { "hour": "20時", "intensity": 5, "taskCount": 1 }
+      ]
+    }
+  ],
+  "hints": [
+    {
+      "optionId": "OPTION_A",
+      "title": "オプションA: フリー担当を重点配置",
+      "description": "203室の全介助タスクに対し、10:00〜11:00枠でフリーナース1名を局所投入します。",
+      "expectedImpact": "203室の構造的タスク競合遅延率 85%削減",
+      "riskFactor": "他室での急変発生時のサポート中断リスク"
+    },
+    {
+      "optionId": "OPTION_B",
+      "title": "オプションB: 該当時間のタスク分散",
+      "description": "時間指定のないタスク（清拭等）を14時台に移行し、ピークを平準化します。",
+      "expectedImpact": "10時台のピーク平準化",
+      "riskFactor": "昼食配膳タスクとの新たな時間競合"
+    }
+  ]
+}
