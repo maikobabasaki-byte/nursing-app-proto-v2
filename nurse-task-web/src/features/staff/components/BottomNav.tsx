@@ -2,9 +2,11 @@ import { useTimelineStore } from '../../../stores/useTimelineStore';
 import { checkIsLeader } from '../../../utils/userUtils';
 import { useTheme, type AppTheme } from '../../../hooks/useTheme';
 
+import type { NavigationScreen } from './MainLayout';
+
 interface BottomNavProps {
-  currentScreen: 'login' | 'patientSelect' | 'patientMaster' | 'timeline' | 'map' | 'leaderTodo' | 'settings';
-  onNavigate: (screen: 'patientSelect' | 'patientMaster' | 'timeline' | 'map' | 'leaderTodo' | 'settings') => void;
+  currentScreen: NavigationScreen;
+  onNavigate: (screen: NavigationScreen) => void;
 }
 
 // 🖼️ 全カラーテーマ共通：アクティブ時（選択中）アイコン画像パス（/icon_active/ フォルダ）
@@ -47,40 +49,70 @@ export default function BottomNav({ currentScreen, onNavigate }: BottomNavProps)
   const isLeader = checkIsLeader(currentUser);
 
   const isMasterActive = currentScreen === 'patientMaster' || currentScreen === 'patientSelect';
+  const isExtendedView = currentScreen === 'personalDashboard' || currentScreen === 'adminDashboard';
   const inactiveIcons = INACTIVE_NAV_ICONS[theme] || INACTIVE_NAV_ICONS.vital;
 
-  const navItems = [
-    {
-      id: 'patientMaster' as const,
-      label: '患者マスター',
-      iconKey: 'account_circle',
-      active: isMasterActive,
-    },
-    {
-      id: 'timeline' as const,
-      label: 'タイムライン',
-      iconKey: 'event_note',
-      active: currentScreen === 'timeline',
-    },
-    {
-      id: 'map' as const,
-      label: 'マップ',
-      iconKey: 'pin_drop',
-      active: currentScreen === 'map',
-    },
-    ...(isLeader ? [{
-      id: 'leaderTodo' as const,
-      label: 'リーダーTODO',
-      iconKey: 'add_task',
-      active: currentScreen === 'leaderTodo',
-    }] : []),
-    {
-      id: 'settings' as const,
-      label: '設定',
-      iconKey: 'settings',
-      active: currentScreen === 'settings',
-    },
-  ];
+  const navItems = isExtendedView
+    ? [
+        {
+          id: 'timeline' as const,
+          label: 'タスク管理へ',
+          emoji: '↩️',
+          iconKey: 'event_note',
+          active: false,
+        },
+        {
+          id: 'personalDashboard' as const,
+          label: '個人用ダッシュボード',
+          emoji: '📋',
+          iconKey: 'account_circle',
+          active: currentScreen === 'personalDashboard',
+        },
+        {
+          id: 'adminDashboard' as const,
+          label: '師長用ダッシュボード',
+          emoji: '📊',
+          iconKey: 'add_task',
+          active: currentScreen === 'adminDashboard',
+        },
+      ]
+    : [
+        {
+          id: 'patientMaster' as const,
+          label: '患者マスター',
+          emoji: '👥',
+          iconKey: 'account_circle',
+          active: isMasterActive,
+        },
+        {
+          id: 'timeline' as const,
+          label: 'タイムライン',
+          emoji: '🗓️',
+          iconKey: 'event_note',
+          active: currentScreen === 'timeline',
+        },
+        {
+          id: 'map' as const,
+          label: 'マップ',
+          emoji: '📍',
+          iconKey: 'pin_drop',
+          active: currentScreen === 'map',
+        },
+        ...(isLeader ? [{
+          id: 'leaderTodo' as const,
+          label: 'リーダーTODO',
+          emoji: '📝',
+          iconKey: 'add_task',
+          active: currentScreen === 'leaderTodo',
+        }] : []),
+        {
+          id: 'settings' as const,
+          label: '設定',
+          emoji: '⚙️',
+          iconKey: 'settings',
+          active: currentScreen === 'settings',
+        },
+      ];
 
   return (
     <nav

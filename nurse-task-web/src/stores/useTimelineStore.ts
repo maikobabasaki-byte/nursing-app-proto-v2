@@ -38,6 +38,7 @@ export interface CurrentUser {
   email: string;
   team?: string;
   is_leader?: boolean;
+  role?: 'admin' | 'nurse';
   assigned_patients?: string[];
   isAnonymous?: boolean;
 }
@@ -65,8 +66,10 @@ interface TimelineStore {
   selectedDate: string;
   activeDates: string[];
   isReadOnly: boolean;
+  targetUserId: string;
   setSelectedDate: (date: string) => void;
   setActiveDates: (dates: string[]) => void;
+  setTargetUserId: (id: string) => void;
   showLowPriority: boolean;
   loading: boolean;
   groupingMode: string | null;
@@ -192,10 +195,11 @@ export function mergeNurseData(
   // 1. まずマスターデータをベースとして登録（nurse_id で正規化）
   masters.forEach((master) => {
     const cleanId = (master.nurse_id || '').replace(/^nurse-/, '').trim();
-    const key = cleanId || master.name.replace(/[\s　]+/g, '');
+    const key = cleanId || (master.name || '').replace(/[\s　]+/g, '');
+    if (!key) return;
     nurseMap.set(key, {
       nurse_id: master.nurse_id,
-      name: master.name,
+      name: master.name || '看護師',
       gender: master.gender,
       team: master.team,
       email: master.email,
@@ -248,7 +252,7 @@ export function mergeNurseData(
       const existing = nurseMap.get(k);
       if (!existing) return false;
       const cleanExistingId = (existing.nurse_id || '').replace(/^nurse-/, '').trim();
-      const normalizedExistingName = existing.name.replace(/[\s　]+/g, '');
+      const normalizedExistingName = (existing.name || '').replace(/[\s　]+/g, '');
       return (
         (cleanRtId !== '' && cleanExistingId === cleanRtId) ||
         (normalizedRuntimeName !== '' && normalizedExistingName === normalizedRuntimeName)
@@ -319,6 +323,8 @@ export const useTimelineStore = create<TimelineStore>((set, get) => ({
   selectedDate: getJSTDateString(),
   activeDates: [getJSTDateString()],
   isReadOnly: false,
+  targetUserId: 'N002',
+  setTargetUserId: (id) => set({ targetUserId: id }),
 
   setSelectedDate: (date) => set(() => {
     const today = getJSTDateString();

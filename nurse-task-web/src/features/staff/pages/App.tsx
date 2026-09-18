@@ -22,6 +22,7 @@ const Timeline = lazy(() => import('./Timeline'));
 const MapContainer = lazy(() => import('./Map'));
 const LeaderTodoPage = lazy(() => import('./LeaderTodoPage').then((module) => ({ default: module.LeaderTodoPage })));
 const Settings = lazy(() => import('./Settings'));
+const PersonalDashboard = lazy(() => import('../../../features/admin/pages/PersonalDashboard'));
 const AdminDashboard = lazy(() => import('../../../features/admin/pages/AdminDashboard'));
 
 // 🎨 画面読み込み用の上質スピナーコンポーネント
@@ -36,7 +37,7 @@ const PageLoadingFallback = () => (
 
 import { ensureTodayTasksSynced } from '../../../services/taskSyncService';
 
-type ScreenType = 'login' | 'patientSelect' | 'timeline' | 'patientMaster' | 'map' | 'leaderTodo' | 'settings' | 'adminDashboard';
+type ScreenType = 'login' | 'patientSelect' | 'timeline' | 'patientMaster' | 'map' | 'leaderTodo' | 'personalDashboard' | 'settings' | 'adminDashboard';
 
 import { GlobalSosToast } from '../components/Map/GlobalSosToast';
 import OfflineIndicator from '../components/OfflineIndicator';
@@ -626,7 +627,7 @@ export default function App() {
       )}
 
       {/* ─── 【B：保護されたルート（MainLayoutを使うグループ）】 ─── */}
-      {(currentScreen === 'patientMaster' || currentScreen === 'timeline' || currentScreen === 'map' || currentScreen === 'leaderTodo' || currentScreen === 'settings') && (
+      {(currentScreen === 'patientMaster' || currentScreen === 'timeline' || currentScreen === 'map' || currentScreen === 'leaderTodo' || currentScreen === 'personalDashboard' || currentScreen === 'adminDashboard' || currentScreen === 'settings') && (
         user ? (
           <MainLayout currentScreen={currentScreen} onNavigate={(screen) => setCurrentScreen(screen)}>
             <Suspense fallback={<PageLoadingFallback />}>
@@ -644,6 +645,14 @@ export default function App() {
 
               {currentScreen === 'leaderTodo' && (
                 <LeaderTodoPage />
+              )}
+
+              {currentScreen === 'personalDashboard' && (
+                <PersonalDashboard />
+              )}
+
+              {currentScreen === 'adminDashboard' && (
+                <AdminDashboard />
               )}
 
               {currentScreen === 'settings' && (
@@ -666,12 +675,6 @@ export default function App() {
             <Footer />
           </>
         )
-      )}
-      {/* ─── 【C：管理者用ダッシュボード（拡張版）】 ─── */}
-      {currentScreen === 'adminDashboard' && (
-        <Suspense fallback={<PageLoadingFallback />}>
-          <AdminDashboard />
-        </Suspense>
       )}
 
     </div>

@@ -4,10 +4,21 @@ import GlobalFooter from "./GlobalFooter";
 import BottomNav from "./BottomNav";
 import { useTheme } from "../../../hooks/useTheme";
 
+export type NavigationScreen =
+  | 'login'
+  | 'patientSelect'
+  | 'patientMaster'
+  | 'timeline'
+  | 'map'
+  | 'leaderTodo'
+  | 'personalDashboard'
+  | 'adminDashboard'
+  | 'settings';
+
 interface MainLayoutProps {
   children: React.ReactNode; 
-  currentScreen: 'login' | 'patientSelect' | 'patientMaster' | 'timeline' | 'map' | 'leaderTodo' | 'settings';
-  onNavigate: (screen: 'patientSelect' | 'patientMaster' | 'timeline' | 'map' | 'leaderTodo' | 'settings') => void;
+  currentScreen: NavigationScreen;
+  onNavigate: (screen: NavigationScreen) => void;
 }
 
 export default function MainLayout({ children, currentScreen, onNavigate }: MainLayoutProps) {

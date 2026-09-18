@@ -20,7 +20,9 @@ export interface SelectedSlot {
 export interface OvercrowdedHeatmapProps {
   data?: HeatmapDay[];
   selectedSlot?: SelectedSlot | null;
-  onCellClick?: (day: string, hour: string) => void;
+  onCellClick?: (day: string, hour: string, intensity?: number) => void;
+  yAxisTitle?: string;
+  isExpanded?: boolean;
 }
 
 const HOURS_HEADER = [
@@ -72,6 +74,8 @@ export const OvercrowdedHeatmap: React.FC<OvercrowdedHeatmapProps> = ({
   data = [],
   selectedSlot = null,
   onCellClick,
+  yAxisTitle = '曜日',
+  isExpanded = false,
 }) => {
   const safeData = data || [];
   const [activeCell, setActiveCell] = useState<{
@@ -90,34 +94,57 @@ export const OvercrowdedHeatmap: React.FC<OvercrowdedHeatmapProps> = ({
   return (
     <div className="w-full h-full flex flex-col justify-between select-none relative font-sans text-xs min-h-0">
       {/* 凡例・ヘッダー情報 */}
-      <div className="flex justify-between items-center mb-1 px-0.5 text-[10px] text-gray-500 shrink-0">
-        <span className="font-semibold text-gray-700">時間帯マトリクス（8:00〜20:00）</span>
-        <div className="flex items-center gap-2">
-          <span className="flex items-center gap-0.5 text-[9px]">
-            <span className="w-2.5 h-2.5 rounded border inline-block" style={{ backgroundColor: '#d1fae5', borderColor: '#a7f3d0' }} />
-            <span className="text-emerald-700 font-medium">安全 (〜25%)</span>
+      <div
+        className={`flex justify-between items-center px-0.5 text-gray-500 shrink-0 ${
+          isExpanded ? 'mb-2 text-xs sm:text-sm' : 'mb-1 text-[10px]'
+        }`}
+      >
+        <span className={`font-bold text-gray-700 ${isExpanded ? 'text-sm sm:text-base' : 'text-[11px]'}`}>
+          時間帯マトリクス（8:00〜20:00）
+        </span>
+        <div className={`flex items-center ${isExpanded ? 'gap-3' : 'gap-2'}`}>
+          <span className={`flex items-center gap-1 ${isExpanded ? 'text-xs sm:text-sm' : 'text-[9px]'}`}>
+            <span
+              className={`rounded border inline-block ${isExpanded ? 'w-3.5 h-3.5' : 'w-2.5 h-2.5'}`}
+              style={{ backgroundColor: '#d1fae5', borderColor: '#a7f3d0' }}
+            />
+            <span className="text-emerald-700 font-bold">安全 (〜25%)</span>
           </span>
-          <span className="flex items-center gap-0.5 text-[9px]">
-            <span className="w-2.5 h-2.5 rounded border inline-block" style={{ backgroundColor: '#fef3c7', borderColor: '#fcd34d' }} />
-            <span className="text-amber-800 font-medium">注意 (〜50%)</span>
+          <span className={`flex items-center gap-1 ${isExpanded ? 'text-xs sm:text-sm' : 'text-[9px]'}`}>
+            <span
+              className={`rounded border inline-block ${isExpanded ? 'w-3.5 h-3.5' : 'w-2.5 h-2.5'}`}
+              style={{ backgroundColor: '#fef3c7', borderColor: '#fcd34d' }}
+            />
+            <span className="text-amber-800 font-bold">注意 (〜50%)</span>
           </span>
-          <span className="flex items-center gap-0.5 text-[9px]">
-            <span className="w-2.5 h-2.5 rounded border inline-block" style={{ backgroundColor: '#fb923c', borderColor: '#f97316' }} />
-            <span className="text-orange-600 font-medium">警戒 (〜75%)</span>
+          <span className={`flex items-center gap-1 ${isExpanded ? 'text-xs sm:text-sm' : 'text-[9px]'}`}>
+            <span
+              className={`rounded border inline-block ${isExpanded ? 'w-3.5 h-3.5' : 'w-2.5 h-2.5'}`}
+              style={{ backgroundColor: '#fb923c', borderColor: '#f97316' }}
+            />
+            <span className="text-orange-600 font-bold">警戒 (〜75%)</span>
           </span>
-          <span className="flex items-center gap-0.5 text-[9px]">
-            <span className="w-2.5 h-2.5 rounded border inline-block" style={{ backgroundColor: '#dc2626', borderColor: '#b91c1c' }} />
-            <span className="text-red-600 font-bold">過密 (76%〜)</span>
+          <span className={`flex items-center gap-1 ${isExpanded ? 'text-xs sm:text-sm' : 'text-[9px]'}`}>
+            <span
+              className={`rounded border inline-block ${isExpanded ? 'w-3.5 h-3.5' : 'w-2.5 h-2.5'}`}
+              style={{ backgroundColor: '#dc2626', borderColor: '#b91c1c' }}
+            />
+            <span className="text-red-600 font-black">過密 (76%〜)</span>
           </span>
         </div>
       </div>
 
       {/* ヒートマップ本体コンテナ */}
-      <div className="flex-1 flex flex-col justify-between min-h-0 gap-1">
+      <div className={`flex-1 flex flex-col justify-between min-h-0 ${isExpanded ? 'gap-2' : 'gap-1'}`}>
         {/* 横軸: 時間ヘッダー行 */}
         <div className="flex items-center gap-1 shrink-0">
-          <div className="w-6 shrink-0 text-center font-bold text-gray-400 text-[9px]">
-            曜日
+          <div
+            className={`shrink-0 text-center font-bold text-gray-500 truncate ${
+              isExpanded ? 'w-10 sm:w-12 text-xs sm:text-sm' : 'w-8 text-[9px]'
+            }`}
+            title={yAxisTitle}
+          >
+            {yAxisTitle}
           </div>
           <div
             className="flex-1 gap-1"
@@ -126,7 +153,9 @@ export const OvercrowdedHeatmap: React.FC<OvercrowdedHeatmapProps> = ({
             {HOURS_HEADER.map((hour) => (
               <div
                 key={hour}
-                className="text-center font-bold text-gray-500 text-[9px] tracking-tighter"
+                className={`text-center font-bold text-gray-600 ${
+                  isExpanded ? 'text-xs sm:text-sm tracking-tight' : 'text-[9px] tracking-tighter'
+                }`}
               >
                 {hour}
               </div>
@@ -134,22 +163,25 @@ export const OvercrowdedHeatmap: React.FC<OvercrowdedHeatmapProps> = ({
           </div>
         </div>
 
-        {/* 縦軸: 各曜日データ行 */}
+        {/* 縦軸: 各曜日/部屋データ行 */}
         {safeData.map((row, rowIndex) => {
           const hours = row?.hours || [];
           const dayLabel = row?.day || `${rowIndex + 1}`;
 
           return (
             <div key={dayLabel} className="flex-1 flex items-center gap-1 min-h-0">
-              {/* 曜日ラベル */}
+              {/* 曜日/部屋ラベル */}
               <div
-                className={`w-6 shrink-0 h-full flex items-center justify-center font-bold text-[10px] rounded ${
+                className={`shrink-0 h-full flex items-center justify-center font-bold rounded px-0.5 truncate ${
+                  isExpanded ? 'w-10 sm:w-12 text-xs sm:text-sm' : 'w-8 text-[10px]'
+                } ${
                   dayLabel === '土'
                     ? 'text-blue-600 bg-blue-50'
                     : dayLabel === '日'
                     ? 'text-red-600 bg-red-50'
                     : 'text-gray-700 bg-gray-100'
                 }`}
+                title={dayLabel}
               >
                 {dayLabel}
               </div>
@@ -168,7 +200,7 @@ export const OvercrowdedHeatmap: React.FC<OvercrowdedHeatmapProps> = ({
                     <button
                       key={`${dayLabel}-${item.hour}`}
                       type="button"
-                      onClick={() => onCellClick?.(dayLabel, item.hour)}
+                      onClick={() => onCellClick?.(dayLabel, item.hour, item.intensity)}
                       onMouseEnter={() => setActiveCell({ day: dayLabel, item })}
                       onMouseLeave={() => setActiveCell(null)}
                       style={{
@@ -184,9 +216,15 @@ export const OvercrowdedHeatmap: React.FC<OvercrowdedHeatmapProps> = ({
                           ? 'ring-4 ring-blue-500 ring-offset-1 z-20 scale-110 shadow-xl border-white font-black'
                           : 'hover:scale-105 hover:z-10 hover:shadow-md'
                       }`}
-                      aria-label={`${dayLabel}曜日 ${item.hour}: 過密度${item.intensity}%`}
+                      aria-label={`${
+                        yAxisTitle === '部屋' ? `部屋 ${dayLabel}` : `${dayLabel}曜日`
+                      } ${item.hour}: 過密度${item.intensity}%`}
                     >
-                      <span className="text-[9px] tracking-tighter">
+                      <span
+                        className={`tracking-tighter ${
+                          isExpanded ? 'text-xs sm:text-sm lg:text-base font-black' : 'text-[9px]'
+                        }`}
+                      >
                         {item.intensity > 35 ? item.intensity : ''}
                       </span>
                     </button>
@@ -200,15 +238,19 @@ export const OvercrowdedHeatmap: React.FC<OvercrowdedHeatmapProps> = ({
 
       {/* ホバー時の詳細ツールチップポップアップ（件数・過密理由コメント付き） */}
       {activeCell && (
-        <div className="absolute top-7 right-2 bg-slate-900/95 text-white backdrop-blur-md p-3 rounded-xl shadow-2xl border border-slate-700 z-50 pointer-events-none text-xs space-y-1.5 max-w-sm animate-fade-in">
+        <div
+          className={`absolute top-7 right-2 bg-slate-900/95 text-white backdrop-blur-md rounded-xl shadow-2xl border border-slate-700 z-50 pointer-events-none space-y-1.5 animate-fade-in ${
+            isExpanded ? 'p-4 max-w-md text-sm space-y-2' : 'p-3 max-w-sm text-xs'
+          }`}
+        >
           <div className="flex items-center justify-between font-bold border-b border-slate-700 pb-1.5 gap-3">
-            <span className="text-xs lg:text-sm">
-              📅 {activeCell.day}曜日 {activeCell.item.hour}
+            <span className={isExpanded ? 'text-sm sm:text-base' : 'text-xs lg:text-sm'}>
+              📅 {yAxisTitle === '部屋' ? `部屋 ${activeCell.day}` : `${activeCell.day}曜日`} {activeCell.item.hour}
             </span>
             <span
-              className={`px-2 py-0.5 rounded text-[10px] lg:text-xs font-black text-white ${getBadgeColor(
-                activeCell.item.intensity
-              )}`}
+              className={`px-2 py-0.5 rounded font-black text-white ${
+                isExpanded ? 'text-xs sm:text-sm' : 'text-[10px] lg:text-xs'
+              } ${getBadgeColor(activeCell.item.intensity)}`}
             >
               過密度 {activeCell.item.intensity}%
             </span>
@@ -216,14 +258,18 @@ export const OvercrowdedHeatmap: React.FC<OvercrowdedHeatmapProps> = ({
 
           {/* 平均タスク件数表示 */}
           {activeCell.item.taskCount !== undefined && (
-            <div className="text-xs text-slate-300 font-medium">
+            <div className={`text-slate-300 font-medium ${isExpanded ? 'text-sm' : 'text-xs'}`}>
               平均タスク発生: <span className="font-extrabold text-white">{activeCell.item.taskCount}件</span>
             </div>
           )}
 
           {/* なぜ過密なのかのコメント・理由メモ */}
           {activeCell.item.riskFactor && (
-            <div className="text-xs text-red-300 font-bold pt-1.5 border-t border-slate-800 leading-relaxed break-words">
+            <div
+              className={`text-red-300 font-bold pt-1.5 border-t border-slate-800 leading-relaxed break-words ${
+                isExpanded ? 'text-xs sm:text-sm' : 'text-xs'
+              }`}
+            >
               ⚠️ 要因: {activeCell.item.riskFactor}
             </div>
           )}

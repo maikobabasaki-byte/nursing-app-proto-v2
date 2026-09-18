@@ -1,8 +1,9 @@
 import { useTheme, type AppTheme } from '../../../hooks/useTheme';
 
-// 💡 1. onNavigate の型に 'adminDashboard' を追加
+import type { NavigationScreen } from './MainLayout';
+
 interface GlobalFooterProps {
-  onNavigate?: (screen: 'settings' | 'patientSelect' | 'patientMaster' | 'timeline' | 'map' | 'leaderTodo' | 'adminDashboard') => void;
+  onNavigate?: (screen: NavigationScreen) => void;
 }
 
 // 🎨 各テーマ別設定アイコン画像マッピング
@@ -22,7 +23,7 @@ export default function GlobalFooter({ onNavigate }: GlobalFooterProps) {
       style={{ backgroundColor: currentConfig.mainColor }}
     >
       {/* ⚙️ 左側エリア：ナビゲーション群（flexで横並びに） */}
-      <div className="flex items-center gap-6">
+      <div className="flex items-center gap-4 flex-wrap">
         
         {/* 既存：システム設定 */}
         <div 
@@ -39,14 +40,23 @@ export default function GlobalFooter({ onNavigate }: GlobalFooterProps) {
           <p className="text-sm font-bold">システム設定</p>
         </div>
 
-        {/* 📊 新規追加：改善ダッシュボード（拡張版） */}
+        {/* 📊 拡張ダッシュボードへの切り替え */}
         <div 
-          onClick={() => onNavigate?.('adminDashboard')}
-          className="flex items-center cursor-pointer hover:opacity-80 transition-opacity  px-3 py-1.5 rounded-lg"
+          onClick={() => onNavigate?.('personalDashboard')}
+          className="flex items-center cursor-pointer hover:opacity-80 transition-opacity px-2 py-1 rounded-lg"
           style={{ color: currentConfig.accentColor }}
         >
-          <span className="text-base mr-1.5">📊</span>
-          <p className="text-sm font-bold">改善ダッシュボード</p>
+          <span className="text-sm mr-1">📋</span>
+          <p className="text-xs font-bold">個人用ダッシュボード</p>
+        </div>
+
+        <div 
+          onClick={() => onNavigate?.('adminDashboard')}
+          className="flex items-center cursor-pointer hover:opacity-80 transition-opacity px-2 py-1 rounded-lg"
+          style={{ color: currentConfig.accentColor }}
+        >
+          <span className="text-sm mr-1">📊</span>
+          <p className="text-xs font-bold">師長用ダッシュボード</p>
         </div>
 
       </div>

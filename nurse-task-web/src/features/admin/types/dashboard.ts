@@ -30,4 +30,5 @@ export interface DayHeatmapData {
 
  export interface OvercrowdedHeatmapProps {
   data?: DayHeatmapData[];
+  yAxisTitle?: string;
 }
