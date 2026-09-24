@@ -18,7 +18,7 @@ const SETTINGS_ICONS: Record<AppTheme, string> = {
 export default function GlobalFooter({ onNavigate }: GlobalFooterProps) {
   const { theme, currentConfig } = useTheme();
   const currentUser = useTimelineStore((state) => state.currentUser);
-  const isLeader = checkIsLeader(currentUser) || currentUser?.role === 'admin';
+  const isAdmin = currentUser?.role === 'admin' || (currentUser?.name || '').includes('師長') || (currentUser?.nurse_id || '').includes('admin');
   const settingsIconSrc = SETTINGS_ICONS[theme] || SETTINGS_ICONS.vital;
 
   return (
@@ -54,7 +54,7 @@ export default function GlobalFooter({ onNavigate }: GlobalFooterProps) {
           <p className="text-xs font-bold">個人用ダッシュボード</p>
         </div>
 
-        {isLeader && (
+        {isAdmin && (
           <div 
             onClick={() => onNavigate?.('adminDashboard')}
             className="flex items-center cursor-pointer hover:opacity-80 transition-opacity px-2 py-1 rounded-lg"

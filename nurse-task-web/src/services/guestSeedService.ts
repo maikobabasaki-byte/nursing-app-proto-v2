@@ -9,7 +9,7 @@ export const seedGuestData = async (guestUid: string, role: 'leader' | 'member' 
 
   const todayStr = getJSTDateString();
   const isLeaderRole = role === 'leader';
-  const nurseName = isLeaderRole ? 'ゲスト（リーダー）' : 'ゲスト（メンバー）';
+  const nurseName = isLeaderRole ? 'ゲストリーダー' : 'ゲストメンバー';
 
   console.log(`🚀 [GuestSeed] ゲストセッション初期化: 役割 [${role}] (UID: ${guestUid}) - ローカル環境で即時準備中...`);
 

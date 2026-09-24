@@ -87,7 +87,7 @@ export default function App() {
           const defaultRole = isDemoPresenter ? 'member' : 'leader';
           const guestRole = (sessionStorage.getItem('nurseflow_guest_role') as 'leader' | 'member') || defaultRole;
           const isLeader = isDemoPresenter ? false : guestRole === 'leader';
-          const guestName = isDemoPresenter ? 'デモ１（メンバー）' : (isLeader ? 'ゲスト（リーダー）' : 'ゲスト（メンバー）');
+          const guestName = isDemoPresenter ? 'デモ１（メンバー）' : (isLeader ? 'ゲストリーダー' : 'ゲストメンバー');
 
           console.log(`👤 [AuthCheck] セッション (Demo:${isDemoPresenter}, Role:${guestRole}, isLeader:${isLeader}) 検出 UID: ${currentUser.uid}`);
 
@@ -97,6 +97,7 @@ export default function App() {
             email: currentUser.email || 'guest@nurseflow.local',
             is_leader: isLeader,
             team: 'Aチーム',
+            role: 'nurse',
             isAnonymous: currentUser.isAnonymous,
           });
 

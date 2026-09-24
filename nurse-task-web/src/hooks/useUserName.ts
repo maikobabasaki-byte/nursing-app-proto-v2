@@ -20,7 +20,7 @@ export const useUserName = () => {
     // 💡 ゲストユーザーの場合は Firestore 検索を行わず即時リターン（Missing or insufficient permissions を防止）
     if (isGuestUser) {
       const isLeader = currentUser ? currentUser.is_leader === true : guestRole === 'leader';
-      setUserName(isLeader ? 'ゲスト（リーダー）' : 'ゲスト（メンバー）');
+      setUserName(isLeader ? 'ゲストリーダー' : 'ゲストメンバー');
       return;
     }
 
@@ -35,7 +35,7 @@ export const useUserName = () => {
         if (isGuestSession) {
           const role = sessionStorage.getItem('nurseflow_guest_role');
           const isLeader = role === 'leader';
-          setUserName(isLeader ? 'ゲスト（リーダー）' : 'ゲスト（メンバー）');
+          setUserName(isLeader ? 'ゲストリーダー' : 'ゲストメンバー');
           return;
         }
 
@@ -85,7 +85,7 @@ export const useUserName = () => {
 
   if (isGuestUser) {
     const isLeader = currentUser ? currentUser.is_leader === true : guestRole === 'leader';
-    return isLeader ? 'ゲスト（リーダー）' : 'ゲスト（メンバー）';
+    return isLeader ? 'ゲストリーダー' : 'ゲストメンバー';
   }
 
   return userName;

@@ -319,12 +319,14 @@ export default function GlobalHeader({ currentPage, onNavigate}: GlobalHeaderPro
               <span className="whitespace-nowrap">ログイン者：<strong className="font-bold">{userName}</strong></span>
               <span
                 className={`text-[9px] sm:text-[10px] font-black px-1.5 py-0.5 rounded shrink-0 whitespace-nowrap ${
-                  isLeader || currentUser?.role === 'admin'
+                  currentUser?.role === 'admin'
                     ? 'bg-purple-100 text-purple-900 border border-purple-300'
+                    : isLeader
+                    ? 'bg-indigo-100 text-indigo-900 border border-indigo-300'
                     : 'bg-blue-100 text-blue-900 border border-blue-300'
                 }`}
               >
-                {isLeader || currentUser?.role === 'admin' ? '👑 師長' : '🩺 一般看護師'}
+                {currentUser?.role === 'admin' ? '👑 師長' : isLeader ? '👑 リーダー' : '🩺 一般看護師'}
               </span>
             </p>
           </div>

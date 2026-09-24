@@ -46,7 +46,8 @@ const INACTIVE_NAV_ICONS: Record<AppTheme, Record<string, string>> = {
 export default function BottomNav({ currentScreen, onNavigate }: BottomNavProps) {
   const { theme, currentConfig } = useTheme();
   const currentUser = useTimelineStore((state) => state.currentUser);
-  const isLeader = checkIsLeader(currentUser) || currentUser?.role === 'admin';
+  const isLeader = checkIsLeader(currentUser);
+  const isAdmin = currentUser?.role === 'admin' || (currentUser?.name || '').includes('師長') || (currentUser?.nurse_id || '').includes('admin');
 
   const isMasterActive = currentScreen === 'patientMaster' || currentScreen === 'patientSelect';
   const isExtendedView = currentScreen === 'personalDashboard' || currentScreen === 'adminDashboard';
@@ -68,7 +69,7 @@ export default function BottomNav({ currentScreen, onNavigate }: BottomNavProps)
           iconKey: 'account_circle',
           active: currentScreen === 'personalDashboard',
         },
-        ...(isLeader ? [{
+        ...(isAdmin ? [{
           id: 'adminDashboard' as const,
           label: '師長用ダッシュボード',
           emoji: '📊',
