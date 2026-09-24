@@ -79,14 +79,17 @@ export default function App() {
         // 🎯 sessionStorageに保存されている画面を取得（リロード時の画面状態を安全に復元）
         const savedScreen = sessionStorage.getItem('currentScreen') as ScreenType | null;
 
-        // 🎯 ゲストユーザー（is_guest_session === 'true' または 匿名ログイン isAnonymous）の場合のみシードデータを同期
-        const isGuest = currentUser.isAnonymous || sessionStorage.getItem('is_guest_session') === 'true';
-        if (isGuest) {
-          const guestRole = (sessionStorage.getItem('nurseflow_guest_role') as 'leader' | 'member') || 'leader';
-          const isLeader = guestRole === 'leader';
-          const guestName = isLeader ? 'ゲスト（リーダー）' : 'ゲスト（メンバー）';
+        // 🎯 ゲストユーザーまたは面接デモプレゼンターセッションの場合の初期化
+        const isDemoPresenter = sessionStorage.getItem('is_demo_presenter_session') === 'true';
+        const isGuest = currentUser.isAnonymous || sessionStorage.getItem('is_guest_session') === 'true' || isDemoPresenter;
 
-          console.log(`👤 [AuthCheck] ゲストユーザー(${guestRole})を検出しました! (UID: ${currentUser.uid}, isAnonymous: ${currentUser.isAnonymous})`);
+        if (isGuest) {
+          const defaultRole = isDemoPresenter ? 'member' : 'leader';
+          const guestRole = (sessionStorage.getItem('nurseflow_guest_role') as 'leader' | 'member') || defaultRole;
+          const isLeader = isDemoPresenter ? false : guestRole === 'leader';
+          const guestName = isDemoPresenter ? 'デモ１（メンバー）' : (isLeader ? 'ゲスト（リーダー）' : 'ゲスト（メンバー）');
+
+          console.log(`👤 [AuthCheck] セッション (Demo:${isDemoPresenter}, Role:${guestRole}, isLeader:${isLeader}) 検出 UID: ${currentUser.uid}`);
 
           useTimelineStore.getState().setCurrentUser({
             nurse_id: currentUser.uid,
@@ -220,9 +223,10 @@ export default function App() {
   useEffect(() => {
     if (!user) return;
 
-    const isGuestUser = Boolean(user.isAnonymous || (user.email && user.email.includes('guest')) || sessionStorage.getItem('is_guest_session') === 'true');
+    const isDemoPresenter = sessionStorage.getItem('is_demo_presenter_session') === 'true';
+    const isGuestUser = Boolean(user.isAnonymous || (user.email && user.email.includes('guest')) || sessionStorage.getItem('is_guest_session') === 'true' || isDemoPresenter);
     if (isGuestUser) {
-      console.log("👻 [App] ゲストユーザーのため、Firestoreからのタスク上書き監視をスキップしローカルシードデータを保護します");
+      console.log("👻 [App] ゲスト/デモユーザーのため、Firestoreからのタスク上書き監視をスキップしローカルシードデータを保護します");
       return;
     }
 
@@ -422,7 +426,7 @@ export default function App() {
               n.nurse_id?.toLowerCase().includes('guest') ||
               n.nurse_id?.startsWith('GUEST-') ||
               (n.email && n.email.toLowerCase().includes('guest')) ||
-              (n.name && n.name.includes('ゲスト'))
+              (n.name && (n.name.includes('ゲスト') || n.name.includes('デモ')))
             );
 
             // 🛡️ 通常ユーザーログイン時は、ゲスト看護師データ（SOS含む全データ）を100%完全遮断
@@ -431,10 +435,12 @@ export default function App() {
               return true;
             }
 
-            // 🛡️ ゲストログイン時：通常看護師（非ゲスト）を100%完全遮断（自分またはゲストナースのみ）
+            // 🛡️ ゲスト・デモログイン時：他の過去のゲスト・デモ看護師データを遮断し、自分自身または通常看護師マスターのみ許可
             const currentUserId = user?.uid || useTimelineStore.getState().currentUser?.nurse_id;
-            const isSelf = n.nurse_id === currentUserId;
-            if (!isSelf && !isGuestNurse) {
+            const currentUserName = useTimelineStore.getState().currentUser?.name;
+            const isSelf = n.nurse_id === currentUserId || (currentUserName && n.name === currentUserName);
+
+            if (isGuestNurse && !isSelf) {
               return false;
             }
             return true;

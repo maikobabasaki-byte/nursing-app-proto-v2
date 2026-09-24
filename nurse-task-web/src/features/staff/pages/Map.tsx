@@ -206,29 +206,61 @@ export default function MapContainer({ selectedPatients }: MapContainerProps): R
 
   const displayNurses = useMemo(() => {
     const currentUserId = currentUser?.nurse_id || auth.currentUser?.uid;
+    const isDemoPresenterSession = typeof window !== 'undefined' && sessionStorage.getItem('is_demo_presenter_session') === 'true';
     const isGuestSession = Boolean(
       sessionStorage.getItem('is_guest_session') === 'true' ||
       currentUser?.isAnonymous === true
     );
+
+    // 🎬 面接デモセッション時は「デモ１（メンバー）」のピンのみをマップ上に限定表示
+    if (isDemoPresenterSession) {
+      const demoPin = nurses.find((n) =>
+        n.nurse_id === currentUserId ||
+        n.name === 'デモ１（メンバー）' ||
+        (currentUser?.name && n.name === currentUser.name)
+      );
+
+      if (demoPin) {
+        return [{
+          ...demoPin,
+          name: 'デモ１（メンバー）',
+          role: 'メンバー',
+          color: '#2563eb',
+        }];
+      }
+      return [{
+        nurse_id: currentUserId || 'demo-nurse-01',
+        name: 'デモ１（メンバー）',
+        team: currentUser?.team || 'Aチーム',
+        color: '#2563eb',
+        role: 'メンバー',
+        is_leader: false,
+        x_percent: 48.0,
+        y_percent: 45.0,
+        is_logged_in: true,
+      }];
+    }
+
     const seenKeys = new Set<string>();
     return nurses.filter((nurse) => {
       if (nurse.is_logged_in === false) {
         return false;
       }
-      // 💡 自分以外の別モードユーザーをマップ表示から完全排除
-      const isSelf = nurse.nurse_id === currentUserId;
-      const isGuestNurse = Boolean(
+      const isSelf = nurse.nurse_id === currentUserId || (currentUser?.name && nurse.name === currentUser.name);
+      const isGuestOrDemoNurse = Boolean(
         nurse.nurse_id?.includes('guest') ||
         nurse.nurse_id?.startsWith('GUEST-') ||
         (nurse.email && nurse.email.includes('guest')) ||
-        (nurse.name && nurse.name.includes('ゲスト')) ||
-        (nurse.role && nurse.role.includes('ゲスト'))
+        (nurse.name && (nurse.name.includes('ゲスト') || nurse.name.includes('デモ'))) ||
+        (nurse.role && (nurse.role.includes('ゲスト') || nurse.role.includes('デモ')))
       );
+
       if (!isGuestSession) {
-        if (isGuestNurse) return false;
+        if (isGuestOrDemoNurse) return false;
       } else {
-        if (!isSelf && !isGuestNurse) return false;
+        if (!isSelf) return false;
       }
+
       const key = nurse.nurse_id || nurse.name.replace(/[\s　]+/g, '');
       if (seenKeys.has(key)) {
         return false;

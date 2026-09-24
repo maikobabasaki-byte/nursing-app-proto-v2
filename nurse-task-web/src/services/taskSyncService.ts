@@ -20,16 +20,25 @@ export const mapGASTaskToExtendedTask = (
   const taskId = String(item.emr_order_id || (item as any).task_id || `GAS_TASK_${index + 1}`).trim();
   
   // 💡 Sat Dec 30 1899... などの不用なDate文字列を除去し、HH:mm 表記へ正規化
-  const rawPeriod = String(item.display_period || item.scheduled_time || item.scheduled_at || "").trim();
+  const timeMatch = 
+    String(item.scheduled_at || "").match(/(?:T|\s|^)(\d{1,2}):(\d{2})/) ||
+    String(item.scheduled_time || "").match(/(?:T|\s|^)(\d{1,2}):(\d{2})/) ||
+    String(item.display_period || "").match(/(?:T|\s|^)(\d{1,2}):(\d{2})/);
+
+  const isVital = String(item.title || "").includes("バイタル");
   let period = "";
-  
-  const timeMatch = rawPeriod.match(/(?:T|\s|^)(\d{1,2}):(\d{2})/);
-  if (timeMatch) {
+  if (item.display_period === '午前' || item.display_period === '朝') {
+    period = '午前';
+  } else if (item.display_period === '午後' || item.display_period === '昼') {
+    period = '午後';
+  } else if (timeMatch) {
     const hh = timeMatch[1].padStart(2, '0');
     const mm = timeMatch[2];
     period = `${hh}:${mm}`;
-  } else if (!rawPeriod.includes('1899') && !rawPeriod.includes('GMT') && !rawPeriod.includes('1900')) {
-    period = rawPeriod;
+  } else if (item.display_period && !item.display_period.includes('1899') && !item.display_period.includes('GMT')) {
+    period = item.display_period;
+  } else {
+    period = isVital ? '午前' : '10:00';
   }
 
   const rawItem = item as Record<string, any>;

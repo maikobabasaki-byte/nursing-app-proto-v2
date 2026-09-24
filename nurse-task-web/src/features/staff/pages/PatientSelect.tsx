@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useUserName } from '../../../hooks/useUserName';
 import { useTimelineStore } from '../../../stores/useTimelineStore';
 import { checkIsLeader } from '../../../utils/userUtils';
@@ -27,17 +27,14 @@ interface PatientSelectProps {
   onSelectComplete: (selectedPatients: string[]) => void;
 }
 
-/**
- * 担当患者を選択する画面コンポーネント
- */
 export default function PatientSelect({ onSelectComplete }: PatientSelectProps) {
   const userName = useUserName();
   const currentUser = useTimelineStore((state) => state.currentUser);
   const isLeader = checkIsLeader(currentUser);
   const userTeam = currentUser?.team || 'Aチーム';
   const normalizedUserTeam = normalizeTeamName(userTeam) || 'A';
-
-  const [role, setRole] = useState<'member' | 'leader'>(isLeader ? 'leader' : 'member');
+  const isDemoPresenterSession = sessionStorage.getItem('is_demo_presenter_session') === 'true';
+  const [role, setRole] = useState<'member' | 'leader'>(isDemoPresenterSession ? 'member' : (isLeader ? 'leader' : 'member'));
   const [patients, setPatients] = useState<Patient[]>([]);
   const [isSyncing, setIsSyncing] = useState<boolean>(false);
 
@@ -69,16 +66,23 @@ export default function PatientSelect({ onSelectComplete }: PatientSelectProps) 
               });
               setPatients(sortedData);
 
-              // 💡 画面表示時は前回の選択をリセットし、チェック無しの状態に初期化
-              try {
-                sessionStorage.removeItem('selectedPatients');
-                useTimelineStore.getState().setSelectedPatients([]);
-              } catch (e) {
-                console.error("患者リセットエラー:", e);
-              }
+              // 💡 画面表示時の初期選択ロジック（デモプレゼンター時は205・206号室を自動・固定選択）
+              const isDemoPresenter = sessionStorage.getItem('is_demo_presenter_session') === 'true';
 
-              // 🎯 画面表示時はすべてチェックなし（未選択状態）に初期化
-              setSelectedPatientIds([]);
+              if (isDemoPresenter) {
+                const demoPatientIds = sortedData
+                  .filter((p) => p.room_id === '205' || p.room_id === '206' || p.room_id?.includes('205') || p.room_id?.includes('206'))
+                  .map((p) => p.patient_id);
+                setSelectedPatientIds(demoPatientIds);
+              } else {
+                try {
+                  sessionStorage.removeItem('selectedPatients');
+                  useTimelineStore.getState().setSelectedPatients([]);
+                } catch (e) {
+                  console.error("患者リセットエラー:", e);
+                }
+                setSelectedPatientIds([]);
+              }
 
               return;
             }
@@ -179,9 +183,31 @@ export default function PatientSelect({ onSelectComplete }: PatientSelectProps) 
     }
   };
 
+  const isDemoPresenter = sessionStorage.getItem('is_demo_presenter_session') === 'true';
+
+  // 🎯 デモモード時は 205号室・206号室の患者のみを表示（他病室の選択肢を非表示・制限）
+  const displayPatients = useMemo(() => {
+    if (isDemoPresenter) {
+      return patients.filter((p) => p.room_id === '205' || p.room_id === '206' || p.room_id?.includes('205') || p.room_id?.includes('206'));
+    }
+    return patients;
+  }, [patients, isDemoPresenter]);
+
   return (
     <>
       <div className="flex flex-col items-center">
+        {/* 🎬 デモセッション時の案内バッジ */}
+        {isDemoPresenter && (
+          <div className="bg-purple-600 text-white font-extrabold text-xs px-4 py-2.5 rounded-xl shadow-md mb-2 flex items-center justify-between gap-2 w-[40em] max-w-full animate-fade-in border border-purple-400">
+            <div className="flex items-center gap-2">
+              <span className="text-base">🎬</span>
+              <span>面接プレゼンデモモード：205号室・206号室のみに限定表示されています（他病室選択不可）</span>
+            </div>
+            <span className="bg-purple-900/90 text-purple-100 text-[10px] font-bold px-2 py-0.5 rounded-full border border-purple-300 shrink-0">
+              205・206のみ固定
+            </span>
+          </div>
+        )}
         
         {/* 🔘 メンバー / リーダー 切り替え */}
         <div className="bg-sky-100 w-[24em] h-[3em] rounded-4xl m-4 flex justify-evenly !items-center">
@@ -213,15 +239,12 @@ export default function PatientSelect({ onSelectComplete }: PatientSelectProps) 
           {/* メンバーモード */}
           {role === 'member' && (
             <div id="patient-list-container" className="w-100 max-h-[40vh] overflow-y-auto border border-[#ddd] rounded-[8px] bg-white text-gray-800">
-              {patients.map((patient, index) => {
+              {displayPatients.map((patient, index) => {
                     // 1. 【部屋の切り替わり判定】
-                    // 名簿の一番最初（index が 0）であるか、または「1個前の患者の病室ID」と「今の患者の病室ID」が違う場合、
-                    // そこが新しい病室の始まり（1人目の住人）となるため true になる。
-                    const isFirstInRoom = index === 0 || patients[index - 1].room_id !== patient.room_id;
+                    const isFirstInRoom = index === 0 || displayPatients[index - 1].room_id !== patient.room_id;
 
                     // 2. 【この部屋の住人リスト作成】
-                    // 現在注目している部屋（patient.room_id）と同じ部屋にいる患者全員のIDをガサッと集めて配列にする。
-                    const roomPatientIds = patients.filter(p => p.room_id === patient.room_id).map(p => p.patient_id);
+                    const roomPatientIds = displayPatients.filter(p => p.room_id === patient.room_id).map(p => p.patient_id);
 
                     // 3. 【部屋ごと一括チェックの状態判定】
                     // 集めた「この部屋の住人全員」が、現在の選択リスト（selectedPatientIds）に漏れなく含まれているかを判定する。

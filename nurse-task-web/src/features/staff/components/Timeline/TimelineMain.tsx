@@ -43,6 +43,7 @@ export default function TimelineMain({
     sessionStorage.getItem('is_guest_session') === 'true' ||
     currentUser?.isAnonymous === true
   );
+  const isDemoPresenterSession = typeof window !== 'undefined' && sessionStorage.getItem('is_demo_presenter_session') === 'true';
   const isLeader = checkIsLeader(currentUser);
   const leaderTeam = currentUser?.team || 'Aチーム';
 
@@ -57,7 +58,11 @@ export default function TimelineMain({
     if (!effectiveSelectedPatients || effectiveSelectedPatients.length === 0) {
       return true;
     }
-    return effectiveSelectedPatients.includes(patientId);
+    const targetId = String(patientId || '').trim().toLowerCase();
+    return effectiveSelectedPatients.some((id) => {
+      const cleanId = String(id || '').trim().toLowerCase();
+      return cleanId === targetId || targetId.includes(cleanId) || cleanId.includes(targetId);
+    });
   };
 
   const isTaskForSelectedPatient = (task: ExtendedTask) => {
@@ -97,15 +102,24 @@ export default function TimelineMain({
       return false;
     }
 
-    if (isGuestUser) {
-      const isGuestTask = task.task_id?.startsWith('GUEST-') || (task as any).is_guest === true || task.nurse_id === currentUser?.nurse_id || task.assigned_nurse_id === currentUser?.nurse_id;
+    if (isGuestUser || isDemoPresenterSession) {
+      const isGuestTask = 
+        task.task_id?.startsWith('GUEST-') || 
+        (task as any).is_guest === true || 
+        task.nurse_id === currentUser?.nurse_id || 
+        task.assigned_nurse_id === currentUser?.nurse_id ||
+        isLeader ||
+        (effectiveSelectedPatients && effectiveSelectedPatients.length > 0 && isTaskForSelectedPatient(task));
+
       if (!isGuestTask) return false;
 
       if (!isLeader) {
         const room = (task.room_id || '').trim();
-        const is202or203 = room === '202' || room === '203' || room.includes('202') || room.includes('203');
+        const isAllowedRoom = isDemoPresenterSession
+          ? (room === '205' || room === '206' || room.includes('205') || room.includes('206'))
+          : (room === '202' || room === '203' || room.includes('202') || room.includes('203'));
         const isSelected = effectiveSelectedPatients && effectiveSelectedPatients.length > 0 ? effectiveSelectedPatients.includes(task.patient_id) : false;
-        if (!is202or203 && !isSelected) return false;
+        if (!isAllowedRoom && !isSelected) return false;
       }
     } else {
       if (task.task_id?.startsWith('GUEST-') || (task as any).is_guest === true) {
@@ -114,9 +128,14 @@ export default function TimelineMain({
     }
 
     if (isLeader) {
-      // 🛡️ チームの不一致チェック（他チームのタスクはタスクプールからも完全排除）
+      // 🛡️ チームの不一致チェック（師長・全体チームまたは自チームのタスクを対象）
       if (!isTaskInLeaderTeam(task, leaderTeam, nurseMaster)) {
         return false;
+      }
+      if (effectiveSelectedPatients && effectiveSelectedPatients.length > 0) {
+        if (!isTaskForSelectedPatient(task)) {
+          return false;
+        }
       }
       return true;
     }
@@ -136,15 +155,24 @@ export default function TimelineMain({
     }
 
     // 🛡️ ゲストログイン時の全件一瞬ちらつき（Flicker）および通常・ゲスト混在を完全防止
-    if (isGuestUser) {
-      const isGuestTask = task.task_id?.startsWith('GUEST-') || (task as any).is_guest === true || task.nurse_id === currentUser?.nurse_id || task.assigned_nurse_id === currentUser?.nurse_id;
+    if (isGuestUser || isDemoPresenterSession) {
+      const isGuestTask = 
+        task.task_id?.startsWith('GUEST-') || 
+        (task as any).is_guest === true || 
+        task.nurse_id === currentUser?.nurse_id || 
+        task.assigned_nurse_id === currentUser?.nurse_id ||
+        isLeader ||
+        (effectiveSelectedPatients && effectiveSelectedPatients.length > 0 && isTaskForSelectedPatient(task));
+
       if (!isGuestTask) {
         return false;
       }
 
       if (!isLeader) {
         const room = (task.room_id || '').trim();
-        const is202or203 = room === '202' || room === '203' || room.includes('202') || room.includes('203');
+        const isAllowedRoom = isDemoPresenterSession
+          ? (room === '205' || room === '206' || room.includes('205') || room.includes('206'))
+          : (room === '202' || room === '203' || room.includes('202') || room.includes('203'));
         const isSelected = effectiveSelectedPatients && effectiveSelectedPatients.length > 0 ? effectiveSelectedPatients.includes(task.patient_id) : false;
         const isInterrupt = Boolean(
           task.title?.includes('ナースコール') || 
@@ -153,7 +181,7 @@ export default function TimelineMain({
           task.is_additional
         );
 
-        if (!is202or203 && !isSelected && !isInterrupt) {
+        if (!isAllowedRoom && !isSelected && !isInterrupt) {
           return false;
         }
       }
@@ -172,11 +200,16 @@ export default function TimelineMain({
         }
       }
 
-      // 2. チーム名の不一致チェック（他チーム指定のタスクのみ明確に除外）
+      // 2. チーム名の不一致チェック（「全体」チームの師長は病棟全体のタスクを許可）
       const normalizedLeaderTeam = normalizeTeamName(leaderTeam);
       const normalizedTaskTeam = normalizeTeamName(task.team);
 
-      if (normalizedTaskTeam !== '' && normalizedLeaderTeam !== '' && normalizedTaskTeam !== normalizedLeaderTeam) {
+      if (
+        normalizedLeaderTeam !== '全体' &&
+        normalizedTaskTeam !== '' && 
+        normalizedLeaderTeam !== '' && 
+        normalizedTaskTeam !== normalizedLeaderTeam
+      ) {
         return false;
       }
 

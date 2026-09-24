@@ -96,6 +96,42 @@ export default function Login() {
     }
   };
 
+  const handleDemoPresenterLogin = async () => {
+    console.log(`🎬 [DemoLogin] 面接デモログイン (205・206号室固定) がクリックされました`);
+    setIsLoadingGuest(true);
+    const errorEl = document.getElementById('error_message');
+    if (errorEl) errorEl.innerText = '';
+
+    try {
+      // 💡 面接デモ専用セッションフラグをセット（一般メンバー権限に固定）
+      sessionStorage.setItem('is_demo_presenter_session', 'true');
+      sessionStorage.setItem('nurseflow_guest_role', 'member');
+      sessionStorage.removeItem('is_guest_session');
+      sessionStorage.setItem('currentScreen', 'patientSelect');
+
+      // Zustandストア側もデモシナリオ朝（朝スタート）に設定
+      try {
+        const { useTimelineStore } = await import('../../../stores/useTimelineStore');
+        useTimelineStore.getState().setDemoScenario('morning');
+      } catch (e) {}
+
+      await setPersistence(auth, browserLocalPersistence);
+      try {
+        await signInAnonymously(auth);
+      } catch (anonErr: any) {
+        try {
+          await signInWithEmailAndPassword(auth, 'nurse02@nurseflow.local', 'guest1234');
+        } catch (e) {}
+      }
+    } catch (error: any) {
+      if (errorEl) {
+        errorEl.innerText = `デモログインエラー: ${error?.message || ''}`;
+      }
+    } finally {
+      setIsLoadingGuest(false);
+    }
+  };
+
   return (
     <>
       <div className="bg-white p-8 rounded-2xl shadow-xl w-full max-w-sm border border-gray-200">
@@ -182,6 +218,17 @@ export default function Login() {
         </div>
 
         <div className="flex flex-col gap-2.5">
+          {/* 🎬 面接プレゼン用デモログインボタン */}
+          <button
+            type="button"
+            onClick={handleDemoPresenterLogin}
+            disabled={isLoadingGuest}
+            className="!w-full !bg-gradient-to-r !from-purple-600 !to-indigo-600 hover:!from-purple-700 hover:!to-indigo-700 !text-white !font-black !p-3.5 !rounded-xl !shadow-lg !text-xs !flex !items-center !justify-center !gap-2 !cursor-pointer !transition-all !active:!scale-95 disabled:!opacity-50 border-2 border-purple-300"
+          >
+            <span className="text-base">🎬</span>
+            <span>{isLoadingGuest ? 'デモ環境を準備中...' : '面接プレゼン用デモログイン（205・206固定）'}</span>
+          </button>
+
           <button
             type="button"
             onClick={() => handleGuestLogin('member')}

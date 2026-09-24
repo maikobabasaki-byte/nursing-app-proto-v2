@@ -25,39 +25,48 @@ export default function TimelineSidebar({
     sessionStorage.getItem('is_guest_session') === 'true' ||
     currentUser?.isAnonymous === true
   );
+  const isDemoPresenterSession = typeof window !== 'undefined' && sessionStorage.getItem('is_demo_presenter_session') === 'true';
   const isLeader = checkIsLeader(currentUser);
   const leaderTeam = currentUser?.team || 'Aチーム';
   const nurseMaster = useTimelineStore((state) => state.nurseMaster || []);
 
-  // 🎯 【Single Source of Truth】ストアの全タスクからプール用タスクを直算出（ゲストメンバーは202/203号室限定）
+  // 🎯 【Single Source of Truth】ストアの全タスクからプール用タスクを直算出
   const poolTasks = allTasks.filter(task => {
     if (!task || task.status === 'deleted' || task.display_period?.includes(':')) {
       return false;
     }
 
-    if (isGuestUser) {
-      const isGuestTask = task.task_id === 'demo-task-tutorial' || task.task_id?.startsWith('GUEST-') || task.nurse_id === currentUser?.nurse_id || task.assigned_nurse_id === currentUser?.nurse_id;
+    if (isGuestUser || isDemoPresenterSession) {
+      const isGuestTask = 
+        task.task_id === 'demo-task-tutorial' || 
+        task.task_id?.startsWith('GUEST-') || 
+        task.nurse_id === currentUser?.nurse_id || 
+        task.assigned_nurse_id === currentUser?.nurse_id ||
+        isLeader ||
+        (selectedPatients && selectedPatients.length > 0 && selectedPatients.includes(task.patient_id));
+
       if (!isGuestTask) return false;
 
       if (!isLeader) {
         const room = (task.room_id || '').trim();
-        const is202or203 = room === '202' || room === '203' || room.includes('202') || room.includes('203');
+        const isAllowedRoom = isDemoPresenterSession
+          ? (room === '205' || room === '206' || room.includes('205') || room.includes('206'))
+          : (room === '202' || room === '203' || room.includes('202') || room.includes('203'));
         const isSelected = selectedPatients && selectedPatients.length > 0 ? selectedPatients.includes(task.patient_id) : false;
-        if (!is202or203 && !isSelected) return false;
+        if (!isAllowedRoom && !isSelected) return false;
       }
     } else {
       if (task.task_id?.startsWith('GUEST-') || (task as any).is_guest === true) {
         return false;
       }
-      if (!isLeader) {
-        if (selectedPatients && selectedPatients.length > 0) {
-          if (!selectedPatients.includes(task.patient_id)) return false;
-        }
-      }
+    }
+
+    if (selectedPatients && selectedPatients.length > 0) {
+      if (!selectedPatients.includes(task.patient_id)) return false;
     }
 
     if (isLeader) {
-      // 🛡️ チームの不一致チェック（他チームのタスクはタスクプールからも完全排除）
+      // 🛡️ チームの不一致チェック（師長・全体チームまたは自チームのタスクを対象）
       if (!isTaskInLeaderTeam(task, leaderTeam, nurseMaster)) {
         return false;
       }

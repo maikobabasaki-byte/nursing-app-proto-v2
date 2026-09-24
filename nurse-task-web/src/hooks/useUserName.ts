@@ -73,10 +73,20 @@ export const useUserName = () => {
     return () => unsubscribe();
   }, [currentUser, setCurrentUser, isGuestUser, guestRole]);
 
+  const isDemoPresenter = sessionStorage.getItem('is_demo_presenter_session') === 'true';
+
+  if (isDemoPresenter) {
+    return currentUser?.name || 'デモ１（メンバー）';
+  }
+
+  if (currentUser?.name) {
+    return currentUser.name;
+  }
+
   if (isGuestUser) {
     const isLeader = currentUser ? currentUser.is_leader === true : guestRole === 'leader';
     return isLeader ? 'ゲスト（リーダー）' : 'ゲスト（メンバー）';
   }
 
-  return currentUser?.name || userName;
+  return userName;
 };

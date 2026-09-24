@@ -20,7 +20,7 @@ interface Task {
   task_id: string;
   title: string;
   details: string;
-  status: 'untouched' | 'progressing' | 'completed' | 'record_complete'; // 💡 JSONのステータス名に合わせる
+  status: string; // 💡 拡張ステータス（completed, record_start, record_pending, record_complete, no_record_completed等）を網羅
   priority: string;
   display_period: string; // "10:00" など
   patient_id: string;
@@ -155,10 +155,15 @@ export default function PatientMasterPage({ selectedIds }: DashboardProps) {
       filteredBySelection = mergedPatients.filter((p) => p.tasks && p.tasks.length > 0);
     }
 
-    // 🎯 2. ゲストメンバーの場合：タイムライン画面と完全同期し、202号室・203号室の患者のみ表示
+    const isDemoPresenterSession = typeof window !== 'undefined' && sessionStorage.getItem('is_demo_presenter_session') === 'true';
+
+    // 🎯 2. デモメンバー(205・206号室) / ゲストメンバー(202・203号室) の患者限定表示
     let finalPatients = filteredBySelection;
-    if (isGuestUser && !isLeader) {
+    if ((isGuestUser || isDemoPresenterSession) && !isLeader) {
       finalPatients = filteredBySelection.filter((p) => {
+        if (isDemoPresenterSession) {
+          return p.room_id === '205' || p.room_id === '206' || p.room_id?.includes('205') || p.room_id?.includes('206');
+        }
         return p.room_id === '202' || p.room_id === '203' || p.room_id?.includes('202') || p.room_id?.includes('203');
       });
     }
@@ -298,14 +303,25 @@ export default function PatientMasterPage({ selectedIds }: DashboardProps) {
                     </div>
                   </div>
                   <div className="p-4 flex-1 flex flex-col gap-2 justify-center text-sm font-medium">
-                    {patient.tasks?.map((task: Task, idx: number) => (
-                      <div key={task.task_id || idx} className="flex items-center gap-2 text-slate-700">
-                        <span className="w-12 text-xs text-slate-400 shrink-0">{normalizeToHHMM(task.display_period)}</span>
-                        <span className={task.title.toLowerCase().includes(searchWord.toLowerCase()) ? "bg-yellow-100 px-1 rounded font-bold text-cyan-900" : ""}>
-                          {task.title}
-                        </span>
-                      </div>
-                    ))}
+                    {patient.tasks?.map((task: Task, idx: number) => {
+                      const isUnrecorded = ['completed', 'record_start', 'record_pending'].includes(task.status);
+                      const isRecorded = ['record_complete', 'no_record_completed'].includes(task.status);
+                      let textColor = 'text-slate-700';
+                      if (isUnrecorded) textColor = 'text-sky-600 font-bold';
+                      if (isRecorded)   textColor = 'text-sky-300/80';
+
+                      return (
+                        <div key={task.task_id || idx} className={`flex items-center gap-2 ${textColor}`}>
+                          {isUnrecorded ? <span className="text-sky-500 text-xs shrink-0">●</span> : <span className="w-2 shrink-0"></span>}
+                          <span className={`w-12 text-xs shrink-0 ${isUnrecorded ? 'text-sky-500' : isRecorded ? 'text-sky-200' : 'text-slate-400'}`}>
+                            {normalizeToHHMM(task.display_period)}
+                          </span>
+                          <span className={task.title.toLowerCase().includes(searchWord.toLowerCase()) ? "bg-yellow-100 px-1 rounded font-bold text-cyan-900" : ""}>
+                            {task.title}
+                          </span>
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
               ))}
@@ -370,8 +386,8 @@ export default function PatientMasterPage({ selectedIds }: DashboardProps) {
                 <div className="p-4 flex-1 flex flex-col gap-2 justify-center text-sm font-medium">
                   {patient.tasks && patient.tasks.length > 0 ? (
                     patient.tasks.map((task: Task, idx: number) => {
-                      const isUnrecorded = task.status === 'completed';
-                      const isRecorded = task.status === 'record_complete';
+                      const isUnrecorded = ['completed', 'record_start', 'record_pending'].includes(task.status);
+                      const isRecorded = ['record_complete', 'no_record_completed'].includes(task.status);
                       let textColor = 'text-slate-700';
                       if (isUnrecorded) textColor = 'text-sky-600 font-bold';
                       if (isRecorded)   textColor = 'text-sky-300/80';

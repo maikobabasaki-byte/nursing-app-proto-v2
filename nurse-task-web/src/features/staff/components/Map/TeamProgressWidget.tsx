@@ -75,15 +75,64 @@ export const TeamProgressWidget: React.FC<TeamProgressWidgetProps> = ({
 
   const activeNurses = propNurses && propNurses.length > 0 ? propNurses : storeNurses;
 
-  // 4. リーダー権限（is_leader === true）を除外したメンバー看護師一覧を抽出
+  // 4. リーダー権限（is_leader === true）および過去の不要な重複「ゲスト/デモ」データを除外したメンバー看護師一覧を抽出
   const memberNurses = useMemo(() => {
-    return activeNurses.filter((n) => !n.is_leader);
+    const currentUser = useTimelineStore.getState().currentUser;
+    const currentUserId = currentUser?.nurse_id || currentUser?.staff_id;
+    const currentUserName = currentUser?.name;
+    const isDemoPresenterSession = typeof window !== 'undefined' && sessionStorage.getItem('is_demo_presenter_session') === 'true';
+
+    let baseNurses = [...activeNurses];
+    const demoName = isDemoPresenterSession ? 'デモ１（メンバー）' : (currentUserName || 'デモ１（メンバー）');
+    const demoId = currentUserId || 'demo-nurse-01';
+
+    // デモ・ゲストセッション時は「デモ１（メンバー）」のプログレスカードを確実に表示
+    const hasSelf = baseNurses.some((n) => n.nurse_id === demoId || n.name === demoName || n.name === 'デモ１（メンバー）');
+    if (!hasSelf) {
+      baseNurses.unshift({
+        nurse_id: demoId,
+        name: demoName,
+        team: currentUser?.team || 'Aチーム',
+        color: '#2563eb',
+        role: 'メンバー',
+        is_leader: false,
+        x_percent: 48,
+        y_percent: 45,
+        is_logged_in: true,
+      });
+    }
+
+    const seenNurseKeys = new Set<string>();
+
+    return baseNurses.filter((n) => {
+      if (n.is_leader) return false;
+
+      const isGuestOrDemo = Boolean(
+        n.nurse_id?.toLowerCase().includes('guest') ||
+        n.nurse_id?.startsWith('GUEST-') ||
+        (n.email && n.email.toLowerCase().includes('guest')) ||
+        (n.name && (n.name.includes('ゲスト') || n.name.includes('デモ')))
+      );
+
+      if (isGuestOrDemo) {
+        // 現在のログインユーザー本人（デモ１）であれば採用、自分以外の過去の匿名ゲスト/デモデータは除外
+        const isSelf = n.nurse_id === demoId || n.name === demoName || n.name === 'デモ１（メンバー）';
+        if (!isSelf) return false;
+      }
+
+      // 看護師名またはID単位でのデデュープ（重複防止）
+      const key = (n.name || n.nurse_id || '').trim();
+      if (seenNurseKeys.has(key)) return false;
+      seenNurseKeys.add(key);
+
+      return true;
+    });
   }, [activeNurses]);
 
   // 5. 【プランB】各看護師のリアルタイム選択患者（nurseAssignments）に基づき全員の進捗バーを同期計算
   const nurseProgressList = useMemo(() => {
-    return calculateNurseProgressList(memberNurses, allTasks, nurseAssignments, currentMinutes);
-  }, [memberNurses, allTasks, nurseAssignments, currentMinutes]);
+    return calculateNurseProgressList(memberNurses, allTasks, nurseAssignments, currentMinutes, selectedPatientIds);
+  }, [memberNurses, allTasks, nurseAssignments, currentMinutes, selectedPatientIds]);
 
   // 6. 【B: 下部】病棟全体の進捗バー：選択患者に関わらず病棟全体の全タスク（allTasks）で集計
   const overallProgress = useMemo(() => {

@@ -53,3 +53,41 @@ export const getJSTISOString = (dateInput: Date = new Date()): string => {
   const [datePart, timePart] = dateTimeStr.split(' ');
   return `${datePart}T${timePart}+09:00`;
 };
+
+/**
+ * LocalStorage にログイン実績日付を記録
+ */
+export const recordLoginDate = (dateStr?: string): string[] => {
+  const today = dateStr || getJSTDateString();
+  try {
+    const saved = localStorage.getItem('nursing_app_login_dates');
+    let dates: string[] = saved ? JSON.parse(saved) : [];
+    if (!Array.isArray(dates)) dates = [];
+    if (!dates.includes(today)) {
+      dates.push(today);
+      localStorage.setItem('nursing_app_login_dates', JSON.stringify(dates));
+    }
+    return dates;
+  } catch (e) {
+    return [today];
+  }
+};
+
+/**
+ * 記録されているログイン日付の一覧を取得
+ */
+export const getLoginDates = (): string[] => {
+  try {
+    const today = getJSTDateString();
+    const saved = localStorage.getItem('nursing_app_login_dates');
+    let dates: string[] = saved ? JSON.parse(saved) : [];
+    if (!Array.isArray(dates)) dates = [];
+    if (!dates.includes(today)) {
+      dates.push(today);
+      localStorage.setItem('nursing_app_login_dates', JSON.stringify(dates));
+    }
+    return dates;
+  } catch (e) {
+    return [getJSTDateString()];
+  }
+};

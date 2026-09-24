@@ -1,3 +1,5 @@
+import { useTimelineStore } from '../../../stores/useTimelineStore';
+import { checkIsLeader } from '../../../utils/userUtils';
 import { useTheme, type AppTheme } from '../../../hooks/useTheme';
 
 import type { NavigationScreen } from './MainLayout';
@@ -15,6 +17,8 @@ const SETTINGS_ICONS: Record<AppTheme, string> = {
 
 export default function GlobalFooter({ onNavigate }: GlobalFooterProps) {
   const { theme, currentConfig } = useTheme();
+  const currentUser = useTimelineStore((state) => state.currentUser);
+  const isLeader = checkIsLeader(currentUser) || currentUser?.role === 'admin';
   const settingsIconSrc = SETTINGS_ICONS[theme] || SETTINGS_ICONS.vital;
 
   return (
@@ -50,14 +54,16 @@ export default function GlobalFooter({ onNavigate }: GlobalFooterProps) {
           <p className="text-xs font-bold">個人用ダッシュボード</p>
         </div>
 
-        <div 
-          onClick={() => onNavigate?.('adminDashboard')}
-          className="flex items-center cursor-pointer hover:opacity-80 transition-opacity px-2 py-1 rounded-lg"
-          style={{ color: currentConfig.accentColor }}
-        >
-          <span className="text-sm mr-1">📊</span>
-          <p className="text-xs font-bold">師長用ダッシュボード</p>
-        </div>
+        {isLeader && (
+          <div 
+            onClick={() => onNavigate?.('adminDashboard')}
+            className="flex items-center cursor-pointer hover:opacity-80 transition-opacity px-2 py-1 rounded-lg"
+            style={{ color: currentConfig.accentColor }}
+          >
+            <span className="text-sm mr-1">📊</span>
+            <p className="text-xs font-bold">師長用ダッシュボード</p>
+          </div>
+        )}
 
       </div>
 

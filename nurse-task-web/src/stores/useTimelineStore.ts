@@ -53,8 +53,175 @@ export interface PatientSos {
   created_at: string;
 }
 
+export type DemoScenario = 'morning' | 'noon' | 'evening';
+
+export const isTargetRoomTask = (task: ExtendedTask): boolean => {
+  const roomId = String(task.room_id || '').trim();
+  if (roomId === '205' || roomId === '206' || roomId.includes('205') || roomId.includes('206')) {
+    return true;
+  }
+  const patientId = String(task.patient_id || '').trim();
+  if (patientId.includes('205') || patientId.includes('206')) {
+    return true;
+  }
+  return false;
+};
+
+export const timeStringToMinsHelper = (timeStr?: string): number => {
+  if (!timeStr) return 9999;
+  const str = String(timeStr).trim();
+  const match = str.match(/(?:T|\s|^)(\d{1,2}):(\d{2})/);
+  if (match) {
+    const hh = parseInt(match[1], 10);
+    const mm = parseInt(match[2], 10);
+    return hh * 60 + mm;
+  }
+  if (str.includes('午前') || str.includes('朝') || str.includes('AM') || str.includes('am')) {
+    return 600; // 10:00 (600 mins <= 720)
+  }
+  if (str.includes('午後') || str.includes('昼') || str.includes('PM') || str.includes('pm')) {
+    return 840; // 14:00 (840 mins)
+  }
+  if (str.includes('夕')) {
+    return 960; // 16:00
+  }
+  return 9999;
+};
+
+export const extractHHMMHelper = (str?: string): string | null => {
+  if (!str) return null;
+  const match = String(str).trim().match(/(?:T|\s|^)(\d{1,2}):(\d{2})/);
+  if (match) {
+    const hh = match[1].padStart(2, '0');
+    const mm = match[2];
+    return `${hh}:${mm}`;
+  }
+  return null;
+};
+
+export const applyScenarioToTask = (
+  task: ExtendedTask,
+  scenario: DemoScenario
+): ExtendedTask => {
+  const updatedChildren = task.children
+    ? task.children.map((c) => applyScenarioToTask(c, scenario))
+    : undefined;
+
+  const initialP = task.initial_period || task.display_period;
+
+  // タスクに明示的に指定された時間（"09:00", "14:00" などHH:mm表記）があるかチェック
+  const hasSpecificTime = Boolean(
+    task.display_period && 
+    task.display_period.includes(':') && 
+    !task.display_period.includes('T') && 
+    task.display_period !== '午前' && 
+    task.display_period !== '午後' &&
+    task.display_period !== '未定'
+  );
+
+  const rawTimeStr = (hasSpecificTime ? task.display_period : null) || task.scheduled_time || '';
+  const hhmm = extractHHMMHelper(rawTimeStr);
+  const timeMins = timeStringToMinsHelper(rawTimeStr) !== 9999 
+    ? timeStringToMinsHelper(rawTimeStr) 
+    : timeStringToMinsHelper(initialP);
+
+  const isMorning = timeMins <= 720 || initialP === '午前';
+  const gridPeriod = hhmm || (isMorning ? '10:00' : '14:00');
+
+  if (scenario === 'morning') {
+    // 🌅 朝モード：
+    // - 時間指定があるタスク（例: 09:00, 11:00, 14:00, 16:00）：タイムライングリッドのその時間行に直接配置（タスクプールに入れない）
+    // - 時間指定がないタスク（例: "午前", "午後", "未定"）：タスクプールに配置
+    if (hasSpecificTime) {
+      return {
+        ...task,
+        display_period: task.display_period,
+        status: 'untouched',
+        completed_at: undefined,
+        completed_by: undefined,
+        children: updatedChildren,
+      };
+    }
+
+    const poolPeriod = (initialP === '午後' || (!isMorning && initialP !== '午前')) ? '午後' : '午前';
+    return {
+      ...task,
+      display_period: poolPeriod,
+      status: 'untouched',
+      completed_at: undefined,
+      completed_by: undefined,
+      children: updatedChildren,
+    };
+  }
+
+  if (scenario === 'noon') {
+    // 🕛 午前済モード：
+    // - 午前タスク（<=12:00 または "午前"）：10:00行へ展開して完了化（record_complete）
+    // - 午後タスク（>12:00 または "午後"）：14:00行へ展開して未完了（untouched）でタイムラインに配置
+    if (hasSpecificTime) {
+      const isMorningTask = timeMins <= 720;
+      return {
+        ...task,
+        display_period: task.display_period,
+        status: isMorningTask ? 'record_complete' : 'untouched',
+        completed_at: isMorningTask ? (task.completed_at || task.display_period) : undefined,
+        completed_by: isMorningTask ? (task.completed_by || 'デモ１（メンバー）') : undefined,
+        children: updatedChildren,
+      };
+    }
+
+    if (isMorning) {
+      return {
+        ...task,
+        display_period: '10:00',
+        status: 'record_complete',
+        completed_at: task.completed_at || '10:00',
+        completed_by: task.completed_by || 'デモ１（メンバー）',
+        children: updatedChildren,
+      };
+    } else {
+      return {
+        ...task,
+        display_period: '14:00',
+        status: 'untouched',
+        completed_at: undefined,
+        completed_by: undefined,
+        children: updatedChildren,
+      };
+    }
+  }
+
+  if (scenario === 'evening') {
+    // 🌙 勤務終了モード：全タスク完了化
+    const periodToUse = hasSpecificTime ? task.display_period : gridPeriod;
+    return {
+      ...task,
+      display_period: periodToUse,
+      status: 'record_complete',
+      completed_at: task.completed_at || periodToUse,
+      completed_by: task.completed_by || 'デモ１（メンバー）',
+      children: updatedChildren,
+    };
+  }
+
+  return {
+    ...task,
+    children: updatedChildren,
+  };
+};
+
+export const applyScenarioToTasks = (
+  tasks: ExtendedTask[],
+  scenario: DemoScenario
+): ExtendedTask[] => {
+  return tasks.map((t) => applyScenarioToTask(t, scenario));
+};
+
 interface TimelineStore {
   allTasks: ExtendedTask[];
+  rawAllTasks: ExtendedTask[];
+  demoScenario: DemoScenario;
+  setDemoScenario: (scenario: DemoScenario) => void;
   memos: Memo[];
   nurseMaster: NurseMaster[];
   nurses: NursePin[];
@@ -294,6 +461,17 @@ export function mergeNurseData(
 
 export const useTimelineStore = create<TimelineStore>((set, get) => ({
   allTasks: [],
+  rawAllTasks: [],
+  demoScenario: 'morning',
+  setDemoScenario: (scenario: DemoScenario) => set((state) => {
+    const raw = state.rawAllTasks.length > 0 ? state.rawAllTasks : state.allTasks;
+    const overridden = applyScenarioToTasks(raw, scenario);
+    return {
+      demoScenario: scenario,
+      rawAllTasks: raw,
+      allTasks: overridden,
+    };
+  }),
   memos: (() => {
     try {
       const saved = localStorage.getItem('timeline_memos');
@@ -538,17 +716,26 @@ export const useTimelineStore = create<TimelineStore>((set, get) => ({
     }));
   },
   addTask: (task) => set((state) => {
-    const exists = state.allTasks.some(t => t.task_id === task.task_id);
-    if (exists) {
-      return {
-        allTasks: state.allTasks.map(t => t.task_id === task.task_id ? { ...t, ...task } : t)
-      };
-    }
+    const raw = state.rawAllTasks.length > 0 ? state.rawAllTasks : state.allTasks;
+    const exists = raw.some(t => t.task_id === task.task_id);
+    const newRaw = exists
+      ? raw.map(t => t.task_id === task.task_id ? { ...t, ...task } : t)
+      : [task, ...raw];
+    const isDemo = typeof window !== 'undefined' && sessionStorage.getItem('is_demo_presenter_session') === 'true';
+    const overridden = isDemo ? applyScenarioToTasks(newRaw, state.demoScenario) : newRaw;
     return {
-      allTasks: [task, ...state.allTasks]
+      rawAllTasks: newRaw,
+      allTasks: overridden,
     };
   }),
-  setTasks: (tasks) => set({ allTasks: tasks }),
+  setTasks: (tasks) => set((state) => {
+    const isDemo = typeof window !== 'undefined' && sessionStorage.getItem('is_demo_presenter_session') === 'true';
+    const overridden = isDemo ? applyScenarioToTasks(tasks, state.demoScenario) : tasks;
+    return {
+      rawAllTasks: tasks,
+      allTasks: overridden,
+    };
+  }),
   setMemos: (memos) => set({ memos }),
   setCurrentUser: (user) => {
     const userId = user ? (user.nurse_id || user.staff_id || user.email || '').trim() : '';
@@ -669,17 +856,41 @@ export const useTimelineStore = create<TimelineStore>((set, get) => ({
   updateNursePosition: (nurseId, x_percent, y_percent) => set((state) => {
     const rawTarget = String(nurseId || '').trim();
     const cleanTarget = rawTarget.replace(/^nurse-/, '');
+
+    let found = false;
+    const updatedNurses = state.nurses.map((n) => {
+      const rawNId = String(n.nurse_id || '').trim();
+      const cleanNId = rawNId.replace(/^nurse-/, '');
+      const isMatch =
+        rawNId === rawTarget ||
+        cleanNId === cleanTarget ||
+        (rawTarget !== '' && (rawNId === rawTarget || cleanNId === rawTarget)) ||
+        (Boolean(n.name) && Boolean(nurseId) && n.name === nurseId) ||
+        (n.name === 'デモ１（メンバー）');
+      if (isMatch) {
+        found = true;
+        return { ...n, x_percent, y_percent };
+      }
+      return n;
+    });
+
+    if (!found) {
+      const currentUserName = state.currentUser?.name || 'デモ１（メンバー）';
+      updatedNurses.push({
+        nurse_id: rawTarget || 'demo-nurse-01',
+        name: currentUserName,
+        team: state.currentUser?.team || 'Aチーム',
+        color: '#2563eb',
+        role: 'メンバー',
+        is_leader: false,
+        x_percent,
+        y_percent,
+        is_logged_in: true,
+      });
+    }
+
     return {
-      nurses: state.nurses.map((n) => {
-        const rawNId = String(n.nurse_id || '').trim();
-        const cleanNId = rawNId.replace(/^nurse-/, '');
-        const isMatch =
-          rawNId === rawTarget ||
-          cleanNId === cleanTarget ||
-          (rawTarget !== '' && (rawNId === rawTarget || cleanNId === rawTarget)) ||
-          (Boolean(n.name) && Boolean(nurseId) && n.name === nurseId);
-        return isMatch ? { ...n, x_percent, y_percent } : n;
-      }),
+      nurses: updatedNurses,
     };
   }),
   setLoading: (loading) => set({ loading }),

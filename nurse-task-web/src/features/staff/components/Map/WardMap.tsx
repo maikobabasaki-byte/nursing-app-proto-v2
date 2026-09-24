@@ -30,6 +30,49 @@ const BED_W = 135;
 const BED_H = 90;
 const HEADER_H = 35;
 
+// 💡 タスクが該当の患者に紐づくかを柔軟に判定するヘルパー関数
+export const isTaskForPatient = (task: any, patient: Patient): boolean => {
+  if (!task || !patient) return false;
+  if (task.status === 'deleted' || task.is_deleted === true) return false;
+
+  const tPatientId = String(task.patient_id || '').trim().toLowerCase();
+  const pPatientId = String(patient.patient_id || '').trim().toLowerCase();
+
+  const tRoomId = String(task.room_id || '').trim().toLowerCase();
+  const pRoomId = String(patient.room_id || '').trim().toLowerCase();
+
+  // 1. 直接/正規化患者IDの一致判定 (例: "P218" === "P218", "p-218" === "p218")
+  if (tPatientId !== '' && (
+    tPatientId === pPatientId || 
+    tPatientId.replace(/-/g, '') === pPatientId.replace(/-/g, '')
+  )) {
+    return true;
+  }
+
+  // 2. 患者名の一致判定 (空白除去後の比較)
+  const tName = String(task.patient_name || '').replace(/[\s　]+/g, '');
+  const pName = String(patient.name || '').replace(/[\s　]+/g, '');
+  if (tName !== '' && pName !== '' && (tName === pName || tName.includes(pName) || pName.includes(tName))) {
+    return true;
+  }
+
+  // 3. 病室IDの一致判定
+  if (tRoomId !== '' && pRoomId !== '' && (tRoomId === pRoomId || tRoomId.replace(/号室?/, '') === pRoomId.replace(/号室?/, ''))) {
+    // 患者個別IDがなく、部屋単位タスク（205号室など）として設定されている場合
+    if (!tPatientId || tPatientId === tRoomId || tPatientId === pRoomId || tPatientId === '205' || tPatientId === '206') {
+      return true;
+    }
+    // 数値部分の一致判定
+    const tDigits = tPatientId.replace(/\D/g, '');
+    const pDigits = pPatientId.replace(/\D/g, '');
+    if (tDigits !== '' && pDigits !== '' && tDigits === pDigits) {
+      return true;
+    }
+  }
+
+  return false;
+};
+
 export default function WardMap({ 
   rooms, 
   facilities, 
@@ -80,7 +123,7 @@ export default function WardMap({
 
   // 💡 患者タスク一覧ポップアップを画面（ビューポート）内に完全に収めるクランプ表示関数
   const openPatientMenu = (patient: Patient, rawX: number, rawY: number) => {
-    const relatedTasks = allTasks.filter(t => t.patient_id === patient.patient_id);
+    const relatedTasks = allTasks.filter(t => isTaskForPatient(t, patient));
     
     // ポップアップの想定サイズ (幅: 約250px, 高さ: タイトル+タスク数に応じた動的高さ)
     const POPUP_WIDTH = 250;
@@ -357,8 +400,11 @@ export default function WardMap({
                 const textX = bedX + BED_W / 2;
                 const textY = bedTopY + BED_H / 2;
 
-                const hasSos = (patientSosList && patientSosList.some(p => p.patient_id === patient.patient_id)) ||
-                               allTasks.some(t => t.patient_id === patient.patient_id && t.is_sos === true);
+                const hasSos = (patientSosList && patientSosList.some(p => 
+                  p.patient_id === patient.patient_id || 
+                  p.room_id === patient.room_id ||
+                  (p.patient_name && patient.name && p.patient_name.replace(/[\s　]+/g, '') === patient.name.replace(/[\s号室　]+/g, ''))
+                )) || allTasks.some(t => isTaskForPatient(t, patient) && t.is_sos === true);
 
                 let cardFill = '#ffffff';
                 let cardStroke = '#cbd5e1';

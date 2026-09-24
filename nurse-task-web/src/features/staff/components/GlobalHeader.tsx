@@ -1,10 +1,13 @@
+import { useState, useEffect } from 'react';
 import { useTimer } from "../../../hooks/useTimer";
 import { useUserName } from '../../../hooks/useUserName';
 import { useLogout } from '../../../hooks/useLogout';
 import { useTimelineStore } from '../../../stores/useTimelineStore';
 import { checkIsLeader } from '../../../utils/userUtils';
-import { getJSTDateString } from '../../../utils/dateUtils';
+import { getJSTDateString, recordLoginDate } from '../../../utils/dateUtils';
 import { useTheme, type AppTheme } from '../../../hooks/useTheme';
+import CalendarModal from './CalendarModal';
+import DemoScenarioBar from './DemoScenarioBar';
 
 import type { NavigationScreen } from './MainLayout';
 
@@ -65,6 +68,13 @@ export default function GlobalHeader({ currentPage, onNavigate}: GlobalHeaderPro
   const targetUserId = useTimelineStore((state) => state.targetUserId);
   const setTargetUserId = useTimelineStore((state) => state.setTargetUserId);
 
+  const [isCalendarOpen, setIsCalendarOpen] = useState(false);
+
+  // マウント時に本日のログイン実績を記憶
+  useEffect(() => {
+    recordLoginDate();
+  }, []);
+
   const handlePrevDay = () => {
     const d = new Date(selectedDate || new Date());
     d.setDate(d.getDate() - 1);
@@ -96,30 +106,38 @@ export default function GlobalHeader({ currentPage, onNavigate}: GlobalHeaderPro
 
   return (
     <header
-      className="flex justify-between items-center px-3 py-1.5 gap-2 border-b w-full max-w-full shadow-md transition-colors duration-300 shrink-0 tutorial-header min-w-0"
+      className="flex flex-nowrap items-center justify-between px-3 py-1.5 gap-3 w-full max-w-full shadow-md transition-colors duration-300 shrink-0 tutorial-header min-w-0 overflow-x-auto whitespace-nowrap"
       style={{ backgroundColor: currentConfig.mainColor }}
     >
-      <div className="flex flex-col lg:flex-row items-start lg:items-center gap-1.5 lg:gap-2">
-        <h1 className="cursor-pointer flex items-center" onClick={handleLogoClick}>
-          <img src="/app/icon_b/local_hospital_48dp.png" alt="NurseFlow Dashboard" className="w-8 h-8 inline mr-2" />
-          <span className="font-bold text-lg transition-colors duration-300" style={{ color: currentConfig.accentColor }}>
+      <div className="flex flex-nowrap items-center gap-2 shrink-0">
+        {/* アプリロゴ・タイトル */}
+        <h1 className="cursor-pointer flex items-center shrink-0 mr-1" onClick={handleLogoClick}>
+          <img src="/app/icon_b/local_hospital_48dp.png" alt="NurseFlow Dashboard" className="w-8 h-8 inline mr-1.5" />
+          <span className="font-bold text-lg transition-colors duration-300 whitespace-nowrap" style={{ color: currentConfig.accentColor }}>
             NurseFlowApp
           </span>
           {currentPage === 'personalDashboard' && (
-            <span className="hidden md:inline-flex items-center gap-1 bg-sky-100 text-sky-900 border border-sky-300 font-extrabold text-xs px-2.5 py-1 rounded-xl shadow-2xs ml-2">
-              <span>📋</span> 個人パフォーマンス & タイムラインダッシュボード
+            <span className="hidden md:inline-flex items-center gap-1 bg-sky-100 text-sky-900 border border-sky-300 font-extrabold text-xs px-2.5 py-1 rounded-xl shadow-2xs ml-2 whitespace-nowrap">
+              <span>📋</span> 個人パフォーマンスダッシュボード
             </span>
           )}
         </h1>
 
-        {/* 📅 タブレット・スマホ対応：日付選択とナースコール対応の縦並び配置エリア */}
-        <div className="flex flex-col lg:flex-row items-start lg:items-center gap-1">
-          <div className="flex items-center gap-1 flex-wrap">
+        {/* 📅 コントロール群 (日付選択・デモシナリオ 縦並び) */}
+        <div className="flex flex-nowrap items-center gap-2 shrink-0">
+          <div className="flex flex-col gap-1 justify-center shrink-0">
             {/* 📅 日付選択＆過去履歴切り替えコントロール */}
-            <div className="flex items-center gap-1 bg-indigo-50 border border-indigo-200 p-1 rounded-xl shadow-2xs text-xs">
-              <span className="text-[10px] font-extrabold text-indigo-900 px-1 flex items-center gap-1">
-                <span>📅</span> 日付指定:
-              </span>
+            <div className="flex items-center gap-1 bg-indigo-50 border border-indigo-200 p-0.5 rounded-xl shadow-2xs text-xs shrink-0">
+              <button
+                type="button"
+                onClick={() => setIsCalendarOpen(true)}
+                className="!px-2 !py-0.5 !bg-indigo-600 hover:!bg-indigo-700 !text-white !font-bold !rounded-md !shadow-2xs !cursor-pointer flex items-center gap-1 whitespace-nowrap"
+                title="ログイン実績のある日をハイライト表示するカレンダーを開きます"
+              >
+                <span>📅</span>
+                <span>カレンダー</span>
+              </button>
+
               <button
                 type="button"
                 onClick={handlePrevDay}
@@ -145,43 +163,46 @@ export default function GlobalHeader({ currentPage, onNavigate}: GlobalHeaderPro
               <button
                 type="button"
                 onClick={handleToday}
-                className="!px-2 !py-0.5 !bg-indigo-600 hover:!bg-indigo-700 !text-white !font-black !text-[11px] !rounded-md !shadow-2xs !cursor-pointer"
+                className="!px-2 !py-0.5 !bg-indigo-600 hover:!bg-indigo-700 !text-white !font-black !text-[11px] !rounded-md !shadow-2xs !cursor-pointer whitespace-nowrap"
                 title="本日に戻る"
               >
                 今日
               </button>
             </div>
 
-            {/* 👩‍⚕️ 表示対象スタッフ選択（ダッシュボード閲覧時 & 管理者権限） */}
-            {currentPage === 'personalDashboard' && (isLeader || currentUser?.role === 'admin') && (
-              <div className="flex items-center gap-1 bg-amber-50 border border-amber-200 px-2 py-1 rounded-xl shadow-2xs text-xs">
-                <label htmlFor="staff-select-header" className="text-[11px] font-extrabold text-amber-950 flex items-center gap-1 shrink-0">
-                  <span>👩‍⚕️</span> 対象:
-                </label>
-                <select
-                  id="staff-select-header"
-                  value={targetUserId}
-                  onChange={(e) => setTargetUserId(e.target.value)}
-                  className="!bg-white !text-slate-800 !font-extrabold !text-xs !px-2 !py-0.5 !rounded-lg !border !border-amber-300 !shadow-2xs !cursor-pointer focus:!outline-none focus:!ring-2 focus:!ring-amber-500"
-                >
-                  <option value="N001">N001: 師長 (山田 師長)</option>
-                  <option value="N002">N002: Satou Yui (佐藤 由衣)</option>
-                  <option value="N003">N003: Suzuki Yuka (鈴木 優花)</option>
-                </select>
-              </div>
+            {/* 🎬 デモシナリオ切り替えバー (面接デモプレゼン時のみ表示) */}
+            {typeof window !== 'undefined' && sessionStorage.getItem('is_demo_presenter_session') === 'true' && (
+              <DemoScenarioBar />
             )}
-
-            {/* 🔒 過去履歴の閲覧専用（ReadOnly）警告バッジ */}
-            {isReadOnly && (
-              <span className="bg-amber-100 text-amber-900 border border-amber-300 font-black text-[11px] px-1.5 py-0.5 rounded-md flex items-center gap-1 animate-pulse">
-                🔒 過去履歴閲覧モード (編集不可)
-              </span>
-            )}
-
           </div>
 
-          
-          {/* 📞 タブレット・スマホ等で日付選択の下に縦並び表示されるナースコール対応ボタン */}
+          {/* 👩‍⚕️ 表示対象スタッフ選択（ダッシュボード閲覧時 & 管理者権限） */}
+          {currentPage === 'personalDashboard' && (isLeader || currentUser?.role === 'admin') && (
+            <div className="flex items-center gap-1 bg-amber-50 border border-amber-200 px-2 py-1 rounded-xl shadow-2xs text-xs shrink-0">
+              <label htmlFor="staff-select-header" className="text-[11px] font-extrabold text-amber-950 flex items-center gap-1 shrink-0">
+                <span>👩‍⚕️</span> 対象:
+              </label>
+              <select
+                id="staff-select-header"
+                value={targetUserId}
+                onChange={(e) => setTargetUserId(e.target.value)}
+                className="!bg-white !text-slate-800 !font-extrabold !text-xs !px-2 !py-0.5 !rounded-lg !border !border-amber-300 !shadow-2xs !cursor-pointer focus:!outline-none focus:!ring-2 focus:!ring-amber-500"
+              >
+                <option value="N001">N001: 師長 (山田 師長)</option>
+                <option value="N002">N002: Satou Yui (佐藤 由衣)</option>
+                <option value="N003">N003: Suzuki Yuka (鈴木 優花)</option>
+              </select>
+            </div>
+          )}
+
+          {/* 🔒 過去履歴の閲覧専用（ReadOnly）警告バッジ */}
+          {isReadOnly && (
+            <span className="bg-amber-100 text-amber-900 border border-amber-300 font-black text-[11px] px-1.5 py-0.5 rounded-md flex items-center gap-1 animate-pulse shrink-0">
+              🔒 過去履歴閲覧モード (編集不可)
+            </span>
+          )}
+
+          {/* 📞 ナースコール対応ボタン */}
           {!isReadOnly && (
             <button
               id="tutorial-nurse-call"
@@ -192,7 +213,7 @@ export default function GlobalHeader({ currentPage, onNavigate}: GlobalHeaderPro
                   sosReason: 'ナースコール緊急割り込み対応',
                 });
               }}
-              className="!bg-rose-600 hover:!bg-rose-700 !text-white !font-black !text-xs !px-2.5 !py-0.5 !rounded-full !shadow-md !transition-all !cursor-pointer !flex !items-center !gap-1 !border-2 !border-rose-300 !whitespace-nowrap tutorial-nurse-call"
+              className="!bg-rose-600 hover:!bg-rose-700 !text-white !font-black !text-xs !px-2.5 !py-1 !rounded-full !shadow-md !transition-all !cursor-pointer !flex !items-center !gap-1 !border-2 !border-rose-300 !whitespace-nowrap shrink-0 tutorial-nurse-call"
               title="実施中タスクを自動中断し、現在時刻でナースコール割り込み対応実績を作成します"
             >
               <span>ナースコール対応</span>
@@ -204,7 +225,7 @@ export default function GlobalHeader({ currentPage, onNavigate}: GlobalHeaderPro
       {/* 💻 デスクトップ版ヘッダーナビゲーション (lg以上で表示) */}
       {isExtendedView ? (
         /* 🚀 拡張版ダッシュボード表示時：専用ヘッダーナビ（「タスク管理画面に戻る」ボタン付き） */
-        <nav className="hidden lg:flex items-center gap-3">
+        <nav className="hidden lg:flex items-center gap-3 shrink-0">
           {/* 🔙 タスク管理画面に戻る ボタン */}
           <button
             id="nav-back-to-task-app"
@@ -221,7 +242,7 @@ export default function GlobalHeader({ currentPage, onNavigate}: GlobalHeaderPro
         </nav>
       ) : (
         /* 🩺 標準タスク管理アプリ表示時：タスク管理専用ヘッダーナビ */
-        <nav className={`hidden lg:flex ${isLeader ? "w-96" : "w-72"}`}>
+        <nav className={`hidden lg:flex shrink-0 ${isLeader ? "w-96" : "w-72"}`}>
           <ul className="flex justify-between items-center text-center text-xs w-full">
             {/* 👥 患者マスター */}
             <li id="tutorial-nav-patient" className="cursor-pointer flex flex-col items-center justify-center" onClick={() => onNavigate('patientMaster')}>
@@ -326,6 +347,14 @@ export default function GlobalHeader({ currentPage, onNavigate}: GlobalHeaderPro
           </div>
         </div>
       </div>
+
+      {/* 📅 過去履歴ログインカレンダーモーダル */}
+      <CalendarModal
+        isOpen={isCalendarOpen}
+        onClose={() => setIsCalendarOpen(false)}
+        selectedDate={selectedDate}
+        onSelectDate={(date) => setSelectedDate(date)}
+      />
     </header>
   );
 }

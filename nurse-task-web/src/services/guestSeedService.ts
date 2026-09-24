@@ -43,12 +43,17 @@ export const seedGuestData = async (guestUid: string, role: 'leader' | 'member' 
     const localTasksRaw: any[] = Array.isArray(tasksRes) ? tasksRes : [];
     const localPatientsRaw: any[] = Array.isArray(patientsRes) ? patientsRes : [];
 
-    // 2. フィルタリング (メンバーは202/203号室限定、リーダーは全患者)
+    const isDemoPresenterSession = typeof window !== 'undefined' && sessionStorage.getItem('is_demo_presenter_session') === 'true';
+
+    // 2. フィルタリング (デモアカウントは205/206号室、標準ゲストメンバーは202/203号室、リーダーは全患者)
     const filteredTasks = localTasksRaw.filter((t: any) => {
       if (!isValidGASTask(t)) return false;
       const room = String(t.room_id || t.room || '').trim();
       if (isLeaderRole) {
         return true;
+      }
+      if (isDemoPresenterSession) {
+        return room === '205' || room === '206' || room.includes('205') || room.includes('206');
       }
       return room === '202' || room === '203' || room.includes('202') || room.includes('203');
     });

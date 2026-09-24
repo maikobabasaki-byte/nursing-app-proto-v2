@@ -30,11 +30,14 @@ export const isTimeInSlot = (timeStr?: string, slotTimeStr?: string, modeMinutes
 };
 
 /**
- * チーム名の表記揺れ ("A", "Aチーム", "A-team", "teamA") を統一比較用の文字列に正規化する
+ * チーム名の表記揺れ ("A", "Aチーム", "A-team", "teamA", "全体") を統一比較用の文字列に正規化する
  */
 export const normalizeTeamName = (teamName?: string): string => {
   if (!teamName) return "";
   const cleaned = String(teamName).toUpperCase().trim();
+  if (cleaned.includes('全体') || cleaned.includes('ALL') || cleaned === '全' || cleaned.includes('病棟')) {
+    return '全体';
+  }
   const match = cleaned.match(/([A-Z0-9]+)/);
   return match ? match[1] : cleaned;
 };
@@ -49,11 +52,11 @@ export const isTaskInLeaderTeam = (
 ): boolean => {
   if (!leaderTeam) return true;
   const normalizedLeaderTeam = normalizeTeamName(leaderTeam);
-  if (!normalizedLeaderTeam) return true;
+  if (!normalizedLeaderTeam || normalizedLeaderTeam === '全体') return true;
 
   // 1. タスク自体のチーム属性チェック
   const normalizedTaskTeam = normalizeTeamName(task.team);
-  if (normalizedTaskTeam !== '' && normalizedTaskTeam !== normalizedLeaderTeam) {
+  if (normalizedTaskTeam !== '' && normalizedTaskTeam !== '全体' && normalizedTaskTeam !== normalizedLeaderTeam) {
     return false;
   }
 
@@ -72,7 +75,7 @@ export const isTaskInLeaderTeam = (
 
     if (assignedNurse && assignedNurse.team) {
       const normalizedNurseTeam = normalizeTeamName(assignedNurse.team);
-      if (normalizedNurseTeam !== '' && normalizedNurseTeam !== normalizedLeaderTeam) {
+      if (normalizedNurseTeam !== '' && normalizedNurseTeam !== '全体' && normalizedNurseTeam !== normalizedLeaderTeam) {
         return false;
       }
     }

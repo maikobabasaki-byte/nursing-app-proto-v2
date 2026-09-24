@@ -16,10 +16,18 @@ import OvercrowdedHeatmap from '../components/OvercrowdedHeatmap';
 import type { TrendData } from '../components/TrendLineChart';
 import type { BlockerData } from '../components/BlockerPieChart';
 import type { HeatmapDay, HeatmapHour, SelectedSlot } from '../components/OvercrowdedHeatmap';
-import type { Patient, TaskDocument } from '../../../types/types';
 
 // モックデータのJSONファイルインポート
 import adminDashboardMock from '../data/adminDashboardMock.json';
+
+// --- 介入履歴レコードの型定義 ---
+export interface ManagementRecord {
+  id: string;
+  slotLabel: string;
+  timestamp: string;
+  content: string;
+  isAiBased?: boolean;
+}
 
 // --- 1. 重み付けマスタの定義（コンポーネントの外に配置） ---
 const TASK_BASE_TIME: Record<string, number> = {
@@ -199,7 +207,7 @@ export default function AdminDashboard() {
 
   // 選択された時間帯スロットの状態 { day: "月", hour: "10時" } | null
   const [selectedSlot, setSelectedSlot] = useState<SelectedSlot | null>(null);
-  // 1. 要件: 選択状態の管理 (State) - label（曜日または部屋番号）、time（時間帯）、gapIndex（実質負荷）
+  // 選択状態の管理 (State) - label（曜日または部屋番号）、time（時間帯）、gapIndex（実質負荷）
   const [selectedCell, setSelectedCell] = useState<{ label: string; time: string; gapIndex: number } | null>(null);
   // 選択されたAIアクション提案（ヒント）の状態
   const [selectedHint, setSelectedHint] = useState<Hint | null>(null);
@@ -209,8 +217,35 @@ export default function AdminDashboard() {
   const [expandedSection, setExpandedSection] = useState<
     'trend' | 'heatmap' | 'blocker' | 'hints' | null
   >(null);
-  // 師長の対応メモ・実行記録テキストの状態
+  // AIモーダル内の師長の対応メモ・実行記録テキストの状態
   const [actionMemo, setActionMemo] = useState<string>('');
+  // 新設：師長のマネジメント介入記録（直接入力テキストエリア）
+  const [directInputMemo, setDirectInputMemo] = useState<string>('');
+  // 新設：本日の介入・マネジメント対応履歴（タイムライン） State
+  const [managementRecords, setManagementRecords] = useState<ManagementRecord[]>([
+    {
+      id: 'mock-1',
+      slotLabel: '月曜 10:00枠',
+      timestamp: '10:15',
+      content: '田中さんに203室のヘルプを指示（検体採取サポート）',
+      isAiBased: true,
+    },
+    {
+      id: 'mock-2',
+      slotLabel: '月曜 10:00枠',
+      timestamp: '10:30',
+      content: 'AさんとBさんの担当部屋を一部入れ替え（201号室↔205号室のADL負荷分散）',
+      isAiBased: false,
+    },
+    {
+      id: 'mock-3',
+      slotLabel: '水曜 14:00枠',
+      timestamp: '14:10',
+      content: 'フリー担当ナース（佐藤）を全介助清拭の補助に緊急配置',
+      isAiBased: true,
+    },
+  ]);
+
   // 保存中のローディング状態
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   // トレンドデータ取得中のローディング状態
@@ -218,9 +253,9 @@ export default function AdminDashboard() {
   // ヒートマップ計算中のローディング状態
   const [isLoadingHeatmap, setIsLoadingHeatmap] = useState<boolean>(true);
 
-  // 1. 要件: ヒートマップ表示切り替え State ('day' | 'room')
+  // ヒートマップ表示切り替え State ('day' | 'room')
   const [heatmapView, setHeatmapView] = useState<'day' | 'room'>('day');
-  // 1. 要件: それぞれの集計結果を保持する State
+  // それぞれの集計結果を保持する State
   const [heatmapDataDay, setHeatmapDataDay] = useState<HeatmapDay[]>([]);
   const [heatmapDataRoom, setHeatmapDataRoom] = useState<HeatmapDay[]>([]);
 
@@ -286,7 +321,7 @@ export default function AdminDashboard() {
   }, [displayDate]);
 
   /**
-   * 2. 要件: 1回の通信で2パターンの集計を行う (useEffect内)
+   * 1回の通信で2パターンの集計を行う (useEffect内)
    * 「曜日×時間帯」および「部屋番号×時間帯」を同時に集計・構築
    */
   useEffect(() => {
@@ -555,8 +590,6 @@ export default function AdminDashboard() {
           setHeatmapDataDay(generatedDayData);
           setHeatmapDataRoom(generatedRoomData);
         }
-        console.log("計算完了！ヒートマップ（曜日別・部屋別）の生成に成功しました");
-
       } catch (error) {
         console.error("ヒートマップ計算フォールバック処理:", error);
         if (isMounted) {
@@ -595,8 +628,7 @@ export default function AdminDashboard() {
   };
 
   /**
-   * 保存ロジック (handleApplyAction)
-   * target_date に displayDate をセットして Firestore (admin_interventions) に保存
+   * AIモーダルからの保存ロジック (handleApplyAction)
    */
   const handleApplyAction = async () => {
     if (!selectedHint || isSubmitting) return;
@@ -613,6 +645,7 @@ export default function AdminDashboard() {
 
       const noteText = actionMemo.trim() ? actionMemo.trim() : selectedHint.title;
 
+      // チャートデータの更新
       setChartData((prevData) => {
         if (!prevData) return prevData;
         const newChartData = [...prevData];
@@ -643,6 +676,24 @@ export default function AdminDashboard() {
         return newChartData;
       });
 
+      // タイムライン対応履歴（managementRecords）にも追加
+      const now = new Date();
+      const timeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+      const currentSlotLabel = selectedCell
+        ? `${selectedCell.label}曜 ${selectedCell.time}枠`
+        : selectedSlot
+        ? `${selectedSlot.day}曜 ${selectedSlot.hour}枠`
+        : '全体';
+
+      const newMgmtRecord: ManagementRecord = {
+        id: `ai-${Date.now()}`,
+        slotLabel: currentSlotLabel,
+        timestamp: timeStr,
+        content: `【AI提案適用】${selectedHint.title}${actionMemo.trim() ? ` - ${actionMemo.trim()}` : ''}`,
+        isAiBased: true,
+      };
+      setManagementRecords((prev) => [newMgmtRecord, ...prev]);
+
       alert('介入記録をデータベースに保存しました。');
       handleCloseModal();
     } catch (error) {
@@ -654,8 +705,67 @@ export default function AdminDashboard() {
   };
 
   /**
-   * 2. 要件: ヒートマップのクリックイベントと選択UI
-   * セルクリック時に label, time, gapIndex を setSelectedCell / setSelectedSlot にセット（トグル対応）
+   * 師長直接入力フォームからの「対応を記録する」ハンドラー
+   */
+  const handleSaveDirectIntervention = async () => {
+    if (!directInputMemo.trim()) return;
+
+    const currentSlotLabel = selectedCell
+      ? `${selectedCell.label}曜 ${selectedCell.time}枠`
+      : selectedSlot
+      ? `${selectedSlot.day}曜 ${selectedSlot.hour}枠`
+      : '全体';
+
+    const now = new Date();
+    const timeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+
+    const newRecord: ManagementRecord = {
+      id: `record-${Date.now()}`,
+      slotLabel: currentSlotLabel,
+      timestamp: timeStr,
+      content: directInputMemo.trim(),
+      isAiBased: false,
+    };
+
+    setManagementRecords((prev) => [newRecord, ...prev]);
+
+    // Firestoreへの非同期保存
+    try {
+      await addDoc(collection(db, 'admin_interventions'), {
+        action_title: '師長直接介入',
+        memo: `[${currentSlotLabel}] ${directInputMemo.trim()}`,
+        target_date: displayDate,
+        ward_id: shiftInfo.wardId,
+        created_at: serverTimestamp(),
+      });
+
+      setChartData((prevData) => {
+        if (!prevData) return prevData;
+        const newChartData = [...prevData];
+        const targetIndex = findClosestIndex(newChartData, displayDate, displayDate);
+
+        if (targetIndex !== -1) {
+          const existingNote = newChartData[targetIndex].interventionNote;
+          newChartData[targetIndex] = {
+            ...newChartData[targetIndex],
+            hasIntervention: true,
+            interventionNote: existingNote
+              ? `${existingNote} / ${directInputMemo.trim()}`
+              : directInputMemo.trim(),
+          };
+        }
+        return newChartData;
+      });
+    } catch (e) {
+      console.warn('Firestoreへの直接介入保存フォールバック:', e);
+    }
+
+    // 入力リセット
+    setDirectInputMemo('');
+  };
+
+  /**
+   * ヒートマップのクリックイベントと選択UI
    */
   const handleCellClick = (day: string, hour: string, intensity?: number) => {
     if (
@@ -685,13 +795,12 @@ export default function AdminDashboard() {
   };
 
   /**
-   * 3. 要件: 右側パネル（遅延要因ドーナツグラフ）の連動
-   * selectedCell が null の場合はデフォルト「直近1週間平均」、選択時は gapIndex に応じてデータ構成を動的変更
+   * 右側パネル（遅延要因ドーナツグラフ）の連動
    */
   const activeBlockerData: BlockerData[] = selectedCell
     ? selectedCell.gapIndex >= 100
       ? [
-          { name: '構造的競合', value: 80, color: '#EF4444' }, // 100以上の場合は「構造的競合」が80%
+          { name: '構造的競合', value: 80, color: '#EF4444' },
           { name: '他律的要因', value: 12, color: '#F59E0B' },
           { name: '自律的要因', value: 8, color: '#3B82F6' },
         ]
@@ -715,8 +824,7 @@ export default function AdminDashboard() {
     : adminDashboardMock.blockerData;
 
   /**
-   * 4. 要件: 右側パネル（AIアクション提案）の連動
-   * selectedCell が null の場合はデフォルト提案、選択時は選択中の label / time / gapIndex を組み込んだ動的提案テキスト
+   * 右側パネル（AIアクション提案）の連動
    */
   const activeHints: Hint[] = selectedCell
     ? [
@@ -773,13 +881,32 @@ export default function AdminDashboard() {
   // 現在アクティブなヒートマップデータ
   const currentHeatmapData = heatmapView === 'day' ? heatmapDataDay : heatmapDataRoom;
 
+  // 選択枠に対応するレコードの抽出（選択枠がある場合は該当ラベルを含むもの優先）
+  const activeSlotLabel = selectedCell
+    ? `${selectedCell.label}曜 ${selectedCell.time}枠`
+    : selectedSlot
+    ? `${selectedSlot.day}曜 ${selectedSlot.hour}枠`
+    : null;
+
+  const currentSlotKeyword = selectedCell
+    ? selectedCell.label
+    : selectedSlot
+    ? selectedSlot.day
+    : '';
+
+  const displayedRecords = activeSlotLabel
+    ? managementRecords.filter(
+        (r) => r.slotLabel.includes(currentSlotKeyword) || r.slotLabel === '全体'
+      )
+    : managementRecords;
+
   return (
     <div
       className="!w-full !h-full !min-h-0 !overflow-y-auto !bg-slate-100 !font-sans !p-2 lg:!p-2 !flex !flex-col !relative !transition-all !duration-300"
       style={{ zoom: zoomScale }}
     >
       {/* 1. ダッシュボードヘッダー */}
-      <header className="shrink-0 mb-3 flex justify-between items-center border-b-2 border-slate-200 ">
+      <header className="shrink-0 mb-3 flex justify-between items-center border-b-2 border-slate-200 pb-2">
         <div>
           <h1 className="text-2xl lg:text-3xl font-extrabold text-slate-900 tracking-tight">
             業務改善・配置最適化ダッシュボード
@@ -809,7 +936,7 @@ export default function AdminDashboard() {
             <button
               type="button"
               onClick={() => setZoomScale(1.15)}
-              className={`!px-3 !py-1 !rounded-lg !text-1.1 !font-extrabold !transition-all !border ${
+              className={`!px-3 !py-1 !rounded-lg !text-xs !font-extrabold !transition-all !border ${
                 zoomScale === 1.15
                   ? '!bg-blue-700 !text-white !border-blue-800 !shadow-sm'
                   : '!bg-white !text-slate-700 !border-slate-300 hover:!bg-slate-100'
@@ -820,7 +947,7 @@ export default function AdminDashboard() {
             <button
               type="button"
               onClick={() => setZoomScale(1.3)}
-              className={`!px-3 !py-1 !rounded-lg !text-1.3 !font-extrabold !transition-all !border ${
+              className={`!px-3 !py-1 !rounded-lg !text-xs !font-extrabold !transition-all !border ${
                 zoomScale === 1.3
                   ? '!bg-blue-700 !text-white !border-blue-800 !shadow-sm'
                   : '!bg-white !text-slate-700 !border-slate-300 hover:!bg-slate-100'
@@ -881,7 +1008,7 @@ export default function AdminDashboard() {
                   )}
                 </h2>
 
-                {/* 3. 要件: 表示モード切替トグルボタン (曜日別 / 部屋別) */}
+                {/* 表示モード切替トグルボタン (曜日別 / 部屋別) */}
                 <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl border border-slate-300">
                   <button
                     type="button"
@@ -935,11 +1062,11 @@ export default function AdminDashboard() {
 
         </div>
 
-        {/* ================= 右側エリア (箱C + 箱D) ================= */}
-        <div className="lg:col-span-1 flex flex-col gap-4 min-h-0 h-full">
+        {/* ================= 右側エリア (箱C + 箱D + 箱E) ================= */}
+        <div className="lg:col-span-1 flex flex-col gap-4 min-h-0 h-full overflow-y-auto pr-1">
           
           {/* 箱C: 要因分析 */}
-          <section className="bg-white p-4 lg:p-5 rounded-2xl shadow-sm border border-slate-200 flex-1 min-h-0 flex flex-col relative">
+          <section className="bg-white p-4 lg:p-5 rounded-2xl shadow-sm border border-slate-200 shrink-0 flex flex-col relative min-h-[260px]">
             <div className="flex justify-between items-center mb-1 shrink-0">
               <h2 className="text-lg font-bold text-slate-900 flex items-center">
                 遅延要因 (Blocker)
@@ -974,7 +1101,7 @@ export default function AdminDashboard() {
               </div>
             </div>
 
-            <div className="flex-1 min-h-0 w-full">
+            <div className="flex-1 min-h-0 w-full h-[180px]">
               <BlockerPieChart data={activeBlockerData} />
             </div>
 
@@ -995,12 +1122,12 @@ export default function AdminDashboard() {
 
           {/* 箱D: AIインサイト（アクション検討提案） */}
           <section
-            className="p-4 lg:p-5 rounded-2xl shadow-sm border-2 flex-1 min-h-0 flex flex-col"
+            className="p-4 lg:p-5 rounded-2xl shadow-sm border-2 shrink-0 flex flex-col"
             style={{ backgroundColor: '#eff6ff', borderColor: '#93c5fd' }}
           >
             <div className="flex justify-between items-center mb-2.5 shrink-0">
-              <h2 className="text-lg font-extrabold text-blue-950 flex items-center">
-                <span className="mr-2 text-xl">🤖</span> アクション検討提案
+              <h2 className="text-base lg:text-lg font-extrabold text-blue-950 flex items-center">
+                <span className="mr-2 text-xl">🤖</span> AI アクション検討提案
               </h2>
               <div className="flex items-center gap-2">
                 {(selectedCell || selectedSlot) && (
@@ -1022,33 +1149,124 @@ export default function AdminDashboard() {
               </div>
             </div>
 
-            <div className="!flex-1 !min-h-0 !overflow-y-auto !space-y-3 !pr-1">
+            <div className="space-y-3">
               {activeHints.map((hint) => (
                 <button
                   key={hint.optionId}
                   type="button"
                   onClick={() => handleSelectHint(hint)}
                   style={{ backgroundColor: '#ffffff', borderColor: '#bfdbfe' }}
-                  className="!w-full !text-left !p-4 !rounded-xl !shadow-sm !border-2 !transition-all !duration-200 hover:!shadow-md hover:!border-blue-400 hover:!bg-blue-50/60 !cursor-pointer !group"
+                  className="!w-full !text-left !p-3.5 !rounded-xl !shadow-sm !border-2 !transition-all !duration-200 hover:!shadow-md hover:!border-blue-400 hover:!bg-blue-50/60 !cursor-pointer !group"
                 >
-                  <div className="font-bold text-blue-950 text-sm mb-1.5 group-hover:text-blue-800 flex items-center justify-between">
+                  <div className="font-bold text-blue-950 text-xs lg:text-sm mb-1 group-hover:text-blue-800 flex items-center justify-between">
                     <span>{hint.title}</span>
                     <span className="text-xs text-blue-700 font-bold group-hover:underline shrink-0 ml-2">
-                      詳細を確認 ➔
+                      詳細 ➔
                     </span>
                   </div>
                   <div className="text-xs text-slate-700 leading-relaxed font-medium">
                     {hint.description}
                   </div>
                   {hint.expectedImpact && (
-                    <div className="mt-2.5 pt-2 border-t border-blue-100 flex items-center justify-between">
-                      <span className="text-xs text-emerald-900 font-extrabold bg-emerald-100 px-2.5 py-1 rounded-md border border-emerald-300">
+                    <div className="mt-2 pt-1.5 border-t border-blue-100 flex items-center justify-between">
+                      <span className="text-[11px] text-emerald-900 font-extrabold bg-emerald-100 px-2 py-0.5 rounded-md border border-emerald-300">
                         ✨ 期待効果: {hint.expectedImpact}
                       </span>
                     </div>
                   )}
                 </button>
               ))}
+            </div>
+          </section>
+
+          {/* 箱E: マネジメント介入記録（対応入力・人間の決定事項） */}
+          <section className="bg-white p-4 lg:p-5 rounded-2xl shadow-sm border-2 border-slate-300 shrink-0 flex flex-col">
+            <div className="flex justify-between items-center mb-3">
+              <h2 className="text-base font-extrabold text-slate-900 flex items-center gap-2">
+                <span className="text-lg">👔</span> マネジメント介入記録（対応入力）
+              </h2>
+              <span className="text-[10px] font-black bg-slate-800 text-white px-2 py-0.5 rounded shadow-xs">
+                師長決定事項
+              </span>
+            </div>
+
+            {/* 選択中の枠ラベル表示 */}
+            {activeSlotLabel ? (
+              <div className="mb-2 text-xs font-bold text-blue-950 bg-blue-50 border border-blue-200 p-2 rounded-xl flex justify-between items-center">
+                <span>📍 対象枠: <strong>{activeSlotLabel}</strong></span>
+                <span className="text-[10px] text-blue-700 font-medium">連動保存</span>
+              </div>
+            ) : (
+              <div className="mb-2 text-xs font-medium text-slate-500 bg-slate-50 border border-slate-200 p-2 rounded-xl">
+                💡 選択枠なし（病棟全体への対応として記録）
+              </div>
+            )}
+
+            {/* 師長入力フォーム */}
+            <div className="space-y-2">
+              <textarea
+                rows={3}
+                value={directInputMemo}
+                onChange={(e) => setDirectInputMemo(e.target.value)}
+                placeholder="例: AIの提案通りフリー担当を配置 / AさんとBさんの担当部屋を一部入れ替え"
+                className="w-full p-3 text-xs lg:text-sm font-medium text-slate-800 bg-slate-50 border-2 border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-slate-700 focus:border-slate-700 focus:bg-white transition-all resize-none placeholder:text-slate-400"
+              />
+              <button
+                type="button"
+                onClick={handleSaveDirectIntervention}
+                disabled={!directInputMemo.trim()}
+                className={`w-full py-2.5 px-4 text-xs lg:text-sm font-extrabold text-white rounded-xl shadow-md border transition-all flex items-center justify-center gap-1.5 ${
+                  directInputMemo.trim()
+                    ? 'bg-slate-900 hover:bg-slate-800 border-slate-950 cursor-pointer active:scale-[0.99]'
+                    : 'bg-slate-300 border-slate-400 cursor-not-allowed opacity-60'
+                }`}
+              >
+                <span>✍️</span> 対応を記録する
+              </button>
+            </div>
+
+            {/* 本日の対応履歴 (タイムライン) */}
+            <div className="mt-4 pt-3 border-t border-slate-200">
+              <h3 className="text-xs font-extrabold text-slate-800 flex items-center justify-between mb-2">
+                <span className="flex items-center gap-1">
+                  <span>📜</span> 本日の対応履歴（タイムライン）
+                </span>
+                <span className="text-[10px] font-bold text-slate-600 bg-slate-100 px-2 py-0.5 rounded-full border border-slate-200">
+                  {displayedRecords.length} 件
+                </span>
+              </h3>
+
+              {displayedRecords.length === 0 ? (
+                <p className="text-xs text-slate-400 italic text-center py-3 bg-slate-50 rounded-xl border border-dashed border-slate-200">
+                  選択中枠の対応履歴はありません
+                </p>
+              ) : (
+                <div className="space-y-2 max-h-52 overflow-y-auto pr-1">
+                  {displayedRecords.map((rec) => (
+                    <div
+                      key={rec.id}
+                      className="p-2.5 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-xl transition-colors text-xs"
+                    >
+                      <div className="flex items-center justify-between font-extrabold text-slate-700 mb-1">
+                        <span className="text-[11px] text-slate-900 flex items-center gap-1">
+                          <span className="text-slate-400">🕒</span> {rec.timestamp}
+                          <span className="bg-slate-200 text-slate-800 px-1.5 py-0.2 rounded text-[10px] ml-1">
+                            {rec.slotLabel}
+                          </span>
+                        </span>
+                        {rec.isAiBased && (
+                          <span className="text-[9px] bg-blue-100 text-blue-900 border border-blue-300 px-1.5 py-0.2 rounded-full font-bold">
+                            🤖 AI提案適用
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-slate-800 font-medium leading-relaxed">
+                        {rec.content}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           </section>
 
@@ -1099,7 +1317,7 @@ export default function AdminDashboard() {
               {/* 4つの評価視点（効果・リスク・コスト・現場負担） */}
               <div className="!space-y-2.5">
                 <h4 className="!text-xs !font-extrabold !text-slate-500 !uppercase !tracking-wider !mb-1">
-                  ⚖️ アクション総合評価（4視点分析）
+                  秤 アクション総合評価（4視点分析）
                 </h4>
 
                 {/* 1. 効果エリア */}

@@ -36,6 +36,15 @@ export const timeStringToMinutes = (timeStr?: string): number => {
     const mm = parseInt(match[2], 10);
     return hh * 60 + mm;
   }
+  if (str.includes('午前') || str.includes('朝') || str.includes('AM') || str.includes('am')) {
+    return 600; // 10:00 (600 mins)
+  }
+  if (str.includes('午後') || str.includes('昼') || str.includes('PM') || str.includes('pm')) {
+    return 840; // 14:00 (840 mins)
+  }
+  if (str.includes('夕')) {
+    return 960; // 16:00
+  }
   return 9999;
 };
 
@@ -147,7 +156,7 @@ export const calculateExtendedTasksProgress = (
   let overallCompletedCount = 0;
 
   activeList.forEach((task) => {
-    const isCompleted = task.status === 'completed';
+    const isCompleted = task.status === 'completed' || task.status === 'record_complete' || task.status === 'no_record_completed';
     if (isCompleted) {
       overallCompletedCount += 1;
     }
@@ -195,14 +204,24 @@ export const calculateNurseProgressList = (
   nurses: (NurseMaster | NursePin)[],
   tasks: ExtendedTask[],
   assignments: Record<string, string[]> = {},
-  _targetMinutes: number = getCurrentTimeMinutes()
+  _targetMinutes: number = getCurrentTimeMinutes(),
+  fallbackPatientIds: string[] = []
 ): NurseProgressResult[] => {
   const activeTasks = (tasks || []).filter((t) => t.status !== 'deleted');
 
   return nurses.map((nurse) => {
+    const isDemoOrSelf = Boolean(
+      nurse.nurse_id?.toLowerCase().includes('demo') ||
+      nurse.nurse_id?.toLowerCase().includes('guest') ||
+      (nurse.name && (nurse.name.includes('デモ') || nurse.name.includes('ゲスト')))
+    );
+
+    // 各看護師が選択している患者IDリスト (assignments[nurse_id] または nurse.assigned_patients または デモ・本人用fallbackPatientIds)
     const nurseId = String(nurse.nurse_id || '');
-    // 各看護師が選択している患者IDリスト (assignments[nurse_id] または nurse.assigned_patients)
-    const rawMyPatientIds = assignments[nurseId] || nurse.assigned_patients || [];
+    let rawMyPatientIds = assignments[nurseId] || nurse.assigned_patients || [];
+    if ((!rawMyPatientIds || rawMyPatientIds.length === 0) && isDemoOrSelf && fallbackPatientIds && fallbackPatientIds.length > 0) {
+      rawMyPatientIds = fallbackPatientIds;
+    }
     
     // 患者ID文字列の正規化
     const myPatientIdSet = new Set(
@@ -240,7 +259,8 @@ export const calculateNurseProgressList = (
     let overallCompletedCount = 0;
 
     myTasks.forEach((task: ExtendedTask) => {
-      if (task.status === 'completed') {
+      const isCompleted = task.status === 'completed' || task.status === 'record_complete' || task.status === 'no_record_completed';
+      if (isCompleted) {
         overallCompletedCount += 1;
         completedOnTimeCount += 1;
       }
