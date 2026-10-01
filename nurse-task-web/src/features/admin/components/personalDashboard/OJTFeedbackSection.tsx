@@ -192,7 +192,7 @@ export const OJTFeedbackSection: React.FC<OJTFeedbackSectionProps> = ({
                   <button
                     type="button"
                     onClick={() => setIsEditingNurseForm(true)}
-                    className="text-xs font-extrabold text-rose-700 hover:text-rose-900 underline flex items-center gap-1 cursor-pointer"
+                    className="!text-xs !font-extrabold !text-rose-700 hover:!text-rose-900 !flex !items-center !gap-1 !cursor-pointer"
                   >
                     <span>✏️</span> 送信内容を修正する
                   </button>
