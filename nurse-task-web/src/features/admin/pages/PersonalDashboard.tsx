@@ -30,6 +30,8 @@ import type { ClinicalLadderData } from '../components/personalDashboard/Clinica
 import { SkillProficiencyChecklist } from '../components/personalDashboard/SkillProficiencyChecklist';
 import type { NursingSkillItem } from '../components/personalDashboard/SkillProficiencyChecklist';
 import { SKILL_LEVEL_DEFINITIONS } from '../components/personalDashboard/SkillProficiencyChecklist';
+import { OJTFeedbackSection } from '../components/personalDashboard/OJTFeedbackSection';
+import type { OJTFeedbackData, PreceptorKPTData } from '../components/personalDashboard/OJTFeedbackSection';
 
 // 後方互換性のための型・定数の再エクスポート
 export type * from '../types/personalDashboard';
@@ -336,6 +338,77 @@ export const PersonalDashboard: React.FC = () => {
       { id: 'sk7', name: '清拭・全身皮膚ケア', category: '清潔ケア', level: 5 },
     ],
   });
+
+  // 💌 新人→プリセプター サンクスカード (OJTフィードバック) State
+  const [ojtFeedbackMap, setOjtFeedbackMap] = useState<Record<string, OJTFeedbackData>>({
+    N001: {
+      clarityRating: 5,
+      psychologicalSafetyRating: 5,
+      thanksMessage: '本日は統括リーダー業務と並行してOJT指導ありがとうございました！アセスメントの考え方が大変勉強になりました。',
+      senderName: '田中 結衣',
+      senderAvatarEmoji: '🌱',
+      submittedAt: '16:15',
+      isSubmitted: true,
+    },
+    N002: {
+      clarityRating: 4,
+      psychologicalSafetyRating: 5,
+      thanksMessage: '本日は気管吸引と静脈採血のフォローありがとうございました！事前に重要なポイントを3つ教えていただいたおかげで落ち着いて実施できました。明日もよろしくお願いします！',
+      senderName: '田中 結衣',
+      senderAvatarEmoji: '🌱',
+      submittedAt: '16:30',
+      isSubmitted: true,
+    },
+    N003: {
+      clarityRating: 4,
+      psychologicalSafetyRating: 4,
+      thanksMessage: '本日は心電図装着とモニター設定のご指導ありがとうございました。大変分かりやすかったです！',
+      senderName: '鈴木 看護師',
+      senderAvatarEmoji: '🌱',
+      submittedAt: '16:45',
+      isSubmitted: true,
+    },
+  });
+
+  // 🎓 プリセプター（指導者）自身の教育KPT State
+  const [preceptorKptMap, setPreceptorKptMap] = useState<Record<string, PreceptorKPTData>>({
+    N001: {
+      keep: '病棟過密時に新人への指示を3ステップで具体的に伝えた。',
+      problem: '急患対応時、指導の振り返り時間を直後に確保できなかった。',
+      try: '明日は申し送り後の5分間で指導振り返りタイムを確保する。',
+      updatedAt: '16:20',
+    },
+    N002: {
+      keep: '処置前にチェックリストを用いて手順のポイントを3点共有できた。新人ナースが焦らず確認しながら動けていた。',
+      problem: '午後の急変タスクが入った際、申し送りの指示がやや早口になってしまい、質問を受け受ける余白が少なかった。',
+      try: '明日は処置開始前5分間の「質問タイム」をあらかじめタイムスケジュールに組み込み、心理的安全性を高める。',
+      updatedAt: '16:35',
+    },
+    N003: {
+      keep: '新人の自己判断を促すオープンクエスチョン形式で発問できた。',
+      problem: 'SOAP記録の事前添削に少し時間がかかってしまった。',
+      try: '明日は記録用テンプレートを事前に共有して入力時間を短縮する。',
+      updatedAt: '16:50',
+    },
+  });
+
+  // 💌 サンクスカード送信ハンドラー
+  const handleSubmitOJTFeedback = (newFeedback: OJTFeedbackData) => {
+    setOjtFeedbackMap((prev) => ({
+      ...prev,
+      [effectiveTargetId]: newFeedback,
+    }));
+    showToast(`💌 指導者へ本日のサンクスカード・フィードバックを送信しました！`);
+  };
+
+  // 🎓 指導者教育KPT保存ハンドラー
+  const handleSavePreceptorKPT = (newKpt: PreceptorKPTData) => {
+    setPreceptorKptMap((prev) => ({
+      ...prev,
+      [effectiveTargetId]: newKpt,
+    }));
+    showToast(`💾 指導スキルの教育用KPT（Keep / Problem / Try）を保存しました。`);
+  };
 
   const [isSaveSuccess, setIsSaveSuccess] = useState<boolean>(false);
   const [autoSaveStatus, setAutoSaveStatus] = useState<'saved' | 'saving' | 'idle'>('idle');
@@ -919,6 +992,19 @@ export const PersonalDashboard: React.FC = () => {
           ladderData={currentLadder}
           onUpdateCompetencyScore={handleUpdateCompetencyScore}
           onSaveFeedback={handleSaveLadderFeedback}
+        />
+
+        {/* ---------------- 4. OJT振り返り & サンクスカード ---------------- */}
+        {/* 🤝 プリセプター（指導者）成長のための「OJT振り返り＆フィードバック」セクション */}
+        <OJTFeedbackSection
+          currentUser={currentUser}
+          effectiveTargetId={effectiveTargetId}
+          preceptorName={currentStaff.reflection.preceptorName || '山田 師長'}
+          nurseName={currentStaff.user.name || '田中 結衣'}
+          ojtFeedback={ojtFeedbackMap[effectiveTargetId] || ojtFeedbackMap['N002']}
+          preceptorKpt={preceptorKptMap[effectiveTargetId] || preceptorKptMap['N002']}
+          onSubmitOJTFeedback={handleSubmitOJTFeedback}
+          onSavePreceptorKPT={handleSavePreceptorKPT}
         />
       </div>
     </div>
