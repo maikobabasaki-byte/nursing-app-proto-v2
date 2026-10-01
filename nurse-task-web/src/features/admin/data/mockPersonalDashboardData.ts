@@ -9,7 +9,7 @@ export const STAFF_PROFILES: Record<string, StaffProfile> = {
       name: '山田 師長',
       role: 'admin',
       rank: '師長・看護管理者',
-      ward: '3階西病棟（循環器・一般）',
+      ward: '2階病棟（一般）',
       avatarEmoji: '👩‍⚕️',
     },
     timeline: [
@@ -91,7 +91,7 @@ export const STAFF_PROFILES: Record<string, StaffProfile> = {
       name: '田中 結衣 (新人A)',
       role: 'nurse',
       rank: '新人ナース（1年目）',
-      ward: '3階西病棟（循環器・一般）',
+      ward: '2階病棟（一般）',
       avatarEmoji: '🌱',
     },
     timeline: [
@@ -233,11 +233,11 @@ export const STAFF_PROFILES: Record<string, StaffProfile> = {
   N003: {
     user: {
       id: 'nurse03',
-      name: '鈴木 看護師 (中堅B)',
-      role: 'nurse',
-      rank: '中堅ナース（4年目）',
-      ward: '3階西病棟（循環器・一般）',
-      avatarEmoji: '👨‍⚕️',
+      name: '鈴木 プリセプター',
+      role: 'preceptor',
+      rank: '指導看護師（4年目・プリセプター）',
+      ward: '2階病棟（一般）',
+      avatarEmoji: '👩‍⚕️',
     },
     timeline: [
       { id: 't1', time: '08:30', room: '306号室', patientName: '加藤 勇様', taskTitle: 'バイタル測定 & 血糖測定', status: 'completed', priority: 'high', estimatedMinutes: 15, taskType: 'patient' },

@@ -42,7 +42,7 @@ export default function MainLayout({ children, currentScreen, onNavigate }: Main
       
       {/* 💻 PC版フッター（lg以上で表示、モバイル・タブレットでは非表示） */}
       <div className="hidden lg:block shrink-0 relative z-30">
-        <GlobalFooter onNavigate={onNavigate} />
+        <GlobalFooter onNavigate={onNavigate} currentScreen={currentScreen} />
       </div>
 
       {/* 📱 モバイル版ボトムナビゲーション（モバイルのみ表示、md以上で非表示） */}

@@ -85,39 +85,68 @@ export default function App() {
 
         if (isGuest) {
           const defaultRole = isDemoPresenter ? 'member' : 'leader';
-          const guestRole = (sessionStorage.getItem('nurseflow_guest_role') as 'leader' | 'member') || defaultRole;
-          const isLeader = isDemoPresenter ? false : guestRole === 'leader';
-          const guestName = isDemoPresenter ? 'デモ１（メンバー）' : (isLeader ? 'ゲストリーダー' : 'ゲストメンバー');
+          const guestRole = (sessionStorage.getItem('nurseflow_guest_role') as 'admin' | 'leader' | 'member') || defaultRole;
+          const isAdmin = guestRole === 'admin';
+          const isLeader = isAdmin || guestRole === 'leader';
 
-          console.log(`👤 [AuthCheck] セッション (Demo:${isDemoPresenter}, Role:${guestRole}, isLeader:${isLeader}) 検出 UID: ${currentUser.uid}`);
+          let guestName = 'ゲストメンバー';
+          let roleName: 'admin' | 'nurse' = 'nurse';
+          let nurseId = currentUser.uid;
+          let staffId = 'N002';
+
+          if (isAdmin) {
+            guestName = '山田 師長';
+            roleName = 'admin';
+            nurseId = 'admin01';
+            staffId = 'N001';
+          } else if (guestRole === 'leader') {
+            guestName = 'ゲストリーダー';
+            roleName = 'nurse';
+            nurseId = 'nurse01';
+            staffId = 'N003';
+          } else if (isDemoPresenter) {
+            guestName = '田中 結衣 (1年目)';
+            roleName = 'nurse';
+            nurseId = 'nurse05';
+            staffId = 'N002';
+          }
+
+          console.log(`👤 [AuthCheck] セッション (Demo:${isDemoPresenter}, Role:${guestRole}, isAdmin:${isAdmin}, isLeader:${isLeader}) 検出 UID: ${currentUser.uid}`);
 
           useTimelineStore.getState().setCurrentUser({
-            nurse_id: currentUser.uid,
+            nurse_id: nurseId,
+            staff_id: staffId,
             name: guestName,
-            email: currentUser.email || 'guest@nurseflow.local',
+            email: currentUser.email || `${nurseId}@nurseflow.local`,
             is_leader: isLeader,
             team: 'Aチーム',
-            role: 'nurse',
+            role: roleName,
             isAnonymous: currentUser.isAnonymous,
           });
 
-          console.log("🌱 [AuthCheck] ゲストデータのローカル初期化中...");
-          setIsSyncingWithPC(true);
+          if (isDemoPresenter) {
+            const initialTargetId = isAdmin ? 'N002' : staffId;
+            useTimelineStore.getState().setTargetUserId(initialTargetId);
+          }
+
+          console.log("🌱 [AuthCheck] ゲストデータの高速ローカル初期化中...");
 
           try {
             const { seedGuestData } = await import('../../../services/guestSeedService');
-            const guestPatientIds = await seedGuestData(currentUser.uid, guestRole);
+            const guestPatientIds = await seedGuestData(currentUser.uid, isLeader ? 'leader' : 'member');
             if (Array.isArray(guestPatientIds) && guestPatientIds.length > 0) {
               setSelectedPatients(guestPatientIds);
               sessionStorage.setItem('selectedPatients', JSON.stringify(guestPatientIds));
             }
-            console.log("🚀 [AuthCheck] ゲストはGASデータと連携せず、ローカル初期化が完了しました! 患者数:", guestPatientIds?.length);
+            console.log("🚀 [AuthCheck] ゲストはGASデータと連携せず、高速初期化が完了しました! 患者数:", guestPatientIds?.length);
           } catch (syncErr) {
             console.warn("⚠️ ゲスト初期化ワーニング:", syncErr);
           } finally {
             setIsSyncingWithPC(false);
-            // 💡 ゲストユーザーは初回ログイン時、固定デモデータが存在するため直接『患者マスター画面(patientMaster)』へ遷移
-            const guestTarget = (savedScreen && savedScreen !== 'login') ? savedScreen : 'patientMaster';
+            const defaultTarget = isDemoPresenter
+              ? (isAdmin ? 'adminDashboard' : 'patientSelect')
+              : 'patientMaster';
+            const guestTarget = (savedScreen && savedScreen !== 'login') ? savedScreen : defaultTarget;
             setCurrentScreen(guestTarget);
             setLoading(false);
           }

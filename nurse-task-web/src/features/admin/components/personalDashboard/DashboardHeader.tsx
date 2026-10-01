@@ -4,9 +4,6 @@ import { getJSTDateString } from '../../../../utils/dateUtils';
 
 interface DashboardHeaderProps {
   currentUser: UserRoleInfo;
-  activeRole: 'admin' | 'nurse';
-  roleOverride: 'admin' | 'nurse' | 'auto';
-  setRoleOverride: (role: 'admin' | 'nurse') => void;
   setTargetUserId: (id: string) => void;
   effectiveTargetId: string;
   currentStaff: StaffProfile;
@@ -16,8 +13,6 @@ interface DashboardHeaderProps {
 
 export const DashboardHeader: React.FC<DashboardHeaderProps> = ({
   currentUser,
-  activeRole,
-  setRoleOverride,
   setTargetUserId,
   effectiveTargetId,
   currentStaff,
@@ -103,38 +98,7 @@ export const DashboardHeader: React.FC<DashboardHeaderProps> = ({
           </button>
         </div>
 
-        {/* 動作確認用権限切替ボタン */}
-        <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl border border-slate-300 text-xs">
-          <span className="text-[10px] font-bold text-slate-500 px-1.5">動作確認用権限:</span>
-          <button
-            type="button"
-            onClick={() => {
-              setRoleOverride('admin');
-              setTargetUserId('N001');
-            }}
-            className={`!px-2.5 !py-1 !rounded-lg !font-bold !transition-all ${
-              activeRole === 'admin'
-                ? '!bg-purple-700 !text-white !shadow-sm'
-                : '!bg-white !text-slate-600 hover:!bg-slate-200'
-            }`}
-          >
-            師長 (admin)
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              setRoleOverride('nurse');
-              setTargetUserId('N002');
-            }}
-            className={`!px-2.5 !py-1 !rounded-lg !font-bold !transition-all ${
-              activeRole === 'nurse'
-                ? '!bg-blue-700 !text-white !shadow-sm'
-                : '!bg-white !text-slate-600 hover:!bg-slate-200'
-            }`}
-          >
-            一般看護師 (nurse)
-          </button>
-        </div>
+
 
         {currentUser.role === 'admin' ? (
           <div className="flex items-center gap-2 bg-blue-50 border border-blue-200 px-3.5 py-1.5 rounded-xl shadow-sm animate-fade-in">

@@ -134,7 +134,7 @@ export const seedGuestData = async (guestUid: string, role: 'leader' | 'member' 
       store.setLeaderTodos(defaultLeaderTodos);
     }
 
-    // 5. 権限がある場合のみバックグラウンドでFirestoreドキュメント作成を試行（権限エラー時は無視）
+    // 5. 権限がある場合のみバックグラウンドでFirestoreドキュメント作成を試行（権限エラー時は無視・同期遅延ゼロ）
     try {
       const nurseRef = doc(db, 'nurses', guestUid);
       const seedBatch = writeBatch(db);
@@ -157,8 +157,9 @@ export const seedGuestData = async (guestUid: string, role: 'leader' | 'member' 
         },
         { merge: true }
       );
-      await seedBatch.commit();
-      await registerActiveDateInFirestore(todayStr);
+      // 非同期バックグラウンド実行（レスポンスをブロックしない）
+      seedBatch.commit().catch(() => {});
+      registerActiveDateInFirestore(todayStr).catch(() => {});
     } catch (fsErr) {
       // ゲストは権限なし・完全ローカル動作用のため権限エラーはサイレントで無視
     }

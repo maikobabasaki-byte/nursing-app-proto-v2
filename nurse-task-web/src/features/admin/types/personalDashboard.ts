@@ -3,7 +3,7 @@
 export interface UserRoleInfo {
   id: string;
   name: string;
-  role: 'admin' | 'nurse';
+  role: 'admin' | 'preceptor' | 'nurse';
 }
 
 export interface TimelineItem {
@@ -43,7 +43,7 @@ export interface ItemChatMessage {
   id: string;
   senderId: string;
   senderName: string;
-  senderRole: 'admin' | 'nurse';
+  senderRole: 'admin' | 'preceptor' | 'nurse';
   senderAvatarEmoji: string;
   text: string;
   createdAt: string;
@@ -87,7 +87,7 @@ export interface StaffProfile {
   user: {
     id: string;
     name: string;
-    role: 'admin' | 'nurse';
+    role: 'admin' | 'preceptor' | 'nurse';
     rank: string;
     ward: string;
     avatarEmoji: string;

@@ -47,7 +47,7 @@ export default function BottomNav({ currentScreen, onNavigate }: BottomNavProps)
   const { theme, currentConfig } = useTheme();
   const currentUser = useTimelineStore((state) => state.currentUser);
   const isLeader = checkIsLeader(currentUser);
-  const isAdmin = currentUser?.role === 'admin' || (currentUser?.name || '').includes('師長') || (currentUser?.nurse_id || '').includes('admin');
+  const isLeaderOrAdmin = currentUser?.role === 'admin' || isLeader;
 
   const isMasterActive = currentScreen === 'patientMaster' || currentScreen === 'patientSelect';
   const isExtendedView = currentScreen === 'personalDashboard' || currentScreen === 'adminDashboard';
@@ -69,7 +69,7 @@ export default function BottomNav({ currentScreen, onNavigate }: BottomNavProps)
           iconKey: 'account_circle',
           active: currentScreen === 'personalDashboard',
         },
-        ...(isAdmin ? [{
+        ...(isLeaderOrAdmin ? [{
           id: 'adminDashboard' as const,
           label: '師長用ダッシュボード',
           emoji: '📊',

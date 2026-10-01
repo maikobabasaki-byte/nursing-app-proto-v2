@@ -15,6 +15,7 @@ export default function Login() {
       // 🔒 正規ユーザーログイン時はゲストセッションフラグおよび状態を完全初期化
       sessionStorage.removeItem('is_guest_session');
       sessionStorage.removeItem('nurseflow_guest_role');
+      sessionStorage.removeItem('is_demo_presenter_session');
       
       const persistenceType = rememberMe ? browserLocalPersistence : browserSessionPersistence;
       await setPersistence(auth, persistenceType);
@@ -47,6 +48,7 @@ export default function Login() {
       // 💡 ゲスト専用セッションフラグを明示的にセット（ゲストは直接患者マスター画面へ遷移）
       sessionStorage.setItem('is_guest_session', 'true');
       sessionStorage.setItem('nurseflow_guest_role', role);
+      sessionStorage.removeItem('is_demo_presenter_session');
       sessionStorage.setItem('currentScreen', 'patientMaster');
 
       // 💡 ゲストログイン時は毎回チュートリアルを表示するため過去の閲覧完了フラグを全削除
@@ -96,23 +98,51 @@ export default function Login() {
     }
   };
 
-  const handleDemoPresenterLogin = async () => {
-    console.log(`🎬 [DemoLogin] 面接デモログイン (205・206号室固定) がクリックされました`);
+  const handleDemoPresenterLogin = async (roleType: 'member' | 'admin' = 'member') => {
+    const isAdmin = roleType === 'admin';
+    console.log(`🎬 [DemoLogin] 面接デモログイン (${isAdmin ? '師長・管理者' : '一般看護師'}) がクリックされました`);
     setIsLoadingGuest(true);
     const errorEl = document.getElementById('error_message');
     if (errorEl) errorEl.innerText = '';
 
     try {
-      // 💡 面接デモ専用セッションフラグをセット（一般メンバー権限に固定）
+      // 💡 面接デモ専用セッションフラグをセット
       sessionStorage.setItem('is_demo_presenter_session', 'true');
-      sessionStorage.setItem('nurseflow_guest_role', 'member');
+      sessionStorage.setItem('nurseflow_guest_role', isAdmin ? 'admin' : 'member');
       sessionStorage.removeItem('is_guest_session');
-      sessionStorage.setItem('currentScreen', 'patientSelect');
 
-      // Zustandストア側もデモシナリオ朝（朝スタート）に設定
+      // ルーティング先の指定（管理者は adminDashboard、一般は patientSelect）
+      const targetScreen = isAdmin ? 'adminDashboard' : 'patientSelect';
+      sessionStorage.setItem('currentScreen', targetScreen);
+
+      // Zustandストア側へモックユーザー情報 & デモシナリオを即座にセット
       try {
         const { useTimelineStore } = await import('../../../stores/useTimelineStore');
+        if (isAdmin) {
+          useTimelineStore.getState().setCurrentUser({
+            nurse_id: 'admin01',
+            staff_id: 'N001',
+            name: '山田 師長',
+            email: 'yamada.admin@nurseflow.local',
+            is_leader: true,
+            role: 'admin',
+            team: 'Aチーム',
+          });
+          useTimelineStore.getState().setTargetUserId('N002');
+        } else {
+          useTimelineStore.getState().setCurrentUser({
+            nurse_id: 'nurse05',
+            staff_id: 'N002',
+            name: '田中 結衣 (1年目)',
+            email: 'yui.tanaka@nurseflow.local',
+            is_leader: false,
+            role: 'nurse',
+            team: 'Aチーム',
+          });
+          useTimelineStore.getState().setTargetUserId('N002');
+        }
         useTimelineStore.getState().setDemoScenario('morning');
+        useTimelineStore.getState().setActiveScreen(targetScreen);
       } catch (e) {}
 
       await setPersistence(auth, browserLocalPersistence);
@@ -120,7 +150,8 @@ export default function Login() {
         await signInAnonymously(auth);
       } catch (anonErr: any) {
         try {
-          await signInWithEmailAndPassword(auth, 'nurse02@nurseflow.local', 'guest1234');
+          const fallbackEmail = isAdmin ? 'admin01@nurseflow.local' : 'nurse02@nurseflow.local';
+          await signInWithEmailAndPassword(auth, fallbackEmail, 'guest1234');
         } catch (e) {}
       }
     } catch (error: any) {
@@ -218,22 +249,40 @@ export default function Login() {
         </div>
 
         <div className="flex flex-col gap-2.5">
-          {/* 🎬 面接プレゼン用デモログインボタン */}
-          <button
-            type="button"
-            onClick={handleDemoPresenterLogin}
-            disabled={isLoadingGuest}
-            className="!w-full !bg-gradient-to-r !from-purple-600 !to-indigo-600 hover:!from-purple-700 hover:!to-indigo-700 !text-white !font-black !p-3.5 !rounded-xl !shadow-lg !text-xs !flex !items-center !justify-center !gap-2 !cursor-pointer !transition-all !active:!scale-95 disabled:!opacity-50 border-2 border-purple-300"
-          >
-            <span className="text-base">🎬</span>
-            <span>{isLoadingGuest ? 'デモ環境を準備中...' : '面接プレゼン用デモログイン（205・206固定）'}</span>
-          </button>
+          {/* 🎬 面接プレゼン用 2つのデモログインボタン（一般看護師 vs 師長・管理者） */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            <button
+              type="button"
+              onClick={() => handleDemoPresenterLogin('member')}
+              disabled={isLoadingGuest}
+              className="!w-full !bg-gradient-to-r !from-emerald-600 !to-teal-600 hover:!from-emerald-700 hover:!to-teal-700 !text-white !font-extrabold !p-2.5 !rounded-xl !shadow-md !text-xs !flex !flex-col !items-center !justify-center !gap-1 !cursor-pointer !transition-all !active:!scale-95 disabled:!opacity-50 border border-emerald-400"
+            >
+              <div className="flex items-center gap-1">
+                <span className="text-sm">🌱</span>
+                <span className="font-black">面接用 (一般看護師)</span>
+              </div>
+              <span className="text-[10px] text-emerald-100 font-medium">田中結衣・メンバー体験</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => handleDemoPresenterLogin('admin')}
+              disabled={isLoadingGuest}
+              className="!w-full !bg-gradient-to-r !from-slate-900 !via-blue-900 !to-indigo-950 hover:!from-slate-950 hover:!to-indigo-900 !text-white !font-extrabold !p-2.5 !rounded-xl !shadow-md !text-xs !flex !flex-col !items-center !justify-center !gap-1 !cursor-pointer !transition-all !active:!scale-95 disabled:!opacity-50 border border-blue-400"
+            >
+              <div className="flex items-center gap-1">
+                <span className="text-sm">👑</span>
+                <span className="font-black">面接用 (師長・管理者)</span>
+              </div>
+              <span className="text-[10px] text-blue-200 font-medium">山田師長・ダッシュボード</span>
+            </button>
+          </div>
 
           <button
             type="button"
             onClick={() => handleGuestLogin('member')}
             disabled={isLoadingGuest}
-            className="!w-full !bg-gradient-to-r !from-emerald-600 !to-teal-600 hover:!from-emerald-700 hover:!to-teal-700 !text-white !font-extrabold !p-3 !rounded-xl !shadow-md !text-xs !flex !items-center !justify-center !gap-2 !cursor-pointer !transition-all !active:!scale-95 disabled:!opacity-50 border-none"
+            className="!w-full !bg-gradient-to-r !from-emerald-600/90 !to-teal-600/90 hover:!from-emerald-700 hover:!to-teal-700 !text-white !font-extrabold !p-2.5 !rounded-xl !shadow-sm !text-xs !flex !items-center !justify-center !gap-2 !cursor-pointer !transition-all !active:!scale-95 disabled:!opacity-50 border-none"
           >
             <span className="text-base">🩺</span>
             <span>{isLoadingGuest ? 'ゲスト環境を準備中...' : 'ゲストログイン（メンバーとして体験）'}</span>
@@ -243,7 +292,7 @@ export default function Login() {
             type="button"
             onClick={() => handleGuestLogin('leader')}
             disabled={isLoadingGuest}
-            className="!w-full !bg-gradient-to-r !from-indigo-600 !to-blue-600 hover:!from-indigo-700 hover:!to-blue-700 !text-white !font-extrabold !p-3 !rounded-xl !shadow-md !text-xs !flex !items-center !justify-center !gap-2 !cursor-pointer !transition-all !active:!scale-95 disabled:!opacity-50 border-none"
+            className="!w-full !bg-gradient-to-r !from-indigo-600/90 !to-blue-600/90 hover:!from-indigo-700 hover:!to-blue-700 !text-white !font-extrabold !p-2.5 !rounded-xl !shadow-sm !text-xs !flex !items-center !justify-center !gap-2 !cursor-pointer !transition-all !active:!scale-95 disabled:!opacity-50 border-none"
           >
             <span className="text-base">👑</span>
             <span>{isLoadingGuest ? 'ゲスト環境を準備中...' : 'ゲストログイン（Aチームリーダーとして体験）'}</span>

@@ -19,6 +19,7 @@ interface TimelineScheduleSectionProps {
   scheduleGaps: GapItem[];
   gapSegments: Record<string, GapSubSegment[]>;
   setGapSegments: React.Dispatch<React.SetStateAction<Record<string, GapSubSegment[]>>>;
+  isViewingSelf?: boolean;
 }
 
 export const TimelineScheduleSection: React.FC<TimelineScheduleSectionProps> = ({
@@ -34,6 +35,7 @@ export const TimelineScheduleSection: React.FC<TimelineScheduleSectionProps> = (
   scheduleGaps,
   gapSegments,
   setGapSegments,
+  isViewingSelf = true,
 }) => {
   const TOTAL_TIMELINE_HOURS = 10;
   const TOTAL_GRID_HEIGHT_PX = 1800;
@@ -210,11 +212,14 @@ export const TimelineScheduleSection: React.FC<TimelineScheduleSectionProps> = (
                     id={`select-gap-seg-${seg.id}`}
                     value={seg.activity}
                     onChange={(e) => handleUpdateSegmentActivity(gap.id, seg.id, e.target.value)}
+                    disabled={!isViewingSelf}
                     style={{ paddingRight: '28px' }}
-                    className={`!w-full sm:!text-xs !font-black !pl-2 !py-0.5 !rounded-lg !border !shadow-2xs !cursor-pointer focus:!outline-none focus:!ring-1 !transition-all !appearance-none !truncate ${
-                      isRecorded
-                        ? '!bg-emerald-600 !text-white !border-emerald-700 focus:!ring-emerald-400'
-                        : '!bg-white !text-amber-950 !border-amber-400 hover:!bg-amber-100 focus:!ring-amber-500 !font-extrabold'
+                    className={`!w-full sm:!text-xs !font-black !pl-2 !py-0.5 !rounded-lg !border !shadow-2xs !transition-all !appearance-none !truncate ${
+                      !isViewingSelf
+                        ? '!bg-slate-100 !text-slate-600 !border-slate-300 !cursor-not-allowed'
+                        : isRecorded
+                        ? '!bg-emerald-600 !text-white !border-emerald-700 focus:!ring-emerald-400 !cursor-pointer'
+                        : '!bg-white !text-amber-950 !border-amber-400 hover:!bg-amber-100 focus:!ring-amber-500 !font-extrabold !cursor-pointer'
                     }`}
                   >
                     {GAP_ACTIVITY_OPTIONS.map((opt) => (
@@ -225,7 +230,7 @@ export const TimelineScheduleSection: React.FC<TimelineScheduleSectionProps> = (
                   </select>
                   <svg
                     className={`w-3.5 h-3.5 pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 stroke-[2.5] ${
-                      isRecorded ? 'text-white' : 'text-amber-900'
+                      !isViewingSelf ? 'text-slate-400' : isRecorded ? 'text-white' : 'text-amber-900'
                     }`}
                     fill="none"
                     viewBox="0 0 24 24"
@@ -237,18 +242,18 @@ export const TimelineScheduleSection: React.FC<TimelineScheduleSectionProps> = (
               </div>
 
               <div className="flex items-center gap-1 my-0.5 shrink-0">
-                {seg.minutes >= 10 && (
+                {isViewingSelf && seg.minutes >= 10 && (
                   <button
                     type="button"
                     onClick={() => handleSplitSegment(gap, seg.id)}
-                    className="!px-1.5 !py-0.5 !bg-white hover:!bg-amber-200 !text-amber-900 !border !border-amber-300 !rounded !font-black !shadow-2xs !transition-all !flex !items-center !gap-0.5 !cursor-pointer"
+                    className="!px-1.5 !py-0.5 !bg-white hover:!bg-amber-200 !text-amber-900 !border !border-amber-300 !rounded !font-black !shadow-2xs !transition-all !flex !items-center !gap-0.5 !cursor-pointer text-[10px]"
                     title="この時間枠を2つに分割して別の行動を追加します"
                   >
                     <span>✂️</span> <span className="hidden md:inline">分割</span>
                   </button>
                 )}
 
-                {segments.length > 1 && (
+                {isViewingSelf && segments.length > 1 && (
                   <button
                     type="button"
                     onClick={() => handleRemoveSegment(gap, seg.id)}
@@ -272,9 +277,16 @@ export const TimelineScheduleSection: React.FC<TimelineScheduleSectionProps> = (
         <div>
           <h3 className="text-base lg:text-lg font-extrabold text-slate-900 flex items-center gap-2">
             <span className="text-xl">⏱️</span> 本日のタイムライン
+            {!isViewingSelf && (
+              <span className="text-xs bg-slate-100 text-slate-700 border border-slate-300 px-2.5 py-0.5 rounded-full font-bold">
+                🔒 閲覧専用 (本人のみ編集可能)
+              </span>
+            )}
           </h3>
           <p className="text-xs text-slate-500 font-medium mt-0.5">
-            空き時間(Gap)は「✂️ 分割」で時間を細かく区切って複数の行動をプルダウン登録できます
+            {isViewingSelf
+              ? '空き時間(Gap)は「✂️ 分割」で時間を細かく区切って複数の行動をプルダウン登録できます'
+              : '他スタッフのタイムラインを閲覧中（記録・ Gap行動選択は本人限定です）'}
           </p>
         </div>
 
@@ -290,8 +302,11 @@ export const TimelineScheduleSection: React.FC<TimelineScheduleSectionProps> = (
               <select
                 value={simulatedTimeStr || 'real'}
                 onChange={(e) => setSimulatedTimeStr(e.target.value === 'real' ? null : e.target.value)}
+                disabled={!isViewingSelf}
                 style={{ paddingRight: '28px' }}
-                className="!appearance-none !bg-white !text-slate-800 !text-[10px] !font-extrabold !pl-2 !py-0.5 !rounded-md !border !border-slate-300 focus:!outline-none focus:!ring-1 focus:!ring-blue-400 hover:!border-slate-400 !cursor-pointer !shadow-2xs !transition-all !truncate"
+                className={`!appearance-none !bg-white !text-slate-800 !text-[10px] !font-extrabold !pl-2 !py-0.5 !rounded-md !border !border-slate-300 focus:!outline-none focus:!ring-1 focus:!ring-blue-400 hover:!border-slate-400 !shadow-2xs !transition-all !truncate ${
+                  !isViewingSelf ? '!cursor-not-allowed !bg-slate-100 !text-slate-400' : '!cursor-pointer'
+                }`}
               >
                 <option value="real">⚡ リアルタイム (時計連動)</option>
                 <option value="08:45">08:45 (朝のバイタル)</option>

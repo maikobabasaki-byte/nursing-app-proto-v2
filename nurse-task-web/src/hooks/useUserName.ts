@@ -11,16 +11,28 @@ export const useUserName = () => {
   const [userName, setUserName] = useState(currentUser?.name || '');
 
   const guestRole = sessionStorage.getItem('nurseflow_guest_role');
+  const isDemoPresenter = sessionStorage.getItem('is_demo_presenter_session') === 'true';
   const isGuestUser = Boolean(
     sessionStorage.getItem('is_guest_session') === 'true' ||
-    currentUser?.isAnonymous === true
+    currentUser?.isAnonymous === true ||
+    isDemoPresenter
   );
 
   useEffect(() => {
-    // 💡 ゲストユーザーの場合は Firestore 検索を行わず即時リターン（Missing or insufficient permissions を防止）
+    // 💡 面接デモプレゼンセッションの場合は Firestore / auth イベントでのユーザー上書きを防止
+    if (isDemoPresenter) {
+      if (currentUser?.name) {
+        setUserName(currentUser.name);
+      } else {
+        setUserName(guestRole === 'admin' ? '山田 師長' : '田中 結衣 (1年目)');
+      }
+      return;
+    }
+
     if (isGuestUser) {
-      const isLeader = currentUser ? currentUser.is_leader === true : guestRole === 'leader';
-      setUserName(isLeader ? 'ゲストリーダー' : 'ゲストメンバー');
+      const isLeader = currentUser ? currentUser.is_leader === true : (guestRole === 'leader' || guestRole === 'admin');
+      const name = currentUser?.name || (guestRole === 'admin' ? '山田 師長' : isLeader ? 'ゲストリーダー' : 'ゲストメンバー');
+      setUserName(name);
       return;
     }
 
@@ -30,12 +42,15 @@ export const useUserName = () => {
     }
 
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
+      const isDemo = sessionStorage.getItem('is_demo_presenter_session') === 'true';
+      if (isDemo) return;
+
       if (user && user.email) {
         const isGuestSession = sessionStorage.getItem('is_guest_session') === 'true' || user.isAnonymous;
         if (isGuestSession) {
           const role = sessionStorage.getItem('nurseflow_guest_role');
-          const isLeader = role === 'leader';
-          setUserName(isLeader ? 'ゲストリーダー' : 'ゲストメンバー');
+          const isLeader = role === 'leader' || role === 'admin';
+          setUserName(role === 'admin' ? '山田 師長' : isLeader ? 'ゲストリーダー' : 'ゲストメンバー');
           return;
         }
 
@@ -52,7 +67,6 @@ export const useUserName = () => {
             matchedId = matchedDoc.id;
           }
 
-          // 🎯 resolveNurseProfile 共通ヘルパーにより、ユーザー名を日本語表示名に自動変換 ＆ リーダー権限を判定
           const nurseProfile = resolveNurseProfile(matchedId, user.email, rawData);
           setCurrentUser(nurseProfile);
           setUserName(nurseProfile.name);
@@ -71,12 +85,10 @@ export const useUserName = () => {
       }
     });
     return () => unsubscribe();
-  }, [currentUser, setCurrentUser, isGuestUser, guestRole]);
-
-  const isDemoPresenter = sessionStorage.getItem('is_demo_presenter_session') === 'true';
+  }, [currentUser, setCurrentUser, isGuestUser, guestRole, isDemoPresenter]);
 
   if (isDemoPresenter) {
-    return currentUser?.name || 'デモ１（メンバー）';
+    return currentUser?.name || (guestRole === 'admin' ? '山田 師長' : '田中 結衣 (1年目)');
   }
 
   if (currentUser?.name) {
@@ -84,8 +96,8 @@ export const useUserName = () => {
   }
 
   if (isGuestUser) {
-    const isLeader = currentUser ? currentUser.is_leader === true : guestRole === 'leader';
-    return isLeader ? 'ゲストリーダー' : 'ゲストメンバー';
+    const isLeader = currentUser ? currentUser.is_leader === true : (guestRole === 'leader' || guestRole === 'admin');
+    return guestRole === 'admin' ? '山田 師長' : isLeader ? 'ゲストリーダー' : 'ゲストメンバー';
   }
 
   return userName;

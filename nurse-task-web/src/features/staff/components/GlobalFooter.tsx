@@ -1,10 +1,12 @@
-import { useTimelineStore } from '../../../stores/useTimelineStore';
 import { useTheme, type AppTheme } from '../../../hooks/useTheme';
+import { useTimelineStore } from '../../../stores/useTimelineStore';
+import { checkIsLeader } from '../../../utils/userUtils';
 
 import type { NavigationScreen } from './MainLayout';
 
 interface GlobalFooterProps {
   onNavigate?: (screen: NavigationScreen) => void;
+  currentScreen?: NavigationScreen;
 }
 
 // 🎨 各テーマ別設定アイコン画像マッピング
@@ -14,11 +16,11 @@ const SETTINGS_ICONS: Record<AppTheme, string> = {
   dark: '/app/icon_g/settings_48dp_2DD4BF_FILL1_wght400_GRAD0_opsz48.png',
 };
 
-export default function GlobalFooter({ onNavigate }: GlobalFooterProps) {
+export default function GlobalFooter({ onNavigate, currentScreen }: GlobalFooterProps) {
   const { theme, currentConfig } = useTheme();
-  const currentUser = useTimelineStore((state) => state.currentUser);
-  const isAdmin = currentUser?.role === 'admin' || (currentUser?.name || '').includes('師長') || (currentUser?.nurse_id || '').includes('admin');
   const settingsIconSrc = SETTINGS_ICONS[theme] || SETTINGS_ICONS.vital;
+  const currentUser = useTimelineStore((state) => state.currentUser);
+  const isLeaderOrAdmin = currentUser?.role === 'admin' || checkIsLeader(currentUser);
 
   return (
     <footer
@@ -26,48 +28,64 @@ export default function GlobalFooter({ onNavigate }: GlobalFooterProps) {
       style={{ backgroundColor: currentConfig.mainColor }}
     >
       {/* ⚙️ 左側エリア：ナビゲーション群（flexで横並びに） */}
-      <div className="flex items-center gap-4 flex-wrap">
+      <div className="flex items-center gap-2 sm:gap-3 flex-wrap py-1.5">
         
         {/* 既存：システム設定 */}
-        <div 
+        <button 
           id="footer-settings-btn"
+          type="button"
           onClick={() => onNavigate?.('settings')}
-          className="setting flex items-center cursor-pointer hover:opacity-80 transition-opacity"
+          className={`flex items-center cursor-pointer hover:bg-white/10 transition-all px-2.5 py-1 rounded-lg border ${
+            currentScreen === 'settings'
+              ? 'bg-white/20 border-white/40 font-black'
+              : 'border-transparent opacity-90 hover:opacity-100'
+          }`}
           style={{ color: currentConfig.accentColor }}
         >
           <img 
             src={settingsIconSrc} 
             alt="システム設定" 
-            className="w-5 h-5 mr-1.5 object-contain transition-all duration-300" 
+            className="w-4 h-4 mr-1.5 object-contain transition-all duration-300" 
           />
-          <p className="text-sm font-bold">システム設定</p>
-        </div>
+          <span className="text-xs font-bold whitespace-nowrap">システム設定</span>
+        </button>
 
-        {/* 📊 拡張ダッシュボードへの切り替え */}
-        <div 
+        {/* 📋 個人用ダッシュボード */}
+        <button 
+          type="button"
           onClick={() => onNavigate?.('personalDashboard')}
-          className="flex items-center cursor-pointer hover:opacity-80 transition-opacity px-2 py-1 rounded-lg"
+          className={`flex items-center cursor-pointer hover:bg-white/10 transition-all px-2.5 py-1 rounded-lg border ${
+            currentScreen === 'personalDashboard'
+              ? 'bg-white/20 border-white/40 font-black'
+              : 'border-transparent opacity-90 hover:opacity-100'
+          }`}
           style={{ color: currentConfig.accentColor }}
         >
-          <span className="text-sm mr-1">📋</span>
-          <p className="text-xs font-bold">個人用ダッシュボード</p>
-        </div>
+          <span className="text-xs mr-1">📋</span>
+          <span className="text-xs font-bold whitespace-nowrap">個人用ダッシュボード</span>
+        </button>
 
-        {isAdmin && (
-          <div 
+        {/* 📊 師長用ダッシュボード（管理者・指導者のみ表示、一般看護師フッターからは削除） */}
+        {isLeaderOrAdmin && (
+          <button 
+            type="button"
             onClick={() => onNavigate?.('adminDashboard')}
-            className="flex items-center cursor-pointer hover:opacity-80 transition-opacity px-2 py-1 rounded-lg"
+            className={`flex items-center cursor-pointer hover:bg-white/10 transition-all px-2.5 py-1 rounded-lg border ${
+              currentScreen === 'adminDashboard'
+                ? 'bg-white/20 border-white/40 font-black'
+                : 'border-transparent opacity-90 hover:opacity-100'
+            }`}
             style={{ color: currentConfig.accentColor }}
           >
-            <span className="text-sm mr-1">📊</span>
-            <p className="text-xs font-bold">師長用ダッシュボード</p>
-          </div>
+            <span className="text-xs mr-1">📊</span>
+            <span className="text-xs font-bold whitespace-nowrap">師長用ダッシュボード</span>
+          </button>
         )}
 
       </div>
 
       {/* ⌨️ 右側：ショートカット */}
-      <div className="shortcut text-xs text-right space-y-0.5 opacity-90 transition-colors duration-300" style={{ color: currentConfig.accentColor }}>
+      <div className="shortcut text-xs text-right space-y-0.5 opacity-90 transition-colors duration-300 hidden md:block" style={{ color: currentConfig.accentColor }}>
         <p>Ctrl + Tab でカルテへ切り替え</p>
         <p>Alt + A で患者マスターへ切り替え</p>
       </div>

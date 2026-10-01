@@ -216,8 +216,6 @@ export default function GlobalHeader({ currentPage, onNavigate}: GlobalHeaderPro
             <span className="text-sm">↩️</span>
             <span className="whitespace-nowrap">タスク管理画面に戻る</span>
           </button>
-
-          
         </nav>
       ) : (
         /* 🩺 標準タスク管理アプリ表示時：タスク管理専用ヘッダーナビ */

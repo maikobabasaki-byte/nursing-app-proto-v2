@@ -21,6 +21,7 @@ export interface PreceptorKPTData {
 interface OJTFeedbackSectionProps {
   currentUser: UserRoleInfo;
   effectiveTargetId: string;
+  isViewingSelf?: boolean;
   preceptorName?: string;
   nurseName?: string;
   ojtFeedback: OJTFeedbackData;
@@ -32,14 +33,17 @@ interface OJTFeedbackSectionProps {
 export const OJTFeedbackSection: React.FC<OJTFeedbackSectionProps> = ({
   currentUser,
   effectiveTargetId,
-  preceptorName = '山田 師長',
+  isViewingSelf = true,
+  preceptorName = '鈴木 プリセプター',
   nurseName = '田中 結衣',
   ojtFeedback,
   preceptorKpt,
   onSubmitOJTFeedback,
   onSavePreceptorKPT,
 }) => {
-  const isAdmin = currentUser.role === 'admin';
+  const isPreceptorOrAdmin = currentUser.role === 'admin' || currentUser.role === 'preceptor';
+  const canEditNurseThanksCard = !isPreceptorOrAdmin && isViewingSelf;
+  const canEditPreceptorKPT = currentUser.role === 'preceptor';
 
   // 新人側 State
   const [clarity, setClarity] = useState<number>(ojtFeedback.clarityRating || 4);
@@ -159,7 +163,7 @@ export const OJTFeedbackSection: React.FC<OJTFeedbackSectionProps> = ({
   return (
     <section className="bg-gradient-to-br from-rose-50/80 via-orange-50/50 to-amber-50/80 p-4 lg:p-6 rounded-2xl shadow-sm border-2 border-rose-200/90 flex flex-col gap-5">
       {/* ---------------- 1. 新人ナース向け UI（サンクスカード送信用） ---------------- */}
-      {!isAdmin ? (
+      {!isPreceptorOrAdmin ? (
         <div className="flex flex-col gap-4">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-rose-200 pb-3">
             <div>
@@ -177,20 +181,22 @@ export const OJTFeedbackSection: React.FC<OJTFeedbackSectionProps> = ({
             </div>
           </div>
 
-          {ojtFeedback.isSubmitted && !isEditingNurseForm ? (
+          {(ojtFeedback.isSubmitted || !canEditNurseThanksCard) && !isEditingNurseForm ? (
             /* 送信完了後の美しいプレビュー表示 */
             <div className="bg-white/90 p-4 rounded-xl border border-rose-200 shadow-2xs space-y-3">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2 text-xs font-extrabold text-emerald-800 bg-emerald-50 px-3 py-1 rounded-lg border border-emerald-200">
-                  <span>✨</span> 本日のサンクスカード送信完了 ({ojtFeedback.submittedAt || '16:30'})
+                  <span>✨</span> 本日のサンクスカード ({ojtFeedback.isSubmitted ? `送信完了 ${ojtFeedback.submittedAt || '16:30'}` : '閲覧専用'})
                 </div>
-                <button
-                  type="button"
-                  onClick={() => setIsEditingNurseForm(true)}
-                  className="text-xs font-extrabold text-rose-700 hover:text-rose-900 underline flex items-center gap-1 cursor-pointer"
-                >
-                  <span>✏️</span> 送信内容を修正する
-                </button>
+                {canEditNurseThanksCard && (
+                  <button
+                    type="button"
+                    onClick={() => setIsEditingNurseForm(true)}
+                    className="text-xs font-extrabold text-rose-700 hover:text-rose-900 underline flex items-center gap-1 cursor-pointer"
+                  >
+                    <span>✏️</span> 送信内容を修正する
+                  </button>
+                )}
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3 bg-rose-50/50 p-3 rounded-lg border border-rose-100">
@@ -345,12 +351,18 @@ export const OJTFeedbackSection: React.FC<OJTFeedbackSectionProps> = ({
                 <h4 className="text-xs lg:text-sm font-extrabold text-slate-900 flex items-center gap-1.5">
                   <span>📝</span> 指導スキルの教育用KPT（自身の指導振り返り）
                 </h4>
-                <button
-                  type="submit"
-                  className="bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold text-xs px-3.5 py-1 rounded-lg shadow-2xs border border-indigo-800 transition-all flex items-center gap-1 cursor-pointer active:scale-95"
-                >
-                  <span>💾</span> KPTを保存
-                </button>
+                {canEditPreceptorKPT ? (
+                  <button
+                    type="submit"
+                    className="!bg-indigo-600 hover:!bg-indigo-700 !text-white !font-extrabold !text-xs !px-3.5 !py-1 !rounded-lg !shadow-2xs !border !border-indigo-800 !transition-all !flex !items-center !gap-1 !cursor-pointer active:!scale-95"
+                  >
+                    <span>💾</span> KPTを保存
+                  </button>
+                ) : (
+                  <span className="text-xs font-bold text-slate-600 bg-slate-100 px-3 py-1 rounded-lg border border-slate-200 flex items-center gap-1">
+                    <span>🔒</span> 閲覧専用 (プリセプターのみ入力可能)
+                  </span>
+                )}
               </div>
 
               {kptSavedNotice && (
@@ -370,8 +382,11 @@ export const OJTFeedbackSection: React.FC<OJTFeedbackSectionProps> = ({
                     rows={2}
                     value={keepText}
                     onChange={(e) => setKeepText(e.target.value)}
+                    disabled={!canEditPreceptorKPT}
                     placeholder="例: 事前にチェックリストで重要手順を3つ絞って説明した。"
-                    className="w-full p-2 text-xs font-medium text-slate-800 bg-white border border-emerald-300 rounded-md focus:outline-none focus:ring-1 focus:ring-emerald-500 resize-none placeholder:text-slate-400"
+                    className={`w-full p-2 text-xs font-medium text-slate-800 bg-white border border-emerald-300 rounded-md focus:outline-none focus:ring-1 focus:ring-emerald-500 resize-none placeholder:text-slate-400 ${
+                      !canEditPreceptorKPT ? '!bg-slate-100 !text-slate-600 !border-slate-300 !cursor-not-allowed' : ''
+                    }`}
                   />
                 </div>
 
@@ -385,8 +400,11 @@ export const OJTFeedbackSection: React.FC<OJTFeedbackSectionProps> = ({
                     rows={2}
                     value={problemText}
                     onChange={(e) => setProblemText(e.target.value)}
+                    disabled={!canEditPreceptorKPT}
                     placeholder="例: 緊急割り込み対応時、指示がやや早口になってしまった。"
-                    className="w-full p-2 text-xs font-medium text-slate-800 bg-white border border-amber-300 rounded-md focus:outline-none focus:ring-1 focus:ring-amber-500 resize-none placeholder:text-slate-400"
+                    className={`w-full p-2 text-xs font-medium text-slate-800 bg-white border border-amber-300 rounded-md focus:outline-none focus:ring-1 focus:ring-amber-500 resize-none placeholder:text-slate-400 ${
+                      !canEditPreceptorKPT ? '!bg-slate-100 !text-slate-600 !border-slate-300 !cursor-not-allowed' : ''
+                    }`}
                   />
                 </div>
 
@@ -400,8 +418,11 @@ export const OJTFeedbackSection: React.FC<OJTFeedbackSectionProps> = ({
                     rows={2}
                     value={tryText}
                     onChange={(e) => setTryText(e.target.value)}
+                    disabled={!canEditPreceptorKPT}
                     placeholder="例: 処置開始前5分間に確認・質問タイムをあらかじめ設定する。"
-                    className="w-full p-2 text-xs font-medium text-slate-800 bg-white border border-blue-300 rounded-md focus:outline-none focus:ring-1 focus:ring-blue-500 resize-none placeholder:text-slate-400"
+                    className={`w-full p-2 text-xs font-medium text-slate-800 bg-white border border-blue-300 rounded-md focus:outline-none focus:ring-1 focus:ring-blue-500 resize-none placeholder:text-slate-400 ${
+                      !canEditPreceptorKPT ? '!bg-slate-100 !text-slate-600 !border-slate-300 !cursor-not-allowed' : ''
+                    }`}
                   />
                 </div>
               </div>

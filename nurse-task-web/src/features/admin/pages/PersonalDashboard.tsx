@@ -46,27 +46,48 @@ export const PersonalDashboard: React.FC = () => {
   const selectedDate = useTimelineStore((state) => state.selectedDate) || getJSTDateString();
   const firebaseUser = auth.currentUser;
 
-  const derivedRole: 'admin' | 'nurse' =
-    storeUser?.role === 'admin' || checkIsLeader(storeUser) || checkIsLeader(firebaseUser)
-      ? 'admin'
-      : 'nurse';
-
-  const [roleOverride] = useState<'admin' | 'nurse' | 'auto'>('auto');
-  const activeRole: 'admin' | 'nurse' = roleOverride === 'auto' ? derivedRole : roleOverride;
-
   const loggedInUserId = storeUser?.nurse_id || storeUser?.staff_id || 'nurse05';
-  const loggedInUserName = storeUser?.name || (activeRole === 'admin' ? '山田 師長' : '田中 結衣');
+  const loggedInUserName = storeUser?.name || '田中 結衣';
+
+  const targetUserId = useTimelineStore((state) => state.targetUserId) || loggedInUserId;
+  const setTargetUserId = useTimelineStore((state) => state.setTargetUserId);
+
+  const normalizeStaffId = (id: string): string => {
+    const clean = (id || '').trim().toLowerCase();
+    if (clean.includes('admin') || clean.includes('yamada') || clean.includes('ono') || clean === 'n001' || clean === 'nurse01' || clean === 'n1') {
+      return 'N001';
+    }
+    if (clean.includes('nurse05') || clean.includes('sato') || clean.includes('yui') || clean === 'n002' || clean === 'nurse02' || clean === 'n2') {
+      return 'N002';
+    }
+    if (clean.includes('nurse03') || clean.includes('tanaka') || clean.includes('suzuki') || clean === 'n003' || clean === 'n3' || clean.includes('preceptor')) {
+      return 'N003';
+    }
+    return 'N002';
+  };
+
+  const defaultTargetId = normalizeStaffId(loggedInUserId);
+  const effectiveTargetId = normalizeStaffId(targetUserId);
+
+  const currentStaff = STAFF_PROFILES[effectiveTargetId] || STAFF_PROFILES['N002'];
+
+  const realRole: 'admin' | 'preceptor' | 'nurse' =
+    (storeUser?.role as 'admin' | 'preceptor' | 'nurse') ||
+    (storeUser?.role === 'admin' || checkIsLeader(storeUser) || checkIsLeader(firebaseUser) ? 'admin' : 'nurse');
 
   const currentUser: UserRoleInfo = {
     id: loggedInUserId,
     name: loggedInUserName,
-    role: activeRole,
+    role: realRole,
   };
 
-  const isLeader = checkIsLeader(storeUser) || checkIsLeader(firebaseUser);
+  // 🛡️ 一般看護師（role === 'nurse'）は他スタッフの画面を閲覧できないよう、閲覧対象を本人（defaultTargetId）に常時固定
+  useEffect(() => {
+    if (realRole === 'nurse' && targetUserId !== defaultTargetId) {
+      setTargetUserId(defaultTargetId);
+    }
+  }, [realRole, targetUserId, defaultTargetId, setTargetUserId]);
 
-  const targetUserId = useTimelineStore((state) => state.targetUserId) || loggedInUserId;
-  const setTargetUserId = useTimelineStore((state) => state.setTargetUserId);
   const [timelineViewMode, setTimelineViewMode] = useState<'patient' | 'gantt' | 'table'>('patient');
 
   const [now, setNow] = useState<Date>(new Date());
@@ -415,31 +436,10 @@ export const PersonalDashboard: React.FC = () => {
   const [lastSavedTime, setLastSavedTime] = useState<string>('');
   const isLoadedRef = useRef<boolean>(false);
 
-  const normalizeStaffId = (id: string): string => {
-    const clean = (id || '').trim().toLowerCase();
-    if (clean.includes('admin') || clean.includes('yamada') || clean.includes('ono') || clean === 'n001' || clean === 'nurse01' || clean === 'n1') {
-      return 'N001';
-    }
-    if (clean.includes('nurse05') || clean.includes('sato') || clean.includes('yui') || clean === 'n002' || clean === 'nurse02' || clean === 'n2') {
-      return 'N002';
-    }
-    if (clean.includes('nurse03') || clean.includes('tanaka') || clean.includes('suzuki') || clean === 'n003' || clean === 'n3') {
-      return 'N003';
-    }
-    return 'N002';
-  };
-
-  const defaultTargetId = normalizeStaffId(loggedInUserId);
-  const effectiveTargetId =
-    currentUser.role === 'admin'
-      ? normalizeStaffId(targetUserId)
-      : defaultTargetId;
-
-  const currentStaff = STAFF_PROFILES[effectiveTargetId] || STAFF_PROFILES['N002'];
   const isViewingSelf = effectiveTargetId === defaultTargetId;
 
-  // 編集可否判定 (自分自身を閲覧中、または管理者・師長権限の場合に編集可能)
-  const isReflectionEditable = isViewingSelf || currentUser.role === 'admin';
+  // 編集可否判定 (自分自身を閲覧中のみ本人の振り返りを編集可能)
+  const isReflectionEditable = isViewingSelf;
   const preceptorBadgeName = isViewingSelf
     ? currentStaff.reflection.preceptorName
     : `${currentUser.name}（指導プリセプター）`;
@@ -850,6 +850,27 @@ export const PersonalDashboard: React.FC = () => {
     });
   };
 
+  const getOjtPairNames = () => {
+    if (effectiveTargetId === 'N003') {
+      return {
+        preceptorName: '鈴木 プリセプター',
+        nurseName: '田中 結衣 (1年目)',
+      };
+    }
+    if (effectiveTargetId === 'N001') {
+      return {
+        preceptorName: '山田 師長',
+        nurseName: '田中 結衣 (1年目)',
+      };
+    }
+    return {
+      preceptorName: '鈴木 プリセプター',
+      nurseName: '田中 結衣 (1年目)',
+    };
+  };
+
+  const { preceptorName: ojtPreceptorName, nurseName: ojtNurseName } = getOjtPairNames();
+
   const scheduleGaps = computeScheduleGaps(currentStaff.timeline);
   const timelineList = currentStaff?.timeline || [];
   const completedCount = timelineList.filter((t) => t.status === 'completed').length;
@@ -866,41 +887,51 @@ export const PersonalDashboard: React.FC = () => {
         </div>
       )}
 
-      {/* 最上部：対象スタッフ選択 & 表示スタッフ概要 (2カラム構造・左右逆) */}
+      {/* 最上部：対象スタッフ選択 (管理者・プリセプター用) または 本人固定表示 (一般看護師用) & 表示スタッフ概要 */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-stretch">
-        {/* 左カラム: 対象スタッフ選択 (管理者・リーダー用) または 表示固定表示 */}
-        {(isLeader || currentUser.role === 'admin') ? (
-          <div className="bg-amber-50 border border-amber-200 p-4 lg:p-5 rounded-2xl shadow-sm flex flex-col justify-center gap-2">
+        {/* 左カラム: 対象スタッフ選択 (管理者・指導者のみ) または 本人専用固定表示 */}
+        {currentUser.role === 'admin' || currentUser.role === 'preceptor' ? (
+          <div className="bg-amber-50/90 border border-amber-200 p-4 lg:p-5 rounded-2xl shadow-sm flex flex-col justify-center gap-2.5">
             <div className="flex items-center gap-2">
               <span className="text-xl">👩‍⚕️</span>
               <label htmlFor="top-2col-staff-select" className="font-extrabold text-amber-950 text-sm">
-                対象スタッフ選択（表示切替）:
+                対象スタッフ選択（表示・評価切替）:
               </label>
             </div>
-            <p className="text-xs text-amber-800 font-medium">
-              ダッシュボードの表示・評価対象となるスタッフを切り替えます。
-            </p>
-            <select
-              id="top-2col-staff-select"
-              value={effectiveTargetId}
-              onChange={(e) => setTargetUserId(e.target.value)}
-              className="!bg-white !text-slate-900 !font-extrabold !text-xs sm:!text-sm !px-3 !py-2 !rounded-xl !border !border-amber-300 focus:!outline-none focus:!ring-2 focus:!ring-amber-500 !cursor-pointer !shadow-sm w-full mt-1"
-            >
-              <option value="N001">N001: 山田 師長 (管理者)</option>
-              <option value="N002">N002: 田中 結衣 (1年目)</option>
-              <option value="N003">N003: 鈴木 看護師 (4年目)</option>
-            </select>
+
+            <div className="mt-0.5">
+              <div>
+                <label htmlFor="top-2col-staff-select" className="text-[11px] font-extrabold text-amber-900 block mb-1">
+                  表示対象スタッフ:
+                </label>
+                <select
+                  id="top-2col-staff-select"
+                  value={effectiveTargetId}
+                  onChange={(e) => setTargetUserId(e.target.value)}
+                  className="!bg-white !text-slate-900 !font-extrabold !text-xs sm:!text-sm !px-3 !py-2 !rounded-xl !border !border-amber-300 focus:!outline-none focus:!ring-2 focus:!ring-amber-500 !cursor-pointer !shadow-sm w-full"
+                >
+                  <option value="N001">N001: 山田 師長 (管理者・病棟長)</option>
+                  <option value="N003">N003: 鈴木 プリセプター (4年目・指導看護師)</option>
+                  <option value="N002">N002: 田中 結衣 (1年目・新人ナース)</option>
+                </select>
+              </div>
+            </div>
           </div>
         ) : (
-          <div className="bg-slate-100 border border-slate-200 p-4 lg:p-5 rounded-2xl shadow-sm flex items-center gap-3">
-            <span className="text-xl">🔒</span>
-            <div>
-              <p className="text-sm font-extrabold text-slate-800">
-                対象スタッフ固定中
-              </p>
-              <p className="text-xs text-slate-500 font-medium mt-0.5">
-                ご自身の個人パフォーマンスおよび本日の振り返りを表示しています。
-              </p>
+          <div className="bg-slate-100 border border-slate-300 p-4 lg:p-5 rounded-2xl shadow-sm flex flex-col justify-center gap-2.5">
+            <div className="flex items-center gap-2">
+              <span className="text-xl">👤</span>
+              <span className="font-extrabold text-slate-800 text-sm">
+                表示対象データ:
+              </span>
+            </div>
+            <div className="mt-0.5 flex items-center justify-between bg-white p-3 rounded-xl border border-slate-300 shadow-2xs">
+              <span className="font-black text-slate-900 text-xs sm:text-sm">
+                {currentStaff.user.name} ({currentStaff.user.role})
+              </span>
+              <span className="text-xs font-bold text-slate-600 bg-slate-100 px-2.5 py-1 rounded-lg border border-slate-200 flex items-center gap-1">
+                🔒 本人専用画面（他者閲覧不可）
+              </span>
             </div>
           </div>
         )}
@@ -931,6 +962,7 @@ export const PersonalDashboard: React.FC = () => {
           scheduleGaps={scheduleGaps}
           gapSegments={gapSegments}
           setGapSegments={setGapSegments}
+          isViewingSelf={isViewingSelf}
         />
 
         {/* 📈 タスク消化ペース比較 & AIパーソナルフィードバック */}
@@ -976,12 +1008,26 @@ export const PersonalDashboard: React.FC = () => {
           selectedDate={selectedDate}
         />
 
+        {/* 🤝 プリセプター（指導者）成長のための「本日のOJT指導振り返り＆サンクスカード」 */}
+        <OJTFeedbackSection
+          currentUser={currentUser}
+          effectiveTargetId={effectiveTargetId}
+          isViewingSelf={isViewingSelf}
+          preceptorName={ojtPreceptorName}
+          nurseName={ojtNurseName}
+          ojtFeedback={ojtFeedbackMap[effectiveTargetId] || ojtFeedbackMap['N002']}
+          preceptorKpt={preceptorKptMap[effectiveTargetId] || preceptorKptMap['N002']}
+          onSubmitOJTFeedback={handleSubmitOJTFeedback}
+          onSavePreceptorKPT={handleSavePreceptorKPT}
+        />
+
         {/* ---------------- 2. 看護技術について ---------------- */}
         {/* 💉 看護技術 5段階習熟度（自立度）チェックリスト (新人教育・OJT用) */}
         <SkillProficiencyChecklist
           currentUser={currentUser}
           skills={currentTechnicalSkills}
           onUpdateSkillLevel={handleUpdateSkillLevel}
+          isViewingSelf={isViewingSelf}
         />
 
         {/* ---------------- 3. クリニカルラダーについて ---------------- */}
@@ -992,19 +1038,7 @@ export const PersonalDashboard: React.FC = () => {
           ladderData={currentLadder}
           onUpdateCompetencyScore={handleUpdateCompetencyScore}
           onSaveFeedback={handleSaveLadderFeedback}
-        />
-
-        {/* ---------------- 4. OJT振り返り & サンクスカード ---------------- */}
-        {/* 🤝 プリセプター（指導者）成長のための「OJT振り返り＆フィードバック」セクション */}
-        <OJTFeedbackSection
-          currentUser={currentUser}
-          effectiveTargetId={effectiveTargetId}
-          preceptorName={currentStaff.reflection.preceptorName || '山田 師長'}
-          nurseName={currentStaff.user.name || '田中 結衣'}
-          ojtFeedback={ojtFeedbackMap[effectiveTargetId] || ojtFeedbackMap['N002']}
-          preceptorKpt={preceptorKptMap[effectiveTargetId] || preceptorKptMap['N002']}
-          onSubmitOJTFeedback={handleSubmitOJTFeedback}
-          onSavePreceptorKPT={handleSavePreceptorKPT}
+          isViewingSelf={isViewingSelf}
         />
       </div>
     </div>

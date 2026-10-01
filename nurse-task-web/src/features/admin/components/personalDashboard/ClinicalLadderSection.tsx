@@ -31,6 +31,7 @@ interface ClinicalLadderSectionProps {
   ladderData: ClinicalLadderData;
   onUpdateCompetencyScore: (key: string, newScore: number) => void;
   onSaveFeedback: (strengths: string, improvements: string) => void;
+  isViewingSelf?: boolean;
 }
 
 // 💡 レーダーチャート用カスタムツールチップ
@@ -61,12 +62,13 @@ export const ClinicalLadderSection: React.FC<ClinicalLadderSectionProps> = ({
   ladderData,
   onUpdateCompetencyScore,
   onSaveFeedback,
+  isViewingSelf = false,
 }) => {
   const [strengthsText, setStrengthsText] = useState(ladderData.strengths);
   const [improvementsText, setImprovementsText] = useState(ladderData.improvements);
   const [isSavedNotice, setIsSavedNotice] = useState(false);
 
-  const isAdmin = currentUser.role === 'admin';
+  const isAdmin = !isViewingSelf && currentUser.role === 'admin';
 
   // React to prop updates if target staff changes
   React.useEffect(() => {

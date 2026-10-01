@@ -53,14 +53,17 @@ interface SkillProficiencyChecklistProps {
   currentUser: UserRoleInfo;
   skills: NursingSkillItem[];
   onUpdateSkillLevel: (skillId: string, skillName: string, newLevel: number) => void;
+  isViewingSelf?: boolean;
 }
 
 export const SkillProficiencyChecklist: React.FC<SkillProficiencyChecklistProps> = ({
   currentUser,
   skills,
   onUpdateSkillLevel,
+  isViewingSelf = false,
 }) => {
-  const isAdmin = currentUser.role === 'admin';
+  // 指導者（プリセプター / 師長）が「他者（本人以外）」を評価・入力可能（本人は変更不可）
+  const isInstructor = !isViewingSelf && (currentUser.role === 'admin' || currentUser.role === 'preceptor');
 
   return (
     <section className="bg-white p-4 lg:p-6 rounded-2xl shadow-sm border border-slate-200 flex flex-col gap-4">
@@ -77,13 +80,13 @@ export const SkillProficiencyChecklist: React.FC<SkillProficiencyChecklistProps>
 
         {/* 権限状態バッジ */}
         <div>
-          {isAdmin ? (
+          {isInstructor ? (
             <span className="text-xs font-bold text-emerald-800 bg-emerald-50 px-3 py-1 rounded-xl border border-emerald-200 flex items-center gap-1 shadow-2xs">
-              <span>✏️</span> 指導者編集モード（クリックでレベル更新）
+              <span>✏️</span> 指導者評価・レベル更新モード（プリセプター / 師長）
             </span>
           ) : (
             <span className="text-xs font-bold text-slate-600 bg-slate-100 px-3 py-1 rounded-xl border border-slate-200 flex items-center gap-1">
-              <span>🔒</span> 閲覧専用モード（本人の習熟度一覧）
+              <span>🔒</span> 閲覧専用モード（指導者のみレベル入力可能・本人は閲覧のみ）
             </span>
           )}
         </div>
@@ -139,11 +142,11 @@ export const SkillProficiencyChecklist: React.FC<SkillProficiencyChecklistProps>
                     <button
                       key={stepVal}
                       type="button"
-                      disabled={!isAdmin}
-                      onClick={() => isAdmin && onUpdateSkillLevel(skill.id, skill.name, stepVal)}
-                      title={`${stepDef.desc} ${isAdmin ? '（クリックでこのレベルに更新）' : '（閲覧のみ）'}`}
+                      disabled={!isInstructor}
+                      onClick={() => isInstructor && onUpdateSkillLevel(skill.id, skill.name, stepVal)}
+                      title={`${stepDef.desc} ${isInstructor ? '（クリックでこのレベルに更新）' : '（指導者のみ入力可能・閲覧モード）'}`}
                       className={`!h-7 !px-2.5 !rounded-lg !font-black !transition-all !flex !items-center !justify-center !gap-1 !border disabled:opacity-100 ${
-                        isAdmin ? 'cursor-pointer active:scale-95' : 'cursor-default'
+                        isInstructor ? 'cursor-pointer active:scale-95' : 'cursor-default'
                       } ${
                         isReached
                           ? `${stepDef.activeBg} ${stepDef.textCol} ${stepDef.borderCol} !shadow-2xs`
