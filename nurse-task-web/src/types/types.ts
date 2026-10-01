@@ -52,6 +52,7 @@ export interface Task {
   children?: Task[]; // グループ内のタスク
   isChild?: boolean; // グループ内のタスクであることのフラグ
   isHandover?: boolean; // 申し送り対象フラグ
+  taskType?: 'patient' | 'ward'; // ✨ 病棟共通タスク区分 ('patient': 個別患者タスク, 'ward': 病棟全体ルーチン業務)
 }
 
 // 1. 基本となるタスクステータスの拡張
@@ -98,6 +99,7 @@ export interface TaskDocument {
   isHandover?: boolean;
   progressLogs?: ProgressLog[];
   assignee?: string | null;
+  taskType?: 'patient' | 'ward';
 }
 
 export interface Patient {

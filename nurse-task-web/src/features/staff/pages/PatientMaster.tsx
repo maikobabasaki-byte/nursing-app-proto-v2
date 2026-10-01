@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useTimelineStore } from '../../../stores/useTimelineStore';
 import { checkIsLeader } from '../../../utils/userUtils';
-import { normalizeToHHMM, flattenTasks, sortTasksChronologically } from '../../../utils/taskLogic';
+import { normalizeToHHMM, flattenTasks, sortTasksChronologically, isWardTask, DEFAULT_WARD_TASKS } from '../../../utils/taskLogic';
 
 // --- 型定義 ---
 interface Patient {
@@ -94,6 +94,37 @@ export default function PatientMasterPage({ selectedIds }: DashboardProps) {
 
   // 2. リアルタイムのタスクデータと結合し、フィルタリング・ソートを行う
   const patients = useMemo(() => {
+    const isWardDutyOnly = Boolean(
+      sessionStorage.getItem('isWardDutyOnly') === 'true' ||
+      !selectedIds ||
+      selectedIds.length === 0
+    );
+
+    // 🏥 病棟業務専任（または患者未選択）の場合の専任カード表示処理
+    if (isWardDutyOnly) {
+      const wardTasksInFlat = flatTasks.filter((t) => isWardTask(t) && t.status !== 'deleted');
+      const allWardTasks = wardTasksInFlat.length > 0 ? wardTasksInFlat : DEFAULT_WARD_TASKS;
+
+      const deduplicatedWardTasks = sortTasksChronologically(
+        allWardTasks.filter((t, index, self) =>
+          index === self.findIndex((x) => (x.title || '').trim() === (t.title || '').trim() && (x.display_period || '').trim() === (t.display_period || '').trim())
+        )
+      );
+
+      const wardDutyPatient: Patient = {
+        patient_id: 'ward-duty-only',
+        name: '病棟全体・共通業務（専任）',
+        room_id: '病棟共通',
+        bed_number: 1,
+        adl: '全体統括',
+        risk_level: '高',
+        allergy: 'なし',
+        tasks: deduplicatedWardTasks as any[],
+      };
+
+      return [wardDutyPatient];
+    }
+
     // 💡 rawPatients をベースとし、flatTasks から動的に患者情報を補完
     const patientMap = new Map<string, Patient>();
     rawPatients.forEach((p) => patientMap.set(p.patient_id, p));
@@ -151,8 +182,6 @@ export default function PatientMasterPage({ selectedIds }: DashboardProps) {
     let filteredBySelection = mergedPatients;
     if (selectedIds && selectedIds.length > 0) {
       filteredBySelection = mergedPatients.filter((p) => selectedIds.includes(p.patient_id));
-    } else {
-      filteredBySelection = mergedPatients.filter((p) => p.tasks && p.tasks.length > 0);
     }
 
     const isDemoPresenterSession = typeof window !== 'undefined' && sessionStorage.getItem('is_demo_presenter_session') === 'true';

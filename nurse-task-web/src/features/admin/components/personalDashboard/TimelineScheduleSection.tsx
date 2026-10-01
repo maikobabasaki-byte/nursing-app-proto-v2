@@ -1,7 +1,6 @@
 import React from 'react';
 import type {
   StaffProfile,
-  TimelineItem,
   GapItem,
   GapSubSegment,
 } from '../../types/personalDashboard';
@@ -57,9 +56,11 @@ export const TimelineScheduleSection: React.FC<TimelineScheduleSectionProps> = (
 
   const patientColumnInfo = uniquePatients.map((patientName) => {
     const match = currentStaff.timeline.find((t) => t.patientName === patientName);
+    const isWard = match?.taskType === 'ward' || patientName === '病棟全体';
     return {
       patientName,
-      room: match?.room || '各部屋',
+      room: isWard ? '病棟全体共通' : (match?.room || '各部屋'),
+      isWard,
     };
   });
 
@@ -368,6 +369,7 @@ export const TimelineScheduleSection: React.FC<TimelineScheduleSectionProps> = (
             </div>
             <div className="flex items-center gap-2.5 text-[10px] font-bold">
               <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-md bg-amber-100 border border-amber-300 inline-block" />Gap</span>
+              <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-md bg-orange-200 border border-orange-400 inline-block" />🏥 病棟共通</span>
               <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-emerald-500 inline-block" /> 完了</span>
               <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-blue-600 inline-block" /> 進行中</span>
               <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-indigo-400 inline-block" /> 予定</span>
@@ -384,10 +386,17 @@ export const TimelineScheduleSection: React.FC<TimelineScheduleSectionProps> = (
                   {patientColumnInfo.map((col) => (
                     <div
                       key={`hdr-${col.patientName}`}
-                      className="flex-1 p-2 text-center bg-slate-100 font-extrabold text-slate-800 truncate"
+                      className={`flex-1 p-2 text-center font-extrabold truncate ${
+                        col.isWard
+                          ? 'bg-amber-100/90 text-amber-950 border-amber-300'
+                          : 'bg-slate-100 text-slate-800'
+                      }`}
                       title={`${col.patientName} (${col.room})`}
                     >
-                      <div className="truncate text-xs text-slate-900 font-extrabold">👤 {col.patientName}</div>
+                      <div className="truncate text-xs font-extrabold flex items-center justify-center gap-1">
+                        <span>{col.isWard ? '🏥' : '👤'}</span>
+                        <span>{col.patientName}</span>
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -450,39 +459,53 @@ export const TimelineScheduleSection: React.FC<TimelineScheduleSectionProps> = (
                         .map((item) => {
                           const isCompleted = item.status === 'completed';
                           const isInProgress = item.status === 'in_progress';
+                          const isWard = item.taskType === 'ward' || item.patientName === '病棟全体';
                           const { topPx, heightPx } = getVerticalGanttPosition(item.time, item.estimatedMinutes);
+
+                          const cardBgClass = isWard
+                            ? isInProgress
+                              ? 'bg-amber-100/95 border-orange-500 ring-2 ring-orange-400 shadow-md z-30'
+                              : isCompleted
+                              ? 'bg-amber-100/90 border-amber-400 hover:border-amber-500 text-amber-950'
+                              : 'bg-gradient-to-r from-amber-50 to-orange-50 border-orange-300 hover:border-orange-400 text-amber-950'
+                            : isInProgress
+                            ? 'bg-blue-50/95 border-blue-600 ring-2 ring-blue-300 shadow-md z-30'
+                            : isCompleted
+                            ? 'bg-emerald-50/90 border-emerald-400 hover:border-emerald-500'
+                            : 'bg-white border-indigo-300 hover:border-indigo-400';
+
+                          const timeBadgeClass = isWard
+                            ? 'bg-orange-600 text-white font-black'
+                            : isInProgress
+                            ? 'bg-blue-600 text-white font-black'
+                            : isCompleted
+                            ? 'bg-emerald-700 text-white'
+                            : 'bg-indigo-700 text-white';
 
                           return (
                             <div
                               key={item.id}
-                              className={`group absolute rounded-xl border-2 p-1.5 sm:p-2 transition-all duration-200 flex flex-col justify-between shadow-2xs hover:shadow-lg overflow-hidden cursor-pointer z-20 ${
-                                isInProgress
-                                  ? 'bg-blue-50/95 border-blue-600 ring-2 ring-blue-300 shadow-md z-30'
-                                  : isCompleted
-                                  ? 'bg-emerald-50/90 border-emerald-400 hover:border-emerald-500'
-                                  : 'bg-white border-indigo-300 hover:border-indigo-400'
-                              }`}
+                              className={`group absolute rounded-xl border-2 p-1.5 sm:p-2 transition-all duration-200 flex flex-col justify-between shadow-2xs hover:shadow-lg overflow-hidden cursor-pointer z-20 ${cardBgClass}`}
                               style={{
                                 top: `${topPx}px`,
                                 height: `${heightPx}px`,
                                 left: '3px',
                                 right: '3px',
                               }}
-                              title={`${item.time} 開始 / 所要時間:${item.estimatedMinutes}分間 / 重症度:${item.priority === 'high' ? '高' : item.priority === 'medium' ? '中' : '低'} / ${item.taskTitle}`}
+                              title={`${isWard ? '[病棟共通業務] ' : ''}${item.time} 開始 / 所要時間:${item.estimatedMinutes}分間 / ${item.taskTitle}`}
                             >
                               {heightPx < 48 ? (
                                 <div className="w-full h-full flex items-center justify-between gap-1 overflow-hidden pointer-events-none px-0.5">
-                                  <span
-                                    className={`font-black text-[9px] px-1 py-0.2 rounded shrink-0 ${
-                                      isInProgress
-                                        ? 'bg-blue-600 text-white font-black'
-                                        : isCompleted
-                                        ? 'bg-emerald-700 text-white'
-                                        : 'bg-indigo-700 text-white'
-                                    }`}
-                                  >
-                                    {item.time}
-                                  </span>
+                                  <div className="flex items-center gap-1 shrink-0">
+                                    <span className={`font-black text-[9px] px-1 py-0.2 rounded shrink-0 ${timeBadgeClass}`}>
+                                      {item.time}
+                                    </span>
+                                    {isWard && (
+                                      <span className="bg-orange-600 text-white font-black text-[8px] px-1 py-0.2 rounded shrink-0">
+                                        🏥 病棟
+                                      </span>
+                                    )}
+                                  </div>
                                   <h4 className="font-extrabold text-[10px] text-slate-900 truncate flex-1 min-w-0" title={item.taskTitle}>
                                     {item.taskTitle}
                                   </h4>
@@ -493,19 +516,16 @@ export const TimelineScheduleSection: React.FC<TimelineScheduleSectionProps> = (
                               ) : (
                                 <div className="w-full h-full flex flex-col justify-between overflow-hidden gap-0.5 pointer-events-none">
                                   <div className="flex items-center justify-between gap-1 shrink-0 overflow-hidden w-full">
-                                    <span
-                                      className={`font-black text-[10px] px-1.5 py-0.2 rounded shrink-0 ${
-                                        isInProgress
-                                          ? 'bg-blue-600 text-white font-black'
-                                          : isCompleted
-                                          ? 'bg-emerald-700 text-white'
-                                          : 'bg-indigo-700 text-white'
-                                      }`}
-                                    >
+                                    <span className={`font-black text-[10px] px-1.5 py-0.2 rounded shrink-0 ${timeBadgeClass}`}>
                                       {item.time}
                                     </span>
                                     
                                     <div className="flex items-center gap-1 shrink-0 min-w-0">
+                                      {isWard && (
+                                        <span className="bg-orange-600 text-white font-black text-[9px] px-1 py-0.2 rounded shrink-0">
+                                          🏥 病棟共通
+                                        </span>
+                                      )}
                                       <span className="text-[9px] font-extrabold text-slate-700 bg-white/90 px-1 py-0.2 rounded border border-slate-200 shrink-0 truncate">
                                         ⏱️ {item.estimatedMinutes}分
                                       </span>
@@ -551,7 +571,7 @@ export const TimelineScheduleSection: React.FC<TimelineScheduleSectionProps> = (
                                   {item.taskTitle}
                                 </div>
                                 <div className="flex items-center justify-between text-[11px] text-slate-300 font-medium">
-                                  <span>👤 {item.patientName} ({item.room})</span>
+                                  <span>{isWard ? '🏥 病棟共通業務 (全体)' : `👤 ${item.patientName}`} ({item.room})</span>
                                   <span className="text-amber-400 font-bold">重症度: {item.priority === 'high' ? '高' : item.priority === 'medium' ? '中' : '低'}</span>
                                 </div>
                               </div>
@@ -634,40 +654,52 @@ export const TimelineScheduleSection: React.FC<TimelineScheduleSectionProps> = (
                 {currentStaff.timeline.map((item) => {
                   const isCompleted = item.status === 'completed';
                   const isInProgress = item.status === 'in_progress';
+                  const isWard = item.taskType === 'ward' || item.patientName === '病棟全体';
                   const { topPx, heightPx } = getVerticalGanttPosition(item.time, item.estimatedMinutes);
+
+                  const cardBgClass = isWard
+                    ? isInProgress
+                      ? 'bg-amber-100/95 border-orange-500 ring-2 ring-orange-400 shadow-md z-30'
+                      : isCompleted
+                      ? 'bg-amber-100/90 border-amber-400 hover:border-amber-500 text-amber-950'
+                      : 'bg-gradient-to-r from-amber-50 via-orange-50 to-amber-50 border-orange-300 hover:border-orange-400 text-amber-950'
+                    : isInProgress
+                    ? 'bg-blue-50/95 border-blue-600 ring-2 ring-blue-300 shadow-md z-30'
+                    : isCompleted
+                    ? 'bg-emerald-50/90 border-emerald-400 hover:border-emerald-500'
+                    : 'bg-white border-indigo-300 hover:border-indigo-400';
+
+                  const timeBadgeClass = isWard
+                    ? 'bg-orange-600 text-white font-black'
+                    : isInProgress
+                    ? 'bg-blue-600 text-white font-black'
+                    : isCompleted
+                    ? 'bg-emerald-700 text-white'
+                    : 'bg-indigo-700 text-white';
 
                   return (
                     <div
                       key={item.id}
-                      className={`group absolute rounded-xl border-2 p-2 sm:p-2.5 transition-all duration-200 flex flex-col justify-between shadow-xs hover:shadow-lg overflow-hidden cursor-pointer z-20 ${
-                        isInProgress
-                          ? 'bg-blue-50/95 border-blue-600 ring-2 ring-blue-300 shadow-md z-30'
-                          : isCompleted
-                          ? 'bg-emerald-50/90 border-emerald-400 hover:border-emerald-500'
-                          : 'bg-white border-indigo-300 hover:border-indigo-400'
-                      }`}
+                      className={`group absolute rounded-xl border-2 p-2 sm:p-2.5 transition-all duration-200 flex flex-col justify-between shadow-xs hover:shadow-lg overflow-hidden cursor-pointer z-20 ${cardBgClass}`}
                       style={{
                         top: `${topPx}px`,
                         height: `${heightPx}px`,
                         left: '8px',
                         right: '8px',
                       }}
-                      title={`${item.time} 開始 / 所要時間:${item.estimatedMinutes}分間 / 重症度:${item.priority === 'high' ? '高' : item.priority === 'medium' ? '中' : '低'} / ${item.taskTitle}`}
+                      title={`${isWard ? '[病棟共通業務] ' : ''}${item.time} 開始 / 所要時間:${item.estimatedMinutes}分間 / ${item.taskTitle}`}
                     >
                       {heightPx < 48 ? (
                         <div className="w-full h-full flex items-center justify-between gap-1.5 overflow-hidden pointer-events-none px-1">
                           <div className="flex items-center gap-1 shrink-0">
-                            <span
-                              className={`font-black text-[10px] px-1.5 py-0.2 rounded ${
-                                isInProgress
-                                  ? 'bg-blue-600 text-white font-black'
-                                  : isCompleted
-                                  ? 'bg-emerald-700 text-white'
-                                  : 'bg-indigo-700 text-white'
-                              }`}
-                            >
+                            <span className={`font-black text-[10px] px-1.5 py-0.2 rounded ${timeBadgeClass}`}>
                               {item.time}
                             </span>
+                            {isWard && (
+                              <span className="bg-orange-600 text-white font-black text-[9px] px-1 py-0.2 rounded shrink-0">
+                                🏥 病棟共通
+                              </span>
+                            )}
                             <span className="text-[9px] font-extrabold text-slate-700 bg-white/90 px-1 py-0.2 rounded border border-slate-300 shrink-0">
                               ⏱️ {item.estimatedMinutes}分
                             </span>
@@ -690,17 +722,16 @@ export const TimelineScheduleSection: React.FC<TimelineScheduleSectionProps> = (
                       ) : (
                         <div className="w-full h-full flex flex-col justify-between overflow-hidden gap-0.5 pointer-events-none">
                           <div className="flex items-center justify-between gap-1 shrink-0 overflow-hidden w-full">
-                            <span
-                              className={`font-black text-xs px-2 py-0.5 rounded shrink-0 ${
-                                isInProgress
-                                  ? 'bg-blue-600 text-white font-black'
-                                  : isCompleted
-                                  ? 'bg-emerald-700 text-white'
-                                  : 'bg-indigo-700 text-white'
-                              }`}
-                            >
-                              {item.time} 開始
-                            </span>
+                            <div className="flex items-center gap-1 shrink-0">
+                              <span className={`font-black text-xs px-2 py-0.5 rounded shrink-0 ${timeBadgeClass}`}>
+                                {item.time} 開始
+                              </span>
+                              {isWard && (
+                                <span className="bg-orange-600 text-white font-black text-[9px] px-1.5 py-0.5 rounded shrink-0">
+                                  🏥 病棟共通ルーチン
+                                </span>
+                              )}
+                            </div>
 
                             <div className="flex items-center gap-1.5 shrink-0 min-w-0">
                               <span className="text-xs font-extrabold text-slate-700 bg-white/90 px-2 py-0.5 rounded border border-slate-300 truncate">
@@ -748,7 +779,7 @@ export const TimelineScheduleSection: React.FC<TimelineScheduleSectionProps> = (
                           {item.taskTitle}
                         </div>
                         <div className="flex items-center justify-between text-[11px] text-slate-300 font-medium">
-                          <span>👤 {item.patientName} ({item.room})</span>
+                          <span>{isWard ? '🏥 病棟共通業務 (全体)' : `👤 ${item.patientName}`} ({item.room})</span>
                           <span className="text-amber-400 font-bold">重症度: {item.priority === 'high' ? '高' : item.priority === 'medium' ? '中' : '低'}</span>
                         </div>
                       </div>
@@ -766,7 +797,7 @@ export const TimelineScheduleSection: React.FC<TimelineScheduleSectionProps> = (
               <tr>
                 <th className="py-2.5 px-3 whitespace-nowrap w-16">時刻</th>
                 <th className="py-2.5 px-3 whitespace-nowrap w-24">所要時間</th>
-                <th className="py-2.5 px-3 whitespace-nowrap w-32">患者</th>
+                <th className="py-2.5 px-3 whitespace-nowrap w-32">対象</th>
                 <th className="py-2.5 px-3">業務・タスク内容</th>
                 <th className="py-2.5 px-3 whitespace-nowrap text-center w-20">状態</th>
               </tr>
@@ -775,28 +806,28 @@ export const TimelineScheduleSection: React.FC<TimelineScheduleSectionProps> = (
               {currentStaff.timeline.map((item) => {
                 const isCompleted = item.status === 'completed';
                 const isInProgress = item.status === 'in_progress';
+                const isWard = item.taskType === 'ward' || item.patientName === '病棟全体';
+
+                const rowClass = isWard
+                  ? 'bg-amber-50/90 border-l-4 border-l-orange-500 hover:bg-amber-100/90 font-bold'
+                  : isInProgress
+                  ? 'bg-blue-50/90 font-bold border-l-4 border-l-blue-600'
+                  : isCompleted
+                  ? 'bg-slate-50/70 text-slate-500'
+                  : 'bg-white';
+
+                const timeBadgeClass = isWard
+                  ? 'bg-orange-600 text-white font-black'
+                  : isInProgress
+                  ? 'bg-blue-700 text-white shadow-sm'
+                  : isCompleted
+                  ? 'bg-slate-200 text-slate-700'
+                  : 'bg-slate-800 text-white';
 
                 return (
-                  <tr
-                    key={item.id}
-                    className={`transition-colors hover:bg-blue-50/50 ${
-                      isInProgress
-                        ? 'bg-blue-50/90 font-bold border-l-4 border-l-blue-600'
-                        : isCompleted
-                        ? 'bg-slate-50/70 text-slate-500'
-                        : 'bg-white'
-                    }`}
-                  >
+                  <tr key={item.id} className={`transition-colors ${rowClass}`}>
                     <td className="py-3 px-3 whitespace-nowrap align-middle">
-                      <span
-                        className={`inline-block font-black px-2 py-0.5 rounded text-[11px] ${
-                          isInProgress
-                            ? 'bg-blue-700 text-white shadow-sm'
-                            : isCompleted
-                            ? 'bg-slate-200 text-slate-700'
-                            : 'bg-slate-800 text-white'
-                        }`}
-                      >
+                      <span className={`inline-block font-black px-2 py-0.5 rounded text-[11px] ${timeBadgeClass}`}>
                         {item.time}
                       </span>
                     </td>
@@ -804,13 +835,24 @@ export const TimelineScheduleSection: React.FC<TimelineScheduleSectionProps> = (
                       ⏱️ {item.estimatedMinutes} 分
                     </td>
                     <td className="py-3 px-3 whitespace-nowrap align-middle">
-                      <div className="text-xs font-bold text-slate-900">
-                        👤 {item.patientName}
-                      </div>
+                      {isWard ? (
+                        <span className="bg-orange-100 text-orange-950 border border-orange-300 font-extrabold px-2 py-0.5 rounded-md text-[11px] inline-flex items-center gap-1">
+                          <span>🏥</span> 病棟全体・共通
+                        </span>
+                      ) : (
+                        <div className="text-xs font-bold text-slate-900">
+                          👤 {item.patientName}
+                        </div>
+                      )}
                     </td>
                     <td className="py-3 px-3 align-middle">
-                      <div className="font-extrabold text-slate-900 text-xs leading-snug">
-                        {item.taskTitle}
+                      <div className="font-extrabold text-slate-900 text-xs leading-snug flex items-center gap-1.5">
+                        {isWard && (
+                          <span className="bg-orange-600 text-white text-[9px] font-black px-1.5 py-0.2 rounded shrink-0">
+                            病棟ルーチン
+                          </span>
+                        )}
+                        <span>{item.taskTitle}</span>
                       </div>
                     </td>
                     <td className="py-3 px-3 whitespace-nowrap align-middle text-center">

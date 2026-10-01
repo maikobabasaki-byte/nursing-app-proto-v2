@@ -74,9 +74,9 @@ export const BlockerPieChart: React.FC<BlockerPieChartProps> = ({
   }
 
   return (
-    <div className="w-full h-full min-h-[140px] flex flex-row items-center justify-between gap-2.5 py-1">
-      {/* 🟢 左側：小ぶりでコンパクトな円グラフ (文字と縦に重ならないよう左に配置) */}
-      <div className="w-[38%] h-full min-h-[120px] max-h-[160px] relative shrink-0 flex items-center justify-center">
+    <div className="w-full flex flex-col items-center justify-center gap-3 py-1">
+      {/* 🟢 上側：円グラフ */}
+      <div className="w-full h-[160px] relative shrink-0 flex items-center justify-center">
         <ResponsiveContainer width="100%" height="100%">
           <PieChart>
             <Tooltip
@@ -99,40 +99,40 @@ export const BlockerPieChart: React.FC<BlockerPieChartProps> = ({
         </ResponsiveContainer>
       </div>
 
-      {/* 🟢 右側：要因・割合リスト (右側に独立配置。縦方向の潰れ・重なりを完全に解消) */}
-      <div className={`w-[62%] h-full flex-1 min-h-0 flex flex-col justify-center bg-slate-50/90 rounded-xl border border-slate-200 shadow-sm overflow-hidden ${
-        isExpanded ? 'p-3.5 gap-2' : 'p-2 gap-1.5'
+      {/* 🟢 下側：要因・割合リスト (内訳) */}
+      <div className={`w-full flex flex-col bg-slate-50/90 rounded-xl border border-slate-200 shadow-sm ${
+        isExpanded ? 'p-3.5 gap-2' : 'p-2.5 gap-2'
       }`}>
         {/* リストヘッダー */}
-        <div className="flex items-center justify-between border-b border-slate-200/80 pb-1 shrink-0">
-          <span className="text-[11px] font-extrabold text-slate-700 flex items-center gap-1">
+        <div className="flex items-center justify-between border-b border-slate-200/80 pb-1.5 shrink-0">
+          <span className="text-xs font-extrabold text-slate-700 flex items-center gap-1">
             <span>📊</span>
             <span>遅延要因内訳</span>
           </span>
-          <span className="text-[11px] font-black text-slate-900 bg-white px-1.5 py-0.5 rounded border border-slate-200 shrink-0">
+          <span className="text-xs font-black text-slate-900 bg-white px-2 py-0.5 rounded border border-slate-200 shrink-0">
             計: {totalValue}%
           </span>
         </div>
 
-        {/* 要因リスト (縦重なり・押し潰れ防止) */}
-        <ul className="space-y-1 flex-1 min-h-0 overflow-y-auto pr-0.5">
+        {/* 要因リスト */}
+        <ul className="space-y-1.5 w-full">
           {formattedData.map((item, index) => (
             <li
               key={`legend-${index}`}
               className={`flex items-center justify-between font-bold bg-white rounded-lg border border-slate-200/90 shadow-2xs ${
-                isExpanded ? 'px-3 py-1.5 text-xs lg:text-sm' : 'px-2 py-1 text-[11px] lg:text-xs'
+                isExpanded ? 'px-3 py-2 text-xs lg:text-sm' : 'px-2.5 py-1.5 text-xs'
               }`}
             >
-              <div className="flex items-center gap-1.5 min-w-0 flex-1">
+              <div className="flex items-center gap-2 min-w-0 flex-1">
                 <span
                   className={`rounded-full shrink-0 shadow-xs ${
-                    isExpanded ? 'w-2.5 h-2.5' : 'w-2 h-2'
+                    isExpanded ? 'w-3 h-3' : 'w-2.5 h-2.5'
                   }`}
                   style={{ backgroundColor: item.color }}
                 />
                 <span className="text-slate-900 font-extrabold truncate leading-none">{item.name}</span>
               </div>
-              <span className="font-black text-slate-900 shrink-0 ml-1.5 whitespace-nowrap leading-none" style={{ color: item.color }}>
+              <span className="font-black text-slate-900 shrink-0 ml-2 whitespace-nowrap leading-none" style={{ color: item.color }}>
                 {item.value}%
               </span>
             </li>

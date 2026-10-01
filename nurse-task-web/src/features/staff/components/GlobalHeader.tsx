@@ -65,8 +65,6 @@ export default function GlobalHeader({ currentPage, onNavigate}: GlobalHeaderPro
   const selectedDate = useTimelineStore((state) => state.selectedDate) || getJSTDateString();
   const isReadOnly = useTimelineStore((state) => state.isReadOnly);
   const setSelectedDate = useTimelineStore((state) => state.setSelectedDate);
-  const targetUserId = useTimelineStore((state) => state.targetUserId);
-  const setTargetUserId = useTimelineStore((state) => state.setTargetUserId);
 
   const [isCalendarOpen, setIsCalendarOpen] = useState(false);
 
@@ -175,25 +173,6 @@ export default function GlobalHeader({ currentPage, onNavigate}: GlobalHeaderPro
               <DemoScenarioBar />
             )}
           </div>
-
-          {/* 👩‍⚕️ 表示対象スタッフ選択（ダッシュボード閲覧時 & 管理者権限） */}
-          {currentPage === 'personalDashboard' && (isLeader || currentUser?.role === 'admin') && (
-            <div className="flex items-center gap-1 bg-amber-50 border border-amber-200 px-2 py-1 rounded-xl shadow-2xs text-xs shrink-0">
-              <label htmlFor="staff-select-header" className="text-[11px] font-extrabold text-amber-950 flex items-center gap-1 shrink-0">
-                <span>👩‍⚕️</span> 対象:
-              </label>
-              <select
-                id="staff-select-header"
-                value={targetUserId}
-                onChange={(e) => setTargetUserId(e.target.value)}
-                className="!bg-white !text-slate-800 !font-extrabold !text-xs !px-2 !py-0.5 !rounded-lg !border !border-amber-300 !shadow-2xs !cursor-pointer focus:!outline-none focus:!ring-2 focus:!ring-amber-500"
-              >
-                <option value="N001">N001: 師長 (山田 師長)</option>
-                <option value="N002">N002: Satou Yui (佐藤 由衣)</option>
-                <option value="N003">N003: Suzuki Yuka (鈴木 優花)</option>
-              </select>
-            </div>
-          )}
 
           {/* 🔒 過去履歴の閲覧専用（ReadOnly）警告バッジ */}
           {isReadOnly && (

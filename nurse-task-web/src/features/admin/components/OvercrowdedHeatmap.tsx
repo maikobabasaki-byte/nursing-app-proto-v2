@@ -26,7 +26,8 @@ export interface OvercrowdedHeatmapProps {
 }
 
 const HOURS_HEADER = [
-  '8時', '9時', '10時', '11時', '12時', '13時', '14時', '15時', '16時', '17時', '18時', '19時', '20時'
+  '0時', '1時', '2時', '3時', '4時', '5時', '6時', '7時', '8時', '9時', '10時', '11時',
+  '12時', '13時', '14時', '15時', '16時', '17時', '18時', '19時', '20時', '21時', '22時', '23時'
 ];
 
 /**
@@ -100,7 +101,7 @@ export const OvercrowdedHeatmap: React.FC<OvercrowdedHeatmapProps> = ({
         }`}
       >
         <span className={`font-bold text-gray-700 ${isExpanded ? 'text-sm sm:text-base' : 'text-[11px]'}`}>
-          時間帯マトリクス（8:00〜20:00）
+          時間帯マトリクス（0:00〜24:00）
         </span>
         <div className={`flex items-center ${isExpanded ? 'gap-3' : 'gap-2'}`}>
           <span className={`flex items-center gap-1 ${isExpanded ? 'text-xs sm:text-sm' : 'text-[9px]'}`}>
@@ -147,14 +148,14 @@ export const OvercrowdedHeatmap: React.FC<OvercrowdedHeatmapProps> = ({
             {yAxisTitle}
           </div>
           <div
-            className="flex-1 gap-1"
-            style={{ display: 'grid', gridTemplateColumns: 'repeat(13, minmax(0, 1fr))' }}
+            className="flex-1 gap-0.5"
+            style={{ display: 'grid', gridTemplateColumns: 'repeat(24, minmax(0, 1fr))' }}
           >
             {HOURS_HEADER.map((hour) => (
               <div
                 key={hour}
                 className={`text-center font-bold text-gray-600 ${
-                  isExpanded ? 'text-xs sm:text-sm tracking-tight' : 'text-[9px] tracking-tighter'
+                  isExpanded ? 'text-xs sm:text-sm tracking-tight' : 'text-[7px] sm:text-[8px] md:text-[9px] tracking-tighter overflow-hidden text-ellipsis whitespace-nowrap'
                 }`}
               >
                 {hour}
@@ -186,10 +187,10 @@ export const OvercrowdedHeatmap: React.FC<OvercrowdedHeatmapProps> = ({
                 {dayLabel}
               </div>
 
-              {/* 時間セル（13列グリッド） */}
+              {/* 時間セル（24列グリッド） */}
               <div
-                className="flex-1 h-full gap-1"
-                style={{ display: 'grid', gridTemplateColumns: 'repeat(13, minmax(0, 1fr))' }}
+                className="flex-1 h-full gap-0.5"
+                style={{ display: 'grid', gridTemplateColumns: 'repeat(24, minmax(0, 1fr))' }}
               >
                 {hours.map((item) => {
                   const styles = getIntensityStyles(item.intensity);
@@ -222,7 +223,7 @@ export const OvercrowdedHeatmap: React.FC<OvercrowdedHeatmapProps> = ({
                     >
                       <span
                         className={`tracking-tighter ${
-                          isExpanded ? 'text-xs sm:text-sm lg:text-base font-black' : 'text-[9px]'
+                          isExpanded ? 'text-xs sm:text-sm lg:text-base font-black' : 'text-[7px] sm:text-[8px] md:text-[9px]'
                         }`}
                       >
                         {item.intensity > 35 ? item.intensity : ''}

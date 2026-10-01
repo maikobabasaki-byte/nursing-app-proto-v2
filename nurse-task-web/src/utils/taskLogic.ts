@@ -463,3 +463,129 @@ export const isEmergencyTaskOutdated = (task: any, targetDate: string): boolean 
   }
   return false;
 };
+
+/**
+ * 病棟全体共通業務のデフォルトサンプルタスク一覧
+ */
+export const DEFAULT_WARD_TASKS: ExtendedTask[] = [
+  {
+    task_id: 'WARD-TASK-1000',
+    title: '10時病棟定時配薬セット & 経管栄養準備',
+    details: '病棟共通 定時配薬カートセットおよび注入用経管栄養の事前準備',
+    status: 'untouched',
+    priority: 'high',
+    display_period: '10:00',
+    initial_period: '10:00',
+    scheduled_at: '',
+    patient_id: 'ward',
+    patient_name: '病棟全体',
+    room_id: '調剤室',
+    taskType: 'ward',
+    nurse_name: '病棟共通',
+    nurse_id: 'ward',
+    staff_id: 'ward',
+    assigned_nurse_id: 'ward',
+    team: '全体',
+    instruction_type: '病棟共通業務',
+  },
+  {
+    task_id: 'WARD-TASK-1130',
+    title: '昼食配膳・食事車運搬 & 下膳カート回収',
+    details: '11:30 配膳車到着、各部屋配膳・配薬確認および食後下膳カート回収',
+    status: 'untouched',
+    priority: 'medium',
+    display_period: '11:30',
+    initial_period: '11:30',
+    scheduled_at: '',
+    patient_id: 'ward',
+    patient_name: '病棟全体',
+    room_id: '配膳室',
+    taskType: 'ward',
+    nurse_name: '病棟共通',
+    nurse_id: 'ward',
+    staff_id: 'ward',
+    assigned_nurse_id: 'ward',
+    team: '全体',
+    instruction_type: '病棟共通業務',
+  },
+  {
+    task_id: 'WARD-TASK-1400',
+    title: '午後看護カンファレンス & タスク平準化',
+    details: '14:00 重症患者アセスメントおよびチーム別業務進捗の最終調整',
+    status: 'untouched',
+    priority: 'medium',
+    display_period: '14:00',
+    initial_period: '14:00',
+    scheduled_at: '',
+    patient_id: 'ward',
+    patient_name: '病棟全体',
+    room_id: 'ナースステーション',
+    taskType: 'ward',
+    nurse_name: '病棟共通',
+    nurse_id: 'ward',
+    staff_id: 'ward',
+    assigned_nurse_id: 'ward',
+    team: '全体',
+    instruction_type: '病棟共通業務',
+  },
+  {
+    task_id: 'WARD-TASK-1530',
+    title: '夕方処方薬受け取り & リネン・備品定時補給',
+    details: '15:30 薬局より夕方追加処方受取、病棟備品・リネン補充',
+    status: 'untouched',
+    priority: 'low',
+    display_period: '15:30',
+    initial_period: '15:30',
+    scheduled_at: '',
+    patient_id: 'ward',
+    patient_name: '病棟全体',
+    room_id: 'ナースステーション',
+    taskType: 'ward',
+    nurse_name: '病棟共通',
+    nurse_id: 'ward',
+    staff_id: 'ward',
+    assigned_nurse_id: 'ward',
+    team: '全体',
+    instruction_type: '病棟共通業務',
+  },
+  {
+    task_id: 'WARD-TASK-1630',
+    title: '終業前看護記録チェック & 夕礼申し送り準備',
+    details: '16:30 申し送り内容確認、夜勤帯引き継ぎサマリー作成',
+    status: 'untouched',
+    priority: 'medium',
+    display_period: '16:30',
+    initial_period: '16:30',
+    scheduled_at: '',
+    patient_id: 'ward',
+    patient_name: '病棟全体',
+    room_id: 'ナースステーション',
+    taskType: 'ward',
+    nurse_name: '病棟共通',
+    nurse_id: 'ward',
+    staff_id: 'ward',
+    assigned_nurse_id: 'ward',
+    team: '全体',
+    instruction_type: '病棟共通業務',
+  },
+];
+
+/**
+ * タスクが「病棟共通業務・病棟タスク」であるか判定する
+ */
+export const isWardTask = (task: any): boolean => {
+  if (!task) return false;
+  if (task.taskType === 'ward') return true;
+  if (task.patient_id === 'ward' || task.patient_id === '病棟全体' || task.patient_id === '病棟共通') return true;
+  const pName = String(task.patient_name || task.patientName || '').trim();
+  if (pName === '病棟全体' || pName === '病棟共通' || pName === '全体病棟' || pName === '病棟業務' || pName.includes('病棟業務')) return true;
+  const roomId = String(task.room_id || task.room || '').trim();
+  if (roomId === '病棟共通' || roomId === '病棟全体' || roomId === '調剤室' || roomId === '配膳室・病棟全体' || roomId === '配膳室') return true;
+
+  const title = String(task.title || task.taskTitle || '').trim();
+  const isIndividualPatient = task.patient_id && String(task.patient_id).startsWith('P-');
+  if (!isIndividualPatient && (title.includes('配膳') || title.includes('配薬') || title.includes('経管栄養') || title.includes('申し送り') || title.includes('カンファレンス'))) {
+    return true;
+  }
+  return false;
+};

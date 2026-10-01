@@ -40,6 +40,8 @@ export default function PatientSelect({ onSelectComplete }: PatientSelectProps) 
 
   // 選択された患者のIDを記録するステート
   const [selectedPatientIds, setSelectedPatientIds] = useState<string[]>([]);
+  // 🏥 病棟業務（専任）の選択ステート
+  const [isWardDutyOnly, setIsWardDutyOnly] = useState<boolean>(false);
 
   /**
    * 【画面起動時の初期化処理（マウント時のみ実行）】
@@ -94,47 +96,48 @@ export default function PatientSelect({ onSelectComplete }: PatientSelectProps) 
   }, [normalizedUserTeam]);
 
   /**
+   * 🏥 病棟業務（専任）チェックボックスがクリックされたときの処理
+   * ONの時は個別の患者選択を解除（患者未選択状態）にします。
+   */
+  const handleWardDutyCheck = (checked: boolean) => {
+    if (checked) {
+      setSelectedPatientIds([]);
+      setIsWardDutyOnly(true);
+      sessionStorage.setItem('isWardDutyOnly', 'true');
+    } else {
+      setIsWardDutyOnly(false);
+      sessionStorage.removeItem('isWardDutyOnly');
+    }
+  };
+
+  /**
    * 個人のチェックボックスがクリックされたときの処理
-   * * 【トグル動作】
-   * すでに選択リストにあれば「消しゴムで消す（削除）」、なければ「末尾に書き足す（追加）」を行います。
-   * * @param patientId クリックされた患者の固有ID
    */
   const handlePatientCheck = (patientId: string) => {
-    // 1. 現在選択されているIDリストの中に、今クリックされたIDがすでに含まれているか？を判定
+    setIsWardDutyOnly(false);
+    sessionStorage.removeItem('isWardDutyOnly');
     if (selectedPatientIds.includes(patientId)) {
-      // 【選択解除】
-      // 含まれていたなら、filterを使って「このID以外」を残した新しいリストを作り直してStateを更新
       setSelectedPatientIds(selectedPatientIds.filter(id => id !== patientId));
     } else {
-      // 【新規選択】
-      // 含まれていなかったら、スプレッド構文（...）を使ってこれまでのリストの末尾にこのIDを追加してStateを更新
       setSelectedPatientIds([...selectedPatientIds, patientId]);
     }
   };
 
   /**
    * 部屋ごとの一括チェックボックスがクリックされたときの処理
-   * * 【一括ON/OFF動作】
-   * その部屋の全員にチェックがあれば「部屋ごと一括解除」、1人でも未チェックがいれば「部屋ごと全員選択」にします。
-   * * @param roomId クリックされた病室のID（例: "401"）
    */
   const handleRoomCheck = (roomId: string) => {
-    // 1. 全患者の中から、この部屋（roomId）に入院している患者のIDだけをガサッと抽出してリスト化
+    setIsWardDutyOnly(false);
+    sessionStorage.removeItem('isWardDutyOnly');
     const roomPatientIds = patients
       .filter(p => p.room_id === roomId)
       .map(p => p.patient_id);
 
-    // 2. 「この部屋の全員」が、すでに自分の選択リスト（selectedPatientIds）に入っているかを判定
     const isAllChecked = roomPatientIds.every(id => selectedPatientIds.includes(id));
 
     if (isAllChecked) {
-      // 【部屋ごと一括解除】
-      // すでに全員選ばれている状態なら、現在の選択リストから「この部屋のメンバーのID」だけを綺麗に排除する
       setSelectedPatientIds(selectedPatientIds.filter(id => !roomPatientIds.includes(id)));
     } else {
-      // 【部屋ごと全員選択（漏れ防止）】
-      // 1人でも選ばれていない人がいるなら、一度現在のリストからこの部屋のメンバーを引いて（重複防止）、
-      // 「他の部屋の選択中メンバー」＋「この部屋の全員」を綺麗に合体させる
       const otherPatientIds = selectedPatientIds.filter(id => !roomPatientIds.includes(id));
       setSelectedPatientIds([...otherPatientIds, ...roomPatientIds]);
     }
@@ -294,6 +297,23 @@ export default function PatientSelect({ onSelectComplete }: PatientSelectProps) 
                   </div>
                 );
               })}
+
+              {/* 🏥 部屋番号リストの一番下：病棟業務（専任）行 */}
+              <div className="flex items-center gap-3.75 py-2 px-5 bg-[#f0f8fa] border-b border-[#eee] font-bold text-[#1A365D] text-[1.1rem]">
+                <input 
+                  type="checkbox" 
+                  id="ward-duty-only"
+                  checked={isWardDutyOnly}
+                  onChange={(e) => handleWardDutyCheck(e.target.checked)}
+                  className="w-5 h-5 m-0 cursor-pointer shrink-0 border border-gray-400 rounded accent-[#1A365D] !appearance-auto" 
+                />
+                <label 
+                  htmlFor="ward-duty-only" 
+                  className="cursor-pointer select-none"
+                >
+                  病棟業務（専任）
+                </label>
+              </div>
             </div>
           )}
 

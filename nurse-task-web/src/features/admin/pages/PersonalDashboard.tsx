@@ -25,6 +25,11 @@ import { StaffOverviewCard } from '../components/personalDashboard/StaffOverview
 import { TimelineScheduleSection } from '../components/personalDashboard/TimelineScheduleSection';
 import { PerformanceChartsSection } from '../components/personalDashboard/PerformanceChartsSection';
 import { DailyReflectionSection } from '../components/personalDashboard/DailyReflectionSection';
+import { ClinicalLadderSection } from '../components/personalDashboard/ClinicalLadderSection';
+import type { ClinicalLadderData } from '../components/personalDashboard/ClinicalLadderSection';
+import { SkillProficiencyChecklist } from '../components/personalDashboard/SkillProficiencyChecklist';
+import type { NursingSkillItem } from '../components/personalDashboard/SkillProficiencyChecklist';
+import { SKILL_LEVEL_DEFINITIONS } from '../components/personalDashboard/SkillProficiencyChecklist';
 
 // 後方互換性のための型・定数の再エクスポート
 export type * from '../types/personalDashboard';
@@ -37,7 +42,6 @@ export const PersonalDashboard: React.FC = () => {
   // ログイン認証状態（Zustandストア / Firebase認証）よりロール判定
   const storeUser = useTimelineStore((state) => state.currentUser);
   const selectedDate = useTimelineStore((state) => state.selectedDate) || getJSTDateString();
-  const setSelectedDate = useTimelineStore((state) => state.setSelectedDate);
   const firebaseUser = auth.currentUser;
 
   const derivedRole: 'admin' | 'nurse' =
@@ -45,7 +49,7 @@ export const PersonalDashboard: React.FC = () => {
       ? 'admin'
       : 'nurse';
 
-  const [roleOverride, setRoleOverride] = useState<'admin' | 'nurse' | 'auto'>('auto');
+  const [roleOverride] = useState<'admin' | 'nurse' | 'auto'>('auto');
   const activeRole: 'admin' | 'nurse' = roleOverride === 'auto' ? derivedRole : roleOverride;
 
   const loggedInUserId = storeUser?.nurse_id || storeUser?.staff_id || 'nurse05';
@@ -57,13 +61,24 @@ export const PersonalDashboard: React.FC = () => {
     role: activeRole,
   };
 
+  const isLeader = checkIsLeader(storeUser) || checkIsLeader(firebaseUser);
+
   const targetUserId = useTimelineStore((state) => state.targetUserId) || loggedInUserId;
   const setTargetUserId = useTimelineStore((state) => state.setTargetUserId);
-  const [chartView, setChartView] = useState<'radar' | 'pace'>('radar');
   const [timelineViewMode, setTimelineViewMode] = useState<'patient' | 'gantt' | 'table'>('patient');
 
   const [now, setNow] = useState<Date>(new Date());
   const [simulatedTimeStr, setSimulatedTimeStr] = useState<string | null>(null);
+
+  // トースト通知 State
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
+
+  const showToast = (msg: string) => {
+    setToastMessage(msg);
+    setTimeout(() => {
+      setToastMessage((prev) => (prev === msg ? null : prev));
+    }, 3500);
+  };
 
   useEffect(() => {
     const timer = setInterval(() => {
@@ -174,15 +189,6 @@ export const PersonalDashboard: React.FC = () => {
           text: '【Good!】バイタル測定と傾聴の手順が非常に丁寧です！患者様への思いやりを今後も継続してくださいね😊',
           createdAt: '16:30',
         },
-        {
-          id: 'c-kpt-k2',
-          senderId: 'nurse05',
-          senderName: '田中 結衣',
-          senderRole: 'nurse',
-          senderAvatarEmoji: '🌱',
-          text: 'ありがとうございます！今後も丁寧な対応を心がけます！',
-          createdAt: '16:45',
-        },
       ],
       problemComments: [
         {
@@ -219,8 +225,8 @@ export const PersonalDashboard: React.FC = () => {
 
   // 🔄 Kolb 各グループ用インラインチャット State
   const [userKolbChats, setUserKolbChats] = useState<Record<string, {
-    expRefComments: ItemChatMessage[]; // 経験・省察チャット
-    conceptExpComments: ItemChatMessage[]; // 概念化・実践チャット
+    expRefComments: ItemChatMessage[];
+    conceptExpComments: ItemChatMessage[];
   }>>({
     N001: { expRefComments: [], conceptExpComments: [] },
     N002: {
@@ -250,11 +256,85 @@ export const PersonalDashboard: React.FC = () => {
     N003: { expRefComments: [], conceptExpComments: [] },
   });
 
-  // 🧱 モジュール型課題カード（配列管理） State
+  // 🧱 モジュール型課題カード State
   const [modularReflections, setModularReflections] = useState<Record<string, ModularReflection[]>>({
     N001: STAFF_PROFILES['N001'].reflection.reflections || [],
     N002: STAFF_PROFILES['N002'].reflection.reflections || [],
     N003: STAFF_PROFILES['N003'].reflection.reflections || [],
+  });
+
+  // 🎖️ JNAクリニカルラダー評価 State (スタッフIDごとのデータ)
+  const [ladderDataMap, setLadderDataMap] = useState<Record<string, ClinicalLadderData>>({
+    N001: {
+      currentLevel: 'レベルⅣ (統括)',
+      targetLevel: 'レベルⅤ (スペシャリスト)',
+      strengths: '病棟全体の過密ボトルネック察知および的確な指示出し、緊急時アセスメント力に非常に優れています。',
+      improvements: 'OJT実地指導の際、新人への事前講義時間を申し送り時に設定する工夫が推奨されます。',
+      competencies: [
+        { key: 'comp1', subject: 'ニーズを捉える力', score: 5, rationale: '患者・病棟全体のニーズを包括的に捉え、的確に優先順位を設定できています。' },
+        { key: 'comp2', subject: 'ケアを実践する力', score: 5, rationale: '根拠に基づいた高度なケア・処置を安全かつ迅速に実施できています。' },
+        { key: 'comp3', subject: '協働する力', score: 4, rationale: '多職種および病棟スタッフ間での情報共有・連携を円滑に主導しています。' },
+        { key: 'comp4', subject: '意思決定を支える力', score: 5, rationale: '患者・家族の意思決定を尊重し、チームでの支援体制を構築できています。' },
+        { key: 'comp5', subject: '安全管理', score: 5, rationale: '医療安全・感染対策・急変時プロトコルを厳格に遵守・徹底しています。' },
+      ],
+    },
+    N002: {
+      currentLevel: 'レベルⅠ (新人)',
+      targetLevel: 'レベルⅡ (一人立ち)',
+      strengths: '患者様への親身で丁寧なコミュニケーションと傾聴姿勢が素晴らしく、安心感を与えられています。基本バイタルの測定も正確です。',
+      improvements: '複数介護タスク（清拭・体位変換等）に入る前の必要物品のワゴン事前準備を徹底し、12分程度の遅延を防ぎましょう。',
+      competencies: [
+        { key: 'comp1', subject: 'ニーズを捉える力', score: 3, rationale: '基本的なバイタル・傾聴ニーズは正確に捉えられていますが、複数ケアの重複時の優先度設定に指導が必要です。' },
+        { key: 'comp2', subject: 'ケアを実践する力', score: 3, rationale: '基本バイタルは手際よく正確ですが、体位変換や清拭で事前準備の工夫余地があります。' },
+        { key: 'comp3', subject: '協働する力', score: 4, rationale: '先輩ナースへの報告・相談・連絡が素直でスムーズに行えています。' },
+        { key: 'comp4', subject: '意思決定を支える力', score: 3, rationale: '患者様の不安な感情に寄り添い、訴えを共感的に聴く姿勢が定着しています。' },
+        { key: 'comp5', subject: '安全管理', score: 4, rationale: 'ダブルチェック・本人確認の手順を忠実に守り、安全意識が高く保たれています。' },
+      ],
+    },
+    N003: {
+      currentLevel: 'レベルⅡ (中堅)',
+      targetLevel: 'レベルⅢ (リーダー候補)',
+      strengths: '自身の担当タスクを計画通り手際よく完了し、SOAP記録の迅速入力が非常に安定しています。',
+      improvements: '午後の余裕がある時間帯に、新人ナースの進捗状況へ目を向け、積極的なサポートを行う姿勢が期待されます。',
+      competencies: [
+        { key: 'comp1', subject: 'ニーズを捉える力', score: 4, rationale: '患者の状態変化を的確に把握し、アセスメントを迅速に行えています。' },
+        { key: 'comp2', subject: 'ケアを実践する力', score: 4, rationale: '自立して各種看護技術を計画時間内に実施できています。' },
+        { key: 'comp3', subject: '協働する力', score: 4, rationale: '新人ナースのペアフォローや他スタッフとの連携がスムーズです。' },
+        { key: 'comp4', subject: '意思決定を支える力', score: 4, rationale: '患者・家族への病状説明補助や意向把握に努めています。' },
+        { key: 'comp5', subject: '安全管理', score: 5, rationale: 'インシデント防止・点滴ダブルチェック・与薬安全を徹底できています。' },
+      ],
+    },
+  });
+
+  // 💉 看護技術 5段階習熟度（自立度）チェックリスト State
+  const [technicalSkillsMap, setTechnicalSkillsMap] = useState<Record<string, NursingSkillItem[]>>({
+    N001: [
+      { id: 'sk1', name: '静脈血採血', category: '注射・採血', level: 5 },
+      { id: 'sk2', name: '気管吸引（経口・経鼻）', category: '呼吸ケア', level: 5 },
+      { id: 'sk3', name: '導尿・尿道カテーテル留置', category: '排泄ケア', level: 5 },
+      { id: 'sk4', name: '経管栄養・胃瘻管理', category: '栄養管理', level: 5 },
+      { id: 'sk5', name: '十二指腸チューブ挿入補助', category: '処置介助', level: 5 },
+      { id: 'sk6', name: '心電図装着・モニター測定', category: '循環アセスメント', level: 5 },
+      { id: 'sk7', name: '清拭・全身皮膚ケア', category: '清潔ケア', level: 5 },
+    ],
+    N002: [
+      { id: 'sk1', name: '静脈血採血', category: '注射・採血', level: 3 },
+      { id: 'sk2', name: '気管吸引（経口・経鼻）', category: '呼吸ケア', level: 2 },
+      { id: 'sk3', name: '導尿・尿道カテーテル留置', category: '排泄ケア', level: 2 },
+      { id: 'sk4', name: '経管栄養・胃瘻管理', category: '栄養管理', level: 3 },
+      { id: 'sk5', name: '十二指腸チューブ挿入補助', category: '処置介助', level: 1 },
+      { id: 'sk6', name: '心電図装着・モニター測定', category: '循環アセスメント', level: 4 },
+      { id: 'sk7', name: '清拭・全身皮膚ケア', category: '清潔ケア', level: 4 },
+    ],
+    N003: [
+      { id: 'sk1', name: '静脈血採血', category: '注射・採血', level: 5 },
+      { id: 'sk2', name: '気管吸引（経口・経鼻）', category: '呼吸ケア', level: 4 },
+      { id: 'sk3', name: '導尿・尿道カテーテル留置', category: '排泄ケア', level: 4 },
+      { id: 'sk4', name: '経管栄養・胃瘻管理', category: '栄養管理', level: 5 },
+      { id: 'sk5', name: '十二指腸チューブ挿入補助', category: '処置介助', level: 3 },
+      { id: 'sk6', name: '心電図装着・モニター測定', category: '循環アセスメント', level: 5 },
+      { id: 'sk7', name: '清拭・全身皮膚ケア', category: '清潔ケア', level: 5 },
+    ],
   });
 
   const [isSaveSuccess, setIsSaveSuccess] = useState<boolean>(false);
@@ -293,6 +373,55 @@ export const PersonalDashboard: React.FC = () => {
 
   const currentFormat = reflectionFormats[effectiveTargetId] || 'modular';
 
+  const currentLadder = ladderDataMap[effectiveTargetId] || ladderDataMap['N002'];
+  const currentTechnicalSkills = technicalSkillsMap[effectiveTargetId] || technicalSkillsMap['N002'];
+
+  // JNAラダースコア更新ハンドラー (管理者専用)
+  const handleUpdateCompetencyScore = (key: string, newScore: number) => {
+    setLadderDataMap((prev) => {
+      const staffLadder = prev[effectiveTargetId] || prev['N002'];
+      const updatedComps = staffLadder.competencies.map((c) =>
+        c.key === key ? { ...c, score: newScore } : c
+      );
+      return {
+        ...prev,
+        [effectiveTargetId]: {
+          ...staffLadder,
+          competencies: updatedComps,
+        },
+      };
+    });
+    const compObj = currentLadder.competencies.find((c) => c.key === key);
+    showToast(`🎯 「${compObj?.subject || key}」の評価を Lv.${newScore} に更新しました。レーダーチャートが即時変化します。`);
+  };
+
+  // 定性フィードバック保存ハンドラー (管理者専用)
+  const handleSaveLadderFeedback = (strengths: string, improvements: string) => {
+    setLadderDataMap((prev) => {
+      const staffLadder = prev[effectiveTargetId] || prev['N002'];
+      return {
+        ...prev,
+        [effectiveTargetId]: {
+          ...staffLadder,
+          strengths,
+          improvements,
+        },
+      };
+    });
+    showToast('💬 指導者からの定性フィードバック（強み・課題）を保存しました。');
+  };
+
+  // 看護技術 習熟度レベル更新ハンドラー (管理者専用)
+  const handleUpdateSkillLevel = (skillId: string, skillName: string, newLevel: number) => {
+    setTechnicalSkillsMap((prev) => {
+      const list = prev[effectiveTargetId] || prev['N002'];
+      const updated = list.map((sk) => (sk.id === skillId ? { ...sk, level: newLevel } : sk));
+      return { ...prev, [effectiveTargetId]: updated };
+    });
+    const levelDef = SKILL_LEVEL_DEFINITIONS[newLevel];
+    showToast(`✨ 「${skillName}」の評価を更新しました：Lv.${newLevel}（${levelDef?.label || ''}）`);
+  };
+
   // 💾 振り返りデータの自動復元 (localStorage & Firestore リアルタイム取得)
   useEffect(() => {
     isLoadedRef.current = false;
@@ -313,19 +442,6 @@ export const PersonalDashboard: React.FC = () => {
         if (parsed.freeChats) setUserFreeChats((prev) => ({ ...prev, [effectiveTargetId]: parsed.freeChats }));
         if (parsed.kptChats) setUserKPTChats((prev) => ({ ...prev, [effectiveTargetId]: parsed.kptChats }));
         if (parsed.kolbChats) setUserKolbChats((prev) => ({ ...prev, [effectiveTargetId]: parsed.kolbChats }));
-      } else {
-        const legacyLocal = localStorage.getItem(`nurseflow_reflection_${effectiveTargetId}`);
-        if (legacyLocal) {
-          const parsed = JSON.parse(legacyLocal);
-          if (parsed.format) setReflectionFormats((prev) => ({ ...prev, [effectiveTargetId]: parsed.format }));
-          if (parsed.modular) setModularReflections((prev) => ({ ...prev, [effectiveTargetId]: parsed.modular }));
-          if (parsed.free !== undefined) setUserFreeReflections((prev) => ({ ...prev, [effectiveTargetId]: parsed.free }));
-          if (parsed.kpt) setUserKPTReflections((prev) => ({ ...prev, [effectiveTargetId]: parsed.kpt }));
-          if (parsed.kolb) setUserKolbReflections((prev) => ({ ...prev, [effectiveTargetId]: parsed.kolb }));
-          if (parsed.freeChats) setUserFreeChats((prev) => ({ ...prev, [effectiveTargetId]: parsed.freeChats }));
-          if (parsed.kptChats) setUserKPTChats((prev) => ({ ...prev, [effectiveTargetId]: parsed.kptChats }));
-          if (parsed.kolbChats) setUserKolbChats((prev) => ({ ...prev, [effectiveTargetId]: parsed.kolbChats }));
-        }
       }
     } catch (e) {
       console.warn("localStorage load error:", e);
@@ -346,20 +462,6 @@ export const PersonalDashboard: React.FC = () => {
           if (parsed.freeChats) setUserFreeChats((prev) => ({ ...prev, [effectiveTargetId]: parsed.freeChats }));
           if (parsed.kptChats) setUserKPTChats((prev) => ({ ...prev, [effectiveTargetId]: parsed.kptChats }));
           if (parsed.kolbChats) setUserKolbChats((prev) => ({ ...prev, [effectiveTargetId]: parsed.kolbChats }));
-        } else {
-          const legacyRef = doc(db, "nurse_reflections", effectiveTargetId);
-          const legacySnap = await getDoc(legacyRef);
-          if (legacySnap.exists()) {
-            const parsed = legacySnap.data();
-            if (parsed.format) setReflectionFormats((prev) => ({ ...prev, [effectiveTargetId]: parsed.format }));
-            if (parsed.modular) setModularReflections((prev) => ({ ...prev, [effectiveTargetId]: parsed.modular }));
-            if (parsed.free !== undefined) setUserFreeReflections((prev) => ({ ...prev, [effectiveTargetId]: parsed.free }));
-            if (parsed.kpt) setUserKPTReflections((prev) => ({ ...prev, [effectiveTargetId]: parsed.kpt }));
-            if (parsed.kolb) setUserKolbReflections((prev) => ({ ...prev, [effectiveTargetId]: parsed.kolb }));
-            if (parsed.freeChats) setUserFreeChats((prev) => ({ ...prev, [effectiveTargetId]: parsed.freeChats }));
-            if (parsed.kptChats) setUserKPTChats((prev) => ({ ...prev, [effectiveTargetId]: parsed.kptChats }));
-            if (parsed.kolbChats) setUserKolbChats((prev) => ({ ...prev, [effectiveTargetId]: parsed.kolbChats }));
-          }
         }
       } catch (e) {
         console.warn("Firestore load error:", e);
@@ -407,12 +509,6 @@ export const PersonalDashboard: React.FC = () => {
           ...dataToSave,
           updated_at: serverTimestamp(),
         }, { merge: true });
-
-        const legacyRef = doc(db, "nurse_reflections", effectiveTargetId);
-        await setDoc(legacyRef, {
-          ...dataToSave,
-          updated_at: serverTimestamp(),
-        }, { merge: true });
       } catch (e) {
         console.warn("Firestore auto-save error:", e);
       }
@@ -450,7 +546,6 @@ export const PersonalDashboard: React.FC = () => {
       updatedAt: new Date().toISOString(),
     };
 
-    // 1. ローカルストレージへの保存
     try {
       localStorage.setItem(`nurseflow_reflection_${targetDateKey}`, JSON.stringify(dataToSave));
       localStorage.setItem(`nurseflow_reflection_${effectiveTargetId}`, JSON.stringify(dataToSave));
@@ -458,16 +553,9 @@ export const PersonalDashboard: React.FC = () => {
       console.warn("localStorage save error:", e);
     }
 
-    // 2. Firestore への保存
     try {
       const docRef = doc(db, "nurse_reflections", targetDateKey);
       await setDoc(docRef, {
-        ...dataToSave,
-        updated_at: serverTimestamp(),
-      }, { merge: true });
-
-      const legacyRef = doc(db, "nurse_reflections", effectiveTargetId);
-      await setDoc(legacyRef, {
         ...dataToSave,
         updated_at: serverTimestamp(),
       }, { merge: true });
@@ -534,7 +622,6 @@ export const PersonalDashboard: React.FC = () => {
     return gaps;
   };
 
-  // 🧱 モジュール型課題カードへのメッセージ追加ハンドラー
   const handleAddModularReflection = () => {
     const newRef: ModularReflection = {
       id: `ref-${Date.now()}`,
@@ -572,7 +659,6 @@ export const PersonalDashboard: React.FC = () => {
     setIsSaveSuccess(false);
   };
 
-  // 🧱 モジュール型課題カード用 インラインチャット送信・編集・削除
   const handleSendModularComment = (refId: string, text: string) => {
     const newMsg: ItemChatMessage = {
       id: `c-mod-${Date.now()}`,
@@ -628,7 +714,6 @@ export const PersonalDashboard: React.FC = () => {
     });
   };
 
-  // 📝 自由記述 インラインチャット送信ハンドラー
   const handleSendFreeComment = (text: string) => {
     const newMsg: ItemChatMessage = {
       id: `c-free-${Date.now()}`,
@@ -646,7 +731,6 @@ export const PersonalDashboard: React.FC = () => {
     }));
   };
 
-  // 📊 KPT 各項目 インラインチャット送信ハンドラー
   const handleSendKPTComment = (typeKey: 'keepComments' | 'problemComments' | 'tryComments', text: string) => {
     const newMsg: ItemChatMessage = {
       id: `c-kpt-${Date.now()}`,
@@ -670,7 +754,6 @@ export const PersonalDashboard: React.FC = () => {
     });
   };
 
-  // 🔄 Kolb 各グループ インラインチャット送信ハンドラー
   const handleSendKolbComment = (typeKey: 'expRefComments' | 'conceptExpComments', text: string) => {
     const newMsg: ItemChatMessage = {
       id: `c-kolb-${Date.now()}`,
@@ -701,17 +784,66 @@ export const PersonalDashboard: React.FC = () => {
   const progressPercent = totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 0;
 
   return (
-    <div className="w-full max-w-full h-full overflow-y-auto bg-slate-50 font-sans p-2.5 sm:p-3 lg:p-4 flex flex-col gap-4 text-slate-800">
-      {/* 1. 表示対象スタッフの概要カード */}
-      <StaffOverviewCard
-        currentStaff={currentStaff}
-        completedCount={completedCount}
-        totalCount={totalCount}
-        progressPercent={progressPercent}
-      />
+    <div className="w-full max-w-full h-full overflow-y-auto bg-slate-50 font-sans p-2.5 sm:p-3 lg:p-4 flex flex-col gap-4 text-slate-800 relative">
+      {/* Toast Notification Popup Banner */}
+      {toastMessage && (
+        <div className="fixed top-4 right-4 z-50 bg-slate-900/95 text-white px-4 py-3 rounded-2xl shadow-2xl border border-slate-700 backdrop-blur-md flex items-center gap-2 animate-bounce max-w-md">
+          <span className="text-lg">📢</span>
+          <span className="text-xs font-bold leading-relaxed">{toastMessage}</span>
+        </div>
+      )}
+
+      {/* 最上部：対象スタッフ選択 & 表示スタッフ概要 (2カラム構造・左右逆) */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-stretch">
+        {/* 左カラム: 対象スタッフ選択 (管理者・リーダー用) または 表示固定表示 */}
+        {(isLeader || currentUser.role === 'admin') ? (
+          <div className="bg-amber-50 border border-amber-200 p-4 lg:p-5 rounded-2xl shadow-sm flex flex-col justify-center gap-2">
+            <div className="flex items-center gap-2">
+              <span className="text-xl">👩‍⚕️</span>
+              <label htmlFor="top-2col-staff-select" className="font-extrabold text-amber-950 text-sm">
+                対象スタッフ選択（表示切替）:
+              </label>
+            </div>
+            <p className="text-xs text-amber-800 font-medium">
+              ダッシュボードの表示・評価対象となるスタッフを切り替えます。
+            </p>
+            <select
+              id="top-2col-staff-select"
+              value={effectiveTargetId}
+              onChange={(e) => setTargetUserId(e.target.value)}
+              className="!bg-white !text-slate-900 !font-extrabold !text-xs sm:!text-sm !px-3 !py-2 !rounded-xl !border !border-amber-300 focus:!outline-none focus:!ring-2 focus:!ring-amber-500 !cursor-pointer !shadow-sm w-full mt-1"
+            >
+              <option value="N001">N001: 山田 師長 (管理者)</option>
+              <option value="N002">N002: 田中 結衣 (1年目)</option>
+              <option value="N003">N003: 鈴木 看護師 (4年目)</option>
+            </select>
+          </div>
+        ) : (
+          <div className="bg-slate-100 border border-slate-200 p-4 lg:p-5 rounded-2xl shadow-sm flex items-center gap-3">
+            <span className="text-xl">🔒</span>
+            <div>
+              <p className="text-sm font-extrabold text-slate-800">
+                対象スタッフ固定中
+              </p>
+              <p className="text-xs text-slate-500 font-medium mt-0.5">
+                ご自身の個人パフォーマンスおよび本日の振り返りを表示しています。
+              </p>
+            </div>
+          </div>
+        )}
+
+        {/* 右カラム: 表示中スタッフの概要 */}
+        <StaffOverviewCard
+          currentStaff={currentStaff}
+          completedCount={completedCount}
+          totalCount={totalCount}
+          progressPercent={progressPercent}
+        />
+      </div>
 
       {/* 3. ワンカラム構造セクション */}
       <div className="w-full flex flex-col gap-5">
+        {/* ---------------- 1. 本日について ---------------- */}
         {/* 本日のタイムライン */}
         <TimelineScheduleSection
           currentStaff={currentStaff}
@@ -728,11 +860,9 @@ export const PersonalDashboard: React.FC = () => {
           setGapSegments={setGapSegments}
         />
 
-        {/* スキル分析 & AIフィードバック */}
+        {/* 📈 タスク消化ペース比較 & AIパーソナルフィードバック */}
         <PerformanceChartsSection
           currentStaff={currentStaff}
-          chartView={chartView}
-          setChartView={setChartView}
           selectedDate={selectedDate}
         />
 
@@ -771,6 +901,24 @@ export const PersonalDashboard: React.FC = () => {
           autoSaveStatus={autoSaveStatus}
           lastSavedTime={lastSavedTime}
           selectedDate={selectedDate}
+        />
+
+        {/* ---------------- 2. 看護技術について ---------------- */}
+        {/* 💉 看護技術 5段階習熟度（自立度）チェックリスト (新人教育・OJT用) */}
+        <SkillProficiencyChecklist
+          currentUser={currentUser}
+          skills={currentTechnicalSkills}
+          onUpdateSkillLevel={handleUpdateSkillLevel}
+        />
+
+        {/* ---------------- 3. クリニカルラダーについて ---------------- */}
+        {/* 🎖️ 日本看護協会 JNAクリニカルラダー評価 & 定性フィードバックセクション */}
+        <ClinicalLadderSection
+          currentUser={currentUser}
+          effectiveTargetId={effectiveTargetId}
+          ladderData={currentLadder}
+          onUpdateCompetencyScore={handleUpdateCompetencyScore}
+          onSaveFeedback={handleSaveLadderFeedback}
         />
       </div>
     </div>

@@ -15,7 +15,7 @@ import { useUserName } from '../../../../hooks/useUserName';
 import { checkIsLeader } from '../../../../utils/userUtils';
 import { getJSTDateString } from '../../../../utils/dateUtils';
 import { PoolTaskCard } from './PoolTaskCard';
-import { normalizeToHHMM, normalizeTeamName, isTaskInLeaderTeam, extractUserProgressingTasks, isTimeInSlot, isEmergencyTaskOutdated } from '../../../../utils/taskLogic';
+import { normalizeToHHMM, normalizeTeamName, isTaskInLeaderTeam, extractUserProgressingTasks, isTimeInSlot, isEmergencyTaskOutdated, isWardTask, DEFAULT_WARD_TASKS } from '../../../../utils/taskLogic';
 import { useIsMobile } from '../../../../hooks/useIsMobile';
 
 export default function TimelineMain({ 
@@ -53,10 +53,17 @@ export default function TimelineMain({
     ? selectedPatients
     : storeSelectedPatients;
 
-  // 💡 判定関数：患者が指定されていない（0件）場合は全タスクを表示し、画面消失を自動防止
+  // 🏥 病棟業務専任（または患者未選択）フラグ
+  const isWardDutyOnly = Boolean(
+    sessionStorage.getItem('isWardDutyOnly') === 'true' ||
+    !effectiveSelectedPatients ||
+    effectiveSelectedPatients.length === 0
+  );
+
+  // 💡 判定関数
   const isPatientSelected = (patientId: string) => {
-    if (!effectiveSelectedPatients || effectiveSelectedPatients.length === 0) {
-      return true;
+    if (isWardDutyOnly) {
+      return false;
     }
     const targetId = String(patientId || '').trim().toLowerCase();
     return effectiveSelectedPatients.some((id) => {
@@ -84,6 +91,16 @@ export default function TimelineMain({
       return true; // 💡 SOS・ナースコール・突発割り込みは受け持ち関係なく全員のタイムラインに100%表示
     }
 
+    // 🏥 病棟共通タスクは常にタイムラインに表示
+    if (isWardTask(task)) {
+      return true;
+    }
+
+    // 病棟専任モード（または患者未選択）の場合は個別の患者タスクを非表示にする
+    if (isWardDutyOnly) {
+      return false;
+    }
+
     if (isPatientSelected(task.patient_id)) return true;
     if (task.isGroup && task.children && task.children.some(c => isPatientSelected(c.patient_id))) {
       return true;
@@ -91,8 +108,17 @@ export default function TimelineMain({
     return false;
   };
 
+  // 病棟業務タスクの自動補完を含む全タスクデータ
+  const sourceTasks = useMemo(() => {
+    const hasWardTaskInStore = storeAllTasks.some((t) => isWardTask(t));
+    if (!hasWardTaskInStore) {
+      return [...storeAllTasks, ...DEFAULT_WARD_TASKS];
+    }
+    return storeAllTasks;
+  }, [storeAllTasks]);
+
   // モバイル用未配置タスクプール算出
-  const poolTasks = storeAllTasks.filter(task => {
+  const poolTasks = sourceTasks.filter(task => {
     if (!task || task.status === 'deleted' || task.display_period?.includes(':')) {
       return false;
     }
@@ -119,7 +145,8 @@ export default function TimelineMain({
           ? (room === '205' || room === '206' || room.includes('205') || room.includes('206'))
           : (room === '202' || room === '203' || room.includes('202') || room.includes('203'));
         const isSelected = effectiveSelectedPatients && effectiveSelectedPatients.length > 0 ? effectiveSelectedPatients.includes(task.patient_id) : false;
-        if (!isAllowedRoom && !isSelected) return false;
+        const isWard = isWardTask(task);
+        if (!isAllowedRoom && !isSelected && !isWard) return false;
       }
     } else {
       if (task.task_id?.startsWith('GUEST-') || (task as any).is_guest === true) {
@@ -132,10 +159,8 @@ export default function TimelineMain({
       if (!isTaskInLeaderTeam(task, leaderTeam, nurseMaster)) {
         return false;
       }
-      if (effectiveSelectedPatients && effectiveSelectedPatients.length > 0) {
-        if (!isTaskForSelectedPatient(task)) {
-          return false;
-        }
+      if (!isTaskForSelectedPatient(task)) {
+        return false;
       }
       return true;
     }
@@ -143,7 +168,7 @@ export default function TimelineMain({
   });
 
   // 🎯 【Single Source of Truth】ストアの全タスクから評価
-  const extendedTasks = storeAllTasks.filter((task) => {
+  const extendedTasks = sourceTasks.filter((task) => {
     if (!task || task.status === 'deleted' || !task.display_period?.includes(':')) {
       return false;
     }
@@ -162,6 +187,7 @@ export default function TimelineMain({
         task.nurse_id === currentUser?.nurse_id || 
         task.assigned_nurse_id === currentUser?.nurse_id ||
         isLeader ||
+        isWardTask(task) ||
         (effectiveSelectedPatients && effectiveSelectedPatients.length > 0 && isTaskForSelectedPatient(task));
 
       if (!isGuestTask) {
@@ -180,8 +206,9 @@ export default function TimelineMain({
           task.task_id?.startsWith('CALL_INTERRUPT_') ||
           task.is_additional
         );
+        const isWard = isWardTask(task);
 
-        if (!isAllowedRoom && !isSelected && !isInterrupt) {
+        if (!isAllowedRoom && !isSelected && !isInterrupt && !isWard) {
           return false;
         }
       }
@@ -193,11 +220,8 @@ export default function TimelineMain({
 
     // 💡 リーダー参照モード (isLeader === true) の場合
     if (isLeader) {
-      // 1. 選択患者リスト（`effectiveSelectedPatients`）が存在する場合は選択患者のみ抽出
-      if (effectiveSelectedPatients && effectiveSelectedPatients.length > 0) {
-        if (!isTaskForSelectedPatient(task)) {
-          return false;
-        }
+      if (!isTaskForSelectedPatient(task)) {
+        return false;
       }
 
       // 2. チーム名の不一致チェック（「全体」チームの師長は病棟全体のタスクを許可）

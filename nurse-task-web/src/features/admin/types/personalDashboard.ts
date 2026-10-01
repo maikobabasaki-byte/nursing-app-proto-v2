@@ -15,6 +15,7 @@ export interface TimelineItem {
   status: 'completed' | 'in_progress' | 'scheduled';
   priority: 'high' | 'medium' | 'low';
   estimatedMinutes: number;
+  taskType?: 'patient' | 'ward'; // ✨ 病棟共通タスク区分 ('patient': 個別患者タスク, 'ward': 病棟全体ルーチン業務)
 }
 
 export interface SkillItem {

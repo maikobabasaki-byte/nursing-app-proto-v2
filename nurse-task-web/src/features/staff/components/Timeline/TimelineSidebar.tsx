@@ -4,7 +4,7 @@ import { PoolTaskCard } from './PoolTaskCard';
 import { useTimelineStore } from '../../../../stores/useTimelineStore';
 import { useUserName } from '../../../../hooks/useUserName';
 import { checkIsLeader } from '../../../../utils/userUtils';
-import { extractUserProgressingTasks, isTaskInLeaderTeam } from '../../../../utils/taskLogic';
+import { extractUserProgressingTasks, isTaskInLeaderTeam, isWardTask } from '../../../../utils/taskLogic';
 
 interface TimelineSidebarProps { 
   selectedPatients: string[];
@@ -61,8 +61,12 @@ export default function TimelineSidebar({
       }
     }
 
+    const isWardDutyOnly = sessionStorage.getItem('isWardDutyOnly') === 'true' || !selectedPatients || selectedPatients.length === 0;
+
     if (selectedPatients && selectedPatients.length > 0) {
-      if (!selectedPatients.includes(task.patient_id)) return false;
+      if (!selectedPatients.includes(task.patient_id) && !isWardTask(task)) return false;
+    } else if (isWardDutyOnly) {
+      if (!isWardTask(task)) return false;
     }
 
     if (isLeader) {

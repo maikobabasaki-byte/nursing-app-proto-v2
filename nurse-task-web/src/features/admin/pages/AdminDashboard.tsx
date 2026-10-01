@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import type { Hint, ShiftInfo } from '../types/dashboard';
 import { db } from '../../../lib/firebase';
 import { collection, addDoc, getDocs, query, where, serverTimestamp } from 'firebase/firestore';
@@ -6,6 +6,18 @@ import { collection, addDoc, getDocs, query, where, serverTimestamp } from 'fire
 // Zustandストアと日付ユーティリティのインポート
 import { useTimelineStore } from '../../../stores/useTimelineStore';
 import { getJSTDateString } from '../../../utils/dateUtils';
+
+// Recharts コンポーネントのインポート
+import {
+  ResponsiveContainer,
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip as RechartsTooltip,
+  Legend,
+} from 'recharts';
 
 // コンポーネント本体のインポート
 import TrendLineChart from '../components/TrendLineChart';
@@ -23,6 +35,7 @@ import adminDashboardMock from '../data/adminDashboardMock.json';
 // --- 介入履歴レコードの型定義 ---
 export interface ManagementRecord {
   id: string;
+  date?: string;
   slotLabel: string;
   timestamp: string;
   content: string;
@@ -83,6 +96,32 @@ const calculateTaskLoad = (taskTitle: string, adl: string, riskLevel: string): n
   const riskMult = RISK_MULTIPLIER[riskLevel] || 1.0;
 
   return baseTime * adlMult * riskMult;
+};
+
+/**
+ * カスタムツールチップ：期間比較棒グラフ用
+ */
+const CustomBarTooltip = ({ active, payload, label }: any) => {
+  if (active && payload && payload.length) {
+    return (
+      <div className="bg-slate-900/90 text-white text-xs p-3 rounded-xl shadow-lg border border-slate-700 backdrop-blur-sm select-none">
+        <p className="font-extrabold text-amber-300 mb-1.5 border-b border-slate-700 pb-1">
+          📅 {label} (業務遅延率)
+        </p>
+        <div className="space-y-1">
+          {payload.map((entry: any, index: number) => (
+            <p key={`bar-tooltip-${index}`} className="flex justify-between items-center gap-4">
+              <span className="font-semibold" style={{ color: entry.color }}>
+                {entry.name}:
+              </span>
+              <span className="font-mono font-bold text-sm">{entry.value}%</span>
+            </p>
+          ))}
+        </div>
+      </div>
+    );
+  }
+  return null;
 };
 
 /**
@@ -213,18 +252,31 @@ export default function AdminDashboard() {
   const [selectedHint, setSelectedHint] = useState<Hint | null>(null);
   // 画面・文字の表示拡大スケール (1: 標準, 1.15: 大, 1.3: 特大)
   const [zoomScale, setZoomScale] = useState<number>(1.0);
-  // 特定セクションの全画面拡大状態 ('trend' | 'heatmap' | 'blocker' | 'hints' | null)
+  // 特定セクションの全画面拡大状態 ('trend' | 'heatmap' | 'blocker' | 'hints' | 'bar' | null)
   const [expandedSection, setExpandedSection] = useState<
-    'trend' | 'heatmap' | 'blocker' | 'hints' | null
+    'trend' | 'heatmap' | 'blocker' | 'hints' | 'bar' | null
   >(null);
   // AIモーダル内の師長の対応メモ・実行記録テキストの状態
   const [actionMemo, setActionMemo] = useState<string>('');
-  // 新設：師長のマネジメント介入記録（直接入力テキストエリア）
+  // 師長のマネジメント介入記録（直接入力テキストエリア）
   const [directInputMemo, setDirectInputMemo] = useState<string>('');
-  // 新設：本日の介入・マネジメント対応履歴（タイムライン） State
+
+  // 🎯 期間比較用（先週 vs 今週）棒グラフデータ State
+  const [periodComparisonData, setPeriodComparisonData] = useState([
+    { period: '月曜', 先週: 38, 今週: 18 },
+    { period: '火曜', 先週: 45, 今週: 22 },
+    { period: '水曜', 先週: 52, 今週: 25 },
+    { period: '木曜', 先週: 48, 今週: 20 },
+    { period: '金曜', 先週: 40, 今週: 16 },
+    { period: '土曜', 先週: 30, 今週: 12 },
+    { period: '日曜', 先週: 22, 今週: 10 },
+  ]);
+
+  // 今月の介入・マネジメント対応履歴（タイムライン） State
   const [managementRecords, setManagementRecords] = useState<ManagementRecord[]>([
     {
       id: 'mock-1',
+      date: '09/01 (月)',
       slotLabel: '月曜 10:00枠',
       timestamp: '10:15',
       content: '田中さんに203室のヘルプを指示（検体採取サポート）',
@@ -232,6 +284,7 @@ export default function AdminDashboard() {
     },
     {
       id: 'mock-2',
+      date: '09/08 (月)',
       slotLabel: '月曜 10:00枠',
       timestamp: '10:30',
       content: 'AさんとBさんの担当部屋を一部入れ替え（201号室↔205号室のADL負荷分散）',
@@ -239,6 +292,7 @@ export default function AdminDashboard() {
     },
     {
       id: 'mock-3',
+      date: '09/17 (水)',
       slotLabel: '水曜 14:00枠',
       timestamp: '14:10',
       content: 'フリー担当ナース（佐藤）を全介助清拭の補助に緊急配置',
@@ -519,7 +573,10 @@ export default function AdminDashboard() {
           if (taskTitle) taskTitlesRoom[roomId][hourStr].push(taskTitle);
         });
 
-        const timeSlots = ["8時", "9時", "10時", "11時", "12時", "13時", "14時", "15時", "16時", "17時", "18時", "19時", "20時"];
+        const timeSlots = [
+          "0時", "1時", "2時", "3時", "4時", "5時", "6時", "7時", "8時", "9時", "10時", "11時",
+          "12時", "13時", "14時", "15時", "16時", "17時", "18時", "19時", "20時", "21時", "22時", "23時"
+        ];
         const days = ["月", "火", "水", "木", "金", "土", "日"];
         const displayD = new Date(displayDate);
         const activeDayLabel = !isNaN(displayD.getTime()) ? ["日", "月", "火", "水", "木", "金", "土"][displayD.getDay()] : '木';
@@ -679,6 +736,9 @@ export default function AdminDashboard() {
       // タイムライン対応履歴（managementRecords）にも追加
       const now = new Date();
       const timeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+      const dateParts = displayDate.split('-');
+      const formattedDateStr = dateParts.length === 3 ? `${dateParts[1]}/${dateParts[2]}` : displayDate;
+
       const currentSlotLabel = selectedCell
         ? `${selectedCell.label}曜 ${selectedCell.time}枠`
         : selectedSlot
@@ -687,6 +747,7 @@ export default function AdminDashboard() {
 
       const newMgmtRecord: ManagementRecord = {
         id: `ai-${Date.now()}`,
+        date: formattedDateStr,
         slotLabel: currentSlotLabel,
         timestamp: timeStr,
         content: `【AI提案適用】${selectedHint.title}${actionMemo.trim() ? ` - ${actionMemo.trim()}` : ''}`,
@@ -698,17 +759,23 @@ export default function AdminDashboard() {
       handleCloseModal();
     } catch (error) {
       console.error('Firestore介入記録の保存エラー:', error);
-      alert('データベースへの保存に失敗しました。');
+      alert('保存処理に失敗しました（ローカル状態のみ更新）。');
+      handleCloseModal();
     } finally {
       setIsSubmitting(false);
     }
   };
 
   /**
-   * 師長直接入力フォームからの「対応を記録する」ハンドラー
+   * 師長がテキスト領域から「直接介入」を記録・追加するハンドラー
    */
   const handleSaveDirectIntervention = async () => {
     if (!directInputMemo.trim()) return;
+
+    const now = new Date();
+    const timeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+    const dateParts = displayDate.split('-');
+    const formattedDateStr = dateParts.length === 3 ? `${dateParts[1]}/${dateParts[2]}` : displayDate;
 
     const currentSlotLabel = selectedCell
       ? `${selectedCell.label}曜 ${selectedCell.time}枠`
@@ -716,24 +783,22 @@ export default function AdminDashboard() {
       ? `${selectedSlot.day}曜 ${selectedSlot.hour}枠`
       : '全体';
 
-    const now = new Date();
-    const timeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
-
-    const newRecord: ManagementRecord = {
-      id: `record-${Date.now()}`,
+    const newMgmtRecord: ManagementRecord = {
+      id: `manual-${Date.now()}`,
+      date: formattedDateStr,
       slotLabel: currentSlotLabel,
       timestamp: timeStr,
       content: directInputMemo.trim(),
       isAiBased: false,
     };
 
-    setManagementRecords((prev) => [newRecord, ...prev]);
+    setManagementRecords((prev) => [newMgmtRecord, ...prev]);
 
-    // Firestoreへの非同期保存
+    // トレンドグラフへもフラグ反映を試行
     try {
       await addDoc(collection(db, 'admin_interventions'), {
         action_title: '師長直接介入',
-        memo: `[${currentSlotLabel}] ${directInputMemo.trim()}`,
+        memo: directInputMemo.trim(),
         target_date: displayDate,
         ward_id: shiftInfo.wardId,
         created_at: serverTimestamp(),
@@ -902,11 +967,11 @@ export default function AdminDashboard() {
 
   return (
     <div
-      className="!w-full !h-full !min-h-0 !overflow-y-auto !bg-slate-100 !font-sans !p-2 lg:!p-2 !flex !flex-col !relative !transition-all !duration-300"
+      className="!w-full !h-full !min-h-0 !overflow-y-auto !bg-slate-100 !font-sans !p-3 lg:!p-4 !flex !flex-col !relative !transition-all !duration-300"
       style={{ zoom: zoomScale }}
     >
       {/* 1. ダッシュボードヘッダー */}
-      <header className="shrink-0 mb-3 flex justify-between items-center border-b-2 border-slate-200 pb-2">
+      <header className="shrink-0 mb-4 flex flex-col md:flex-row md:justify-between md:items-center border-b-2 border-slate-200 pb-3 gap-3">
         <div>
           <h1 className="text-2xl lg:text-3xl font-extrabold text-slate-900 tracking-tight">
             業務改善・配置最適化ダッシュボード
@@ -964,15 +1029,158 @@ export default function AdminDashboard() {
         </div>
       </header>
 
-      {/* 2. メイングリッドレイアウト */}
-      <div className="flex-1 min-h-0 grid grid-cols-1 lg:grid-cols-3 gap-4">
+      {/* 2. ワンカラム（シングルカラム）レイアウト構造 */}
+      <div className="w-full flex flex-col gap-6">
         
-        {/* ================= 左側エリア (箱A + 箱B) ================= */}
-        <div className="lg:col-span-2 flex flex-col gap-4 min-h-0 h-full">
-          
+        {/* === 1. 現状把握 === */}
+        <div className="flex flex-col gap-3">
+          <div className="flex items-center gap-2 pb-1 border-b-2 border-slate-300">
+            <span className="bg-slate-900 text-white font-black px-3 py-1 rounded-xl text-xs lg:text-sm shadow-sm">
+              1. 現状把握
+            </span>
+            <span className="text-xs font-bold text-slate-600">
+              （過密時間帯・エリアおよび遅延原因の特定）
+            </span>
+          </div>
+
+          {/* 🎯 【横並び】ヒートマップ ＆ 遅延要因 (Blocker) 分析 */}
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 items-stretch">
+            {/* 箱B: ヒートマップ（クリックインタラクション＆表示切り替え対応） */}
+            <section className="bg-white p-4 lg:p-6 rounded-2xl shadow-sm border border-slate-200 flex flex-col min-h-[360px] lg:col-span-2">
+              <div className="flex justify-between items-center mb-3 shrink-0">
+                <div className="flex items-center gap-3">
+                  <h2 className="text-lg font-bold text-slate-900 flex items-center">
+                    <span className="mr-2 text-xl">🟥</span> ヒートマップ 
+                    {isLoadingHeatmap && (
+                      <span className="ml-2 text-xs text-blue-600 font-semibold animate-pulse">
+                        (計算中...)
+                      </span>
+                    )}
+                  </h2>
+
+                  {/* 表示モード切替トグルボタン (曜日別 / 部屋別) */}
+                  <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl border border-slate-300">
+                    <button
+                      type="button"
+                      onClick={() => setHeatmapView('day')}
+                      className={`!px-3 !py-1 !rounded-lg !text-xs !font-extrabold !transition-all !border ${
+                        heatmapView === 'day'
+                          ? '!bg-blue-700 !text-white !border-blue-800 !shadow-sm'
+                          : '!bg-white !text-slate-700 !border-slate-300 hover:!bg-slate-100'
+                      }`}
+                    >
+                      曜日別
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setHeatmapView('room')}
+                      className={`!px-3 !py-1 !rounded-lg !text-xs !font-extrabold !transition-all !border ${
+                        heatmapView === 'room'
+                          ? '!bg-blue-700 !text-white !border-blue-800 !shadow-sm'
+                          : '!bg-white !text-slate-700 !border-slate-300 hover:!bg-slate-100'
+                      }`}
+                    >
+                      部屋別
+                    </button>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-slate-600 font-bold bg-amber-50 px-2.5 py-1 rounded-md border border-amber-200">
+                    💡 セルをクリックしてピンポイント分析
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setExpandedSection('heatmap')}
+                    className="!text-xs !font-extrabold !text-blue-700 hover:!text-blue-900 !bg-blue-50 hover:!bg-blue-100 !px-2.5 !py-1 !rounded-lg !border !border-blue-200 !transition-colors !flex !items-center !gap-1 !shrink-0"
+                    title="ヒートマップを全画面拡大表示"
+                  >
+                    ⛶ 全画面拡大
+                  </button>
+                </div>
+              </div>
+
+              <div className="w-full flex-1">
+                <OvercrowdedHeatmap
+                  data={currentHeatmapData}
+                  selectedSlot={selectedSlot}
+                  onCellClick={handleCellClick}
+                  yAxisTitle={heatmapView === 'day' ? '曜日' : '部屋'}
+                />
+              </div>
+            </section>
+
+            {/* 箱C: 遅延要因 (Blocker) 分析 */}
+            <section className="bg-white p-4 lg:p-6 rounded-2xl shadow-sm border border-slate-200 flex flex-col min-h-[360px] justify-between lg:col-span-1">
+              <div className="flex justify-between items-center mb-2 shrink-0">
+                <h2 className="text-lg font-bold text-slate-900 flex items-center">
+                  遅延要因 (Blocker)
+                </h2>
+
+                <div className="flex items-center gap-2">
+                  {selectedCell || selectedSlot ? (
+                    <div className="flex items-center gap-1.5 bg-blue-100 border border-blue-300 px-2.5 py-1 rounded-lg text-xs animate-fade-in">
+                      <span className="text-[11px] font-extrabold text-blue-950 flex items-center gap-1">
+                        <span>📍</span> {selectedCell ? `${selectedCell.label} ${selectedCell.time}` : `${selectedSlot?.day} ${selectedSlot?.hour}`}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={handleClearSelection}
+                        className="ml-1 text-blue-700 hover:text-blue-950 hover:bg-blue-200 px-1.5 py-0.5 rounded text-[10px] font-bold transition-colors border border-blue-300"
+                        title="選択を解除して全期間表示に戻す"
+                      >
+                        解除 ✕
+                      </button>
+                    </div>
+                  ) : (
+                    <span className="text-xs font-bold text-slate-500">直近1週間平均</span>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => setExpandedSection('blocker')}
+                    className="!text-xs !font-extrabold !text-blue-700 hover:!text-blue-900 !bg-blue-50 hover:!bg-blue-100 !px-2.5 !py-1 !rounded-lg !border !border-blue-200 !transition-colors !flex !items-center !gap-1 !shrink-0"
+                    title="遅延要因グラフを全画面拡大表示"
+                  >
+                    ⛶ 拡大
+                  </button>
+                </div>
+              </div>
+
+              <div className="w-full flex-1 flex items-center justify-center min-h-[200px]">
+                <BlockerPieChart data={activeBlockerData} />
+              </div>
+
+              <p className="text-xs font-bold text-red-700 bg-red-50 p-2.5 rounded-lg text-center shrink-0 mt-2 border border-red-200">
+                {selectedCell
+                  ? `💡 【選択中の枠: ${selectedCell.label} ${selectedCell.time}】実質負荷${selectedCell.gapIndex}% - ${
+                      selectedCell.gapIndex >= 100
+                        ? '構造的競合（人員不足・重症度集中）が80%を占めています。'
+                        : selectedCell.gapIndex >= 75
+                        ? '構造的競合が75%に急増しています。'
+                        : '各遅延要因が分散しています。'
+                    }`
+                  : selectedSlot
+                  ? `💡 ${selectedSlot.day} ${selectedSlot.hour}は構造的競合が75%に急増しています。`
+                  : '💡 構造的競合が過半数 (60%) を占めています。'}
+              </p>
+            </section>
+          </div>
+        </div>
+
+        {/* === 2. 前回の介入 === */}
+        <div className="flex flex-col gap-4">
+          <div className="flex items-center gap-2 pt-3 pb-1 border-b-2 border-slate-300">
+            <span className="bg-blue-800 text-white font-black px-3 py-1 rounded-xl text-xs lg:text-sm shadow-sm">
+              2. 前回の介入
+            </span>
+            <span className="text-xs font-bold text-slate-600">
+              （過去の介入効果・負荷トレンド推移・AI推奨アクション）
+            </span>
+          </div>
+
           {/* 箱A: トレンドグラフ */}
-          <section className="bg-white p-4 lg:p-5 rounded-2xl shadow-sm border border-slate-200 flex-1 min-h-0 flex flex-col">
-            <div className="flex justify-between items-center mb-2 shrink-0">
+          <section className="bg-white p-4 lg:p-6 rounded-2xl shadow-sm border border-slate-200 flex flex-col min-h-[320px]">
+            <div className="flex justify-between items-center mb-3 shrink-0">
               <h2 className="text-lg font-bold text-slate-900 flex items-center">
                 <span className="mr-2 text-xl">📈</span> 病棟全体の負荷トレンドと介入の軌跡 (Past 3 Months)
                 {isLoadingData && (
@@ -990,142 +1198,85 @@ export default function AdminDashboard() {
                 ⛶ 全画面拡大
               </button>
             </div>
-            <div className="flex-1 min-h-0 w-full">
+            <div className="w-full h-[240px]">
               <TrendLineChart data={chartData} />
             </div>
           </section>
 
-          {/* 箱B: ヒートマップ（クリックインタラクション＆表示切り替え対応） */}
-          <section className="bg-white p-4 lg:p-5 rounded-2xl shadow-sm border border-slate-200 flex-1 min-h-0 flex flex-col">
-            <div className="flex justify-between items-center mb-2 shrink-0">
-              <div className="flex items-center gap-3">
-                <h2 className="text-lg font-bold text-slate-900 flex items-center">
-                  <span className="mr-2 text-xl">🟥</span> ヒートマップ 
-                  {isLoadingHeatmap && (
-                    <span className="ml-2 text-xs text-blue-600 font-semibold animate-pulse">
-                      (計算中...)
-                    </span>
-                  )}
+          {/* 🎯 期間比較棒グラフ */}
+          <section className="bg-white p-4 lg:p-6 rounded-2xl shadow-sm border border-slate-200 flex flex-col min-h-[340px]">
+            <div className="flex justify-between items-center mb-3">
+              <div>
+                <h2 className="text-base lg:text-lg font-bold text-slate-900 flex items-center gap-2">
+                  <span>📉</span> 介入効果・期間比較 (Bar Chart)
                 </h2>
-
-                {/* 表示モード切替トグルボタン (曜日別 / 部屋別) */}
+                <p className="text-xs font-medium text-slate-500 mt-0.5">
+                  病棟全体の業務遅延率の推移（先週 vs 今週 - 介入による削減成果）
+                </p>
+              </div>
+              <div className="flex items-center gap-2">
                 <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl border border-slate-300">
                   <button
                     type="button"
-                    onClick={() => setHeatmapView('day')}
-                    className={`!px-3 !py-1 !rounded-lg !text-xs !font-extrabold !transition-all !border ${
-                      heatmapView === 'day'
-                        ? '!bg-blue-700 !text-white !border-blue-800 !shadow-sm'
-                        : '!bg-white !text-slate-700 !border-slate-300 hover:!bg-slate-100'
-                    }`}
+                    onClick={() => setPeriodComparisonData([
+                      { period: '月曜', 先週: 38, 今週: 18 },
+                      { period: '火曜', 先週: 45, 今週: 22 },
+                      { period: '水曜', 先週: 52, 今週: 25 },
+                      { period: '木曜', 先週: 48, 今週: 20 },
+                      { period: '金曜', 先週: 40, 今週: 16 },
+                      { period: '土曜', 先週: 30, 今週: 12 },
+                      { period: '日曜', 先週: 22, 今週: 10 },
+                    ])}
+                    className="px-2.5 py-1 text-xs font-extrabold bg-white text-blue-700 border border-slate-300 rounded-lg hover:bg-slate-50 cursor-pointer"
                   >
-                    曜日別
+                    全日
                   </button>
                   <button
                     type="button"
-                    onClick={() => setHeatmapView('room')}
-                    className={`!px-3 !py-1 !rounded-lg !text-xs !font-extrabold !transition-all !border ${
-                      heatmapView === 'room'
-                        ? '!bg-blue-700 !text-white !border-blue-800 !shadow-sm'
-                        : '!bg-white !text-slate-700 !border-slate-300 hover:!bg-slate-100'
-                    }`}
+                    onClick={() => setPeriodComparisonData([
+                      { period: '月曜', 先週: 42, 今週: 15 },
+                      { period: '火曜', 先週: 50, 今週: 18 },
+                      { period: '水曜', 先週: 58, 今週: 20 },
+                      { period: '木曜', 先週: 52, 今週: 16 },
+                      { period: '金曜', 先週: 46, 今週: 12 },
+                    ])}
+                    className="px-2.5 py-1 text-xs font-extrabold bg-white text-slate-700 border border-slate-300 rounded-lg hover:bg-slate-50 cursor-pointer"
                   >
-                    部屋別
+                    平日のみ
                   </button>
                 </div>
-              </div>
-
-              <div className="flex items-center gap-2">
-                <span className="text-xs text-slate-600 font-bold bg-amber-50 px-2.5 py-1 rounded-md border border-amber-200">
-                  💡 セルをクリックしてピンポイント分析
-                </span>
                 <button
                   type="button"
-                  onClick={() => setExpandedSection('heatmap')}
+                  onClick={() => setExpandedSection('bar')}
                   className="!text-xs !font-extrabold !text-blue-700 hover:!text-blue-900 !bg-blue-50 hover:!bg-blue-100 !px-2.5 !py-1 !rounded-lg !border !border-blue-200 !transition-colors !flex !items-center !gap-1 !shrink-0"
-                  title="ヒートマップを全画面拡大表示"
-                >
-                  ⛶ 全画面拡大
-                </button>
-              </div>
-            </div>
-
-            <div className="flex-1 min-h-0 w-full">
-              <OvercrowdedHeatmap
-                data={currentHeatmapData}
-                selectedSlot={selectedSlot}
-                onCellClick={handleCellClick}
-                yAxisTitle={heatmapView === 'day' ? '曜日' : '部屋'}
-              />
-            </div>
-          </section>
-
-        </div>
-
-        {/* ================= 右側エリア (箱C + 箱D + 箱E) ================= */}
-        <div className="lg:col-span-1 flex flex-col gap-4 min-h-0 h-full overflow-y-auto pr-1">
-          
-          {/* 箱C: 要因分析 */}
-          <section className="bg-white p-4 lg:p-5 rounded-2xl shadow-sm border border-slate-200 shrink-0 flex flex-col relative min-h-[260px]">
-            <div className="flex justify-between items-center mb-1 shrink-0">
-              <h2 className="text-lg font-bold text-slate-900 flex items-center">
-                遅延要因 (Blocker)
-              </h2>
-
-              <div className="flex items-center gap-2">
-                {selectedCell || selectedSlot ? (
-                  <div className="flex items-center gap-1.5 bg-blue-100 border border-blue-300 px-3 py-1 rounded-lg text-xs animate-fade-in">
-                    <span className="text-xs font-extrabold text-blue-950 flex items-center gap-1">
-                      <span className="text-sm">📍</span> {selectedCell ? `${selectedCell.label} ${selectedCell.time}` : `${selectedSlot?.day} ${selectedSlot?.hour}`}
-                    </span>
-                    <button
-                      type="button"
-                      onClick={handleClearSelection}
-                      className="ml-1 text-blue-700 hover:text-blue-950 hover:bg-blue-200 px-2 py-0.5 rounded text-xs font-bold transition-colors border border-blue-300"
-                      title="選択を解除して全期間表示に戻す"
-                    >
-                      解除 ✕
-                    </button>
-                  </div>
-                ) : (
-                  <span className="text-xs font-bold text-slate-500">直近1週間平均</span>
-                )}
-                <button
-                  type="button"
-                  onClick={() => setExpandedSection('blocker')}
-                  className="!text-xs !font-extrabold !text-blue-700 hover:!text-blue-900 !bg-blue-50 hover:!bg-blue-100 !px-2.5 !py-1 !rounded-lg !border !border-blue-200 !transition-colors !flex !items-center !gap-1 !shrink-0"
-                  title="遅延要因グラフを全画面拡大表示"
+                  title="棒グラフを全画面拡大表示"
                 >
                   ⛶ 拡大
                 </button>
               </div>
             </div>
 
-            <div className="flex-1 min-h-0 w-full h-[180px]">
-              <BlockerPieChart data={activeBlockerData} />
+            <div className="w-full h-[240px]">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={periodComparisonData} margin={{ top: 10, right: 10, left: -15, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#F1F5F9" />
+                  <XAxis dataKey="period" tick={{ fill: '#475569', fontSize: 11, fontWeight: 700 }} />
+                  <YAxis unit="%" tick={{ fill: '#475569', fontSize: 11 }} domain={[0, 60]} />
+                  <RechartsTooltip content={<CustomBarTooltip />} />
+                  <Legend wrapperStyle={{ fontSize: '12px', fontWeight: 600, paddingTop: '8px' }} />
+                  <Bar name="先週 (介入前)" dataKey="先週" fill="#F59E0B" radius={[6, 6, 0, 0]} />
+                  <Bar name="今週 (介入後)" dataKey="今週" fill="#3B82F6" radius={[6, 6, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
             </div>
-
-            <p className="text-xs font-bold text-red-700 bg-red-50 p-2.5 rounded-lg text-center shrink-0 mt-1 border border-red-200">
-              {selectedCell
-                ? `💡 【選択中の枠: ${selectedCell.label} ${selectedCell.time}】実質負荷${selectedCell.gapIndex}% - ${
-                    selectedCell.gapIndex >= 100
-                      ? '構造的競合（人員不足・重症度集中）が80%を占めています。'
-                      : selectedCell.gapIndex >= 75
-                      ? '構造的競合が75%に急増しています。'
-                      : '各遅延要因が分散しています。'
-                  }`
-                : selectedSlot
-                ? `💡 ${selectedSlot.day} ${selectedSlot.hour}は構造的競合が75%に急増しています。`
-                : '💡 構造的競合が過半数 (60%) を占めています。'}
-            </p>
           </section>
 
           {/* 箱D: AIインサイト（アクション検討提案） */}
           <section
-            className="p-4 lg:p-5 rounded-2xl shadow-sm border-2 shrink-0 flex flex-col"
+            className="p-4 lg:p-6 rounded-2xl shadow-sm border-2 flex flex-col"
             style={{ backgroundColor: '#eff6ff', borderColor: '#93c5fd' }}
           >
-            <div className="flex justify-between items-center mb-2.5 shrink-0">
+            <div className="flex justify-between items-center mb-3 shrink-0">
               <h2 className="text-base lg:text-lg font-extrabold text-blue-950 flex items-center">
                 <span className="mr-2 text-xl">🤖</span> AI アクション検討提案
               </h2>
@@ -1149,14 +1300,14 @@ export default function AdminDashboard() {
               </div>
             </div>
 
-            <div className="space-y-3">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               {activeHints.map((hint) => (
                 <button
                   key={hint.optionId}
                   type="button"
                   onClick={() => handleSelectHint(hint)}
                   style={{ backgroundColor: '#ffffff', borderColor: '#bfdbfe' }}
-                  className="!w-full !text-left !p-3.5 !rounded-xl !shadow-sm !border-2 !transition-all !duration-200 hover:!shadow-md hover:!border-blue-400 hover:!bg-blue-50/60 !cursor-pointer !group"
+                  className="!w-full !text-left !p-4 !rounded-xl !shadow-sm !border-2 !transition-all !duration-200 hover:!shadow-md hover:!border-blue-400 hover:!bg-blue-50/60 !cursor-pointer !group"
                 >
                   <div className="font-bold text-blue-950 text-xs lg:text-sm mb-1 group-hover:text-blue-800 flex items-center justify-between">
                     <span>{hint.title}</span>
@@ -1178,9 +1329,21 @@ export default function AdminDashboard() {
               ))}
             </div>
           </section>
+        </div>
+
+        {/* === 3. 介入記録 === */}
+        <div className="flex flex-col gap-4">
+          <div className="flex items-center gap-2 pt-3 pb-1 border-b-2 border-slate-300">
+            <span className="bg-emerald-800 text-white font-black px-3 py-1 rounded-xl text-xs lg:text-sm shadow-sm">
+              3. 介入記録
+            </span>
+            <span className="text-xs font-bold text-slate-600">
+              （対応策の記録・今月のマネジメント対応履歴）
+            </span>
+          </div>
 
           {/* 箱E: マネジメント介入記録（対応入力・人間の決定事項） */}
-          <section className="bg-white p-4 lg:p-5 rounded-2xl shadow-sm border-2 border-slate-300 shrink-0 flex flex-col">
+          <section className="bg-white p-4 lg:p-6 rounded-2xl shadow-sm border-2 border-slate-300 flex flex-col">
             <div className="flex justify-between items-center mb-3">
               <h2 className="text-base font-extrabold text-slate-900 flex items-center gap-2">
                 <span className="text-lg">👔</span> マネジメント介入記録（対応入力）
@@ -1192,18 +1355,18 @@ export default function AdminDashboard() {
 
             {/* 選択中の枠ラベル表示 */}
             {activeSlotLabel ? (
-              <div className="mb-2 text-xs font-bold text-blue-950 bg-blue-50 border border-blue-200 p-2 rounded-xl flex justify-between items-center">
+              <div className="mb-3 text-xs font-bold text-blue-950 bg-blue-50 border border-blue-200 p-2.5 rounded-xl flex justify-between items-center">
                 <span>📍 対象枠: <strong>{activeSlotLabel}</strong></span>
                 <span className="text-[10px] text-blue-700 font-medium">連動保存</span>
               </div>
             ) : (
-              <div className="mb-2 text-xs font-medium text-slate-500 bg-slate-50 border border-slate-200 p-2 rounded-xl">
+              <div className="mb-3 text-xs font-medium text-slate-500 bg-slate-50 border border-slate-200 p-2.5 rounded-xl">
                 💡 選択枠なし（病棟全体への対応として記録）
               </div>
             )}
 
             {/* 師長入力フォーム */}
-            <div className="space-y-2">
+            <div className="space-y-3">
               <textarea
                 rows={3}
                 value={directInputMemo}
@@ -1225,11 +1388,11 @@ export default function AdminDashboard() {
               </button>
             </div>
 
-            {/* 本日の対応履歴 (タイムライン) */}
+            {/* 今月の対応履歴 (タイムライン) */}
             <div className="mt-4 pt-3 border-t border-slate-200">
               <h3 className="text-xs font-extrabold text-slate-800 flex items-center justify-between mb-2">
                 <span className="flex items-center gap-1">
-                  <span>📜</span> 本日の対応履歴（タイムライン）
+                  <span>📜</span> 今月の対応履歴（タイムライン）
                 </span>
                 <span className="text-[10px] font-bold text-slate-600 bg-slate-100 px-2 py-0.5 rounded-full border border-slate-200">
                   {displayedRecords.length} 件
@@ -1247,10 +1410,17 @@ export default function AdminDashboard() {
                       key={rec.id}
                       className="p-2.5 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-xl transition-colors text-xs"
                     >
-                      <div className="flex items-center justify-between font-extrabold text-slate-700 mb-1">
-                        <span className="text-[11px] text-slate-900 flex items-center gap-1">
-                          <span className="text-slate-400">🕒</span> {rec.timestamp}
-                          <span className="bg-slate-200 text-slate-800 px-1.5 py-0.2 rounded text-[10px] ml-1">
+                      <div className="flex items-center justify-between font-extrabold text-slate-700 mb-1 gap-2 flex-wrap">
+                        <span className="text-[11px] text-slate-900 flex items-center gap-1.5 flex-wrap">
+                          {rec.date && (
+                            <span className="bg-slate-700 text-white font-extrabold px-1.5 py-0.5 rounded text-[10px] shadow-xs">
+                              📅 {rec.date}
+                            </span>
+                          )}
+                          <span className="text-slate-600 font-bold flex items-center gap-0.5">
+                            <span className="text-slate-400">🕒</span> {rec.timestamp}
+                          </span>
+                          <span className="bg-blue-100 text-blue-900 font-extrabold border border-blue-200 px-1.5 py-0.5 rounded text-[10px]">
                             {rec.slotLabel}
                           </span>
                         </span>
@@ -1269,8 +1439,8 @@ export default function AdminDashboard() {
               )}
             </div>
           </section>
-
         </div>
+
       </div>
 
       {/* 3. AIアクション詳細モーダル */}
@@ -1317,7 +1487,7 @@ export default function AdminDashboard() {
               {/* 4つの評価視点（効果・リスク・コスト・現場負担） */}
               <div className="!space-y-2.5">
                 <h4 className="!text-xs !font-extrabold !text-slate-500 !uppercase !tracking-wider !mb-1">
-                  秤 アクション総合評価（4視点分析）
+                  ⚖️ アクション総合評価（4視点分析）
                 </h4>
 
                 {/* 1. 効果エリア */}
@@ -1457,6 +1627,7 @@ export default function AdminDashboard() {
                   {expandedSection === 'blocker' &&
                     '📊 遅延要因 (Blocker) 分析 (全画面表示)'}
                   {expandedSection === 'hints' && '🤖 AI アクション検討提案 (全画面表示)'}
+                  {expandedSection === 'bar' && '📉 介入効果・期間比較 (Bar Chart) (全画面表示)'}
                 </h2>
 
                 {expandedSection === 'heatmap' && (
@@ -1564,6 +1735,23 @@ export default function AdminDashboard() {
                       )}
                     </button>
                   ))}
+                </div>
+              )}
+              {expandedSection === 'bar' && (
+                <div className="!w-full !h-full !min-h-[500px] !flex !flex-col !items-center !justify-center">
+                  <div className="!w-full !h-[450px]">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart data={periodComparisonData} margin={{ top: 20, right: 30, left: 10, bottom: 10 }}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#E2E8F0" />
+                        <XAxis dataKey="period" tick={{ fill: '#1E293B', fontSize: 13, fontWeight: 800 }} />
+                        <YAxis unit="%" tick={{ fill: '#1E293B', fontSize: 13 }} domain={[0, 60]} />
+                        <RechartsTooltip content={<CustomBarTooltip />} />
+                        <Legend wrapperStyle={{ fontSize: '14px', fontWeight: 700, paddingTop: '12px' }} />
+                        <Bar name="先週 (介入前)" dataKey="先週" fill="#F59E0B" radius={[8, 8, 0, 0]} />
+                        <Bar name="今週 (介入後)" dataKey="今週" fill="#3B82F6" radius={[8, 8, 0, 0]} />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
                 </div>
               )}
             </div>

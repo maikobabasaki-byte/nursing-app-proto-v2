@@ -1,5 +1,4 @@
 import { useTimelineStore } from '../../../stores/useTimelineStore';
-import { checkIsLeader } from '../../../utils/userUtils';
 import { useTheme, type AppTheme } from '../../../hooks/useTheme';
 
 import type { NavigationScreen } from './MainLayout';

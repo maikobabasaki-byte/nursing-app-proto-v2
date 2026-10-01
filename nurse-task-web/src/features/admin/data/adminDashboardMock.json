@@ -29,6 +29,14 @@
     {
       "day": "月",
       "hours": [
+        { "hour": "0時", "intensity": 15, "taskCount": 2 },
+        { "hour": "1時", "intensity": 10, "taskCount": 1 },
+        { "hour": "2時", "intensity": 20, "taskCount": 3, "riskFactor": "深夜体位変換・定時巡視" },
+        { "hour": "3時", "intensity": 10, "taskCount": 1 },
+        { "hour": "4時", "intensity": 5, "taskCount": 1 },
+        { "hour": "5時", "intensity": 15, "taskCount": 2 },
+        { "hour": "6時", "intensity": 35, "taskCount": 5, "riskFactor": "早朝検温・採血" },
+        { "hour": "7時", "intensity": 45, "taskCount": 7, "riskFactor": "朝食配膳準備" },
         { "hour": "8時", "intensity": 25, "taskCount": 4 },
         { "hour": "9時", "intensity": 75, "taskCount": 14, "riskFactor": "定期検温・与薬と巡視の重複" },
         { "hour": "10時", "intensity": 95, "taskCount": 22, "riskFactor": "全介助入浴・処置・医師回診のトリプル競合" },
@@ -41,12 +49,23 @@
         { "hour": "17時", "intensity": 65, "taskCount": 13, "riskFactor": "夕方申し送り準備" },
         { "hour": "18時", "intensity": 45, "taskCount": 9 },
         { "hour": "19時", "intensity": 20, "taskCount": 3 },
-        { "hour": "20時", "intensity": 10, "taskCount": 2 }
+        { "hour": "20時", "intensity": 10, "taskCount": 2 },
+        { "hour": "21時", "intensity": 25, "taskCount": 4, "riskFactor": "消灯巡視・就寝前与薬" },
+        { "hour": "22時", "intensity": 15, "taskCount": 2 },
+        { "hour": "23時", "intensity": 10, "taskCount": 1 }
       ]
     },
     {
       "day": "火",
       "hours": [
+        { "hour": "0時", "intensity": 10, "taskCount": 1 },
+        { "hour": "1時", "intensity": 10, "taskCount": 1 },
+        { "hour": "2時", "intensity": 15, "taskCount": 2 },
+        { "hour": "3時", "intensity": 10, "taskCount": 1 },
+        { "hour": "4時", "intensity": 5, "taskCount": 1 },
+        { "hour": "5時", "intensity": 10, "taskCount": 1 },
+        { "hour": "6時", "intensity": 30, "taskCount": 4 },
+        { "hour": "7時", "intensity": 40, "taskCount": 6 },
         { "hour": "8時", "intensity": 20, "taskCount": 3 },
         { "hour": "9時", "intensity": 65, "taskCount": 12 },
         { "hour": "10時", "intensity": 90, "taskCount": 20, "riskFactor": "手術前処置と点滴開始の競合" },
@@ -59,12 +78,23 @@
         { "hour": "17時", "intensity": 60, "taskCount": 11 },
         { "hour": "18時", "intensity": 40, "taskCount": 8 },
         { "hour": "19時", "intensity": 15, "taskCount": 2 },
-        { "hour": "20時", "intensity": 10, "taskCount": 1 }
+        { "hour": "20時", "intensity": 10, "taskCount": 1 },
+        { "hour": "21時", "intensity": 20, "taskCount": 3 },
+        { "hour": "22時", "intensity": 10, "taskCount": 1 },
+        { "hour": "23時", "intensity": 5, "taskCount": 1 }
       ]
     },
     {
       "day": "水",
       "hours": [
+        { "hour": "0時", "intensity": 15, "taskCount": 2 },
+        { "hour": "1時", "intensity": 10, "taskCount": 1 },
+        { "hour": "2時", "intensity": 15, "taskCount": 2 },
+        { "hour": "3時", "intensity": 10, "taskCount": 1 },
+        { "hour": "4時", "intensity": 10, "taskCount": 1 },
+        { "hour": "5時", "intensity": 15, "taskCount": 2 },
+        { "hour": "6時", "intensity": 40, "taskCount": 6, "riskFactor": "早朝点滴準備" },
+        { "hour": "7時", "intensity": 50, "taskCount": 8 },
         { "hour": "8時", "intensity": 30, "taskCount": 5 },
         { "hour": "9時", "intensity": 80, "taskCount": 16, "riskFactor": "水曜カンファレンスとモーニングケア" },
         { "hour": "10時", "intensity": 88, "taskCount": 19, "riskFactor": "清拭・シーツ交換の集中" },
@@ -77,12 +107,23 @@
         { "hour": "17時", "intensity": 55, "taskCount": 10 },
         { "hour": "18時", "intensity": 35, "taskCount": 6 },
         { "hour": "19時", "intensity": 15, "taskCount": 2 },
-        { "hour": "20時", "intensity": 5, "taskCount": 1 }
+        { "hour": "20時", "intensity": 5, "taskCount": 1 },
+        { "hour": "21時", "intensity": 20, "taskCount": 3 },
+        { "hour": "22時", "intensity": 10, "taskCount": 1 },
+        { "hour": "23時", "intensity": 5, "taskCount": 1 }
       ]
     },
     {
       "day": "木",
       "hours": [
+        { "hour": "0時", "intensity": 10, "taskCount": 1 },
+        { "hour": "1時", "intensity": 10, "taskCount": 1 },
+        { "hour": "2時", "intensity": 20, "taskCount": 3 },
+        { "hour": "3時", "intensity": 10, "taskCount": 1 },
+        { "hour": "4時", "intensity": 5, "taskCount": 1 },
+        { "hour": "5時", "intensity": 10, "taskCount": 1 },
+        { "hour": "6時", "intensity": 35, "taskCount": 5 },
+        { "hour": "7時", "intensity": 45, "taskCount": 7 },
         { "hour": "8時", "intensity": 25, "taskCount": 4 },
         { "hour": "9時", "intensity": 70, "taskCount": 13 },
         { "hour": "10時", "intensity": 92, "taskCount": 21, "riskFactor": "木曜各種検査ラッシュ・移送重複" },
@@ -95,12 +136,23 @@
         { "hour": "17時", "intensity": 65, "taskCount": 12 },
         { "hour": "18時", "intensity": 45, "taskCount": 8 },
         { "hour": "19時", "intensity": 20, "taskCount": 3 },
-        { "hour": "20時", "intensity": 10, "taskCount": 2 }
+        { "hour": "20時", "intensity": 10, "taskCount": 2 },
+        { "hour": "21時", "intensity": 25, "taskCount": 4 },
+        { "hour": "22時", "intensity": 15, "taskCount": 2 },
+        { "hour": "23時", "intensity": 10, "taskCount": 1 }
       ]
     },
     {
       "day": "金",
       "hours": [
+        { "hour": "0時", "intensity": 15, "taskCount": 2 },
+        { "hour": "1時", "intensity": 10, "taskCount": 1 },
+        { "hour": "2時", "intensity": 20, "taskCount": 3 },
+        { "hour": "3時", "intensity": 10, "taskCount": 1 },
+        { "hour": "4時", "intensity": 10, "taskCount": 1 },
+        { "hour": "5時", "intensity": 20, "taskCount": 3 },
+        { "hour": "6時", "intensity": 45, "taskCount": 7, "riskFactor": "早朝採血・検体回収" },
+        { "hour": "7時", "intensity": 55, "taskCount": 9 },
         { "hour": "8時", "intensity": 35, "taskCount": 6 },
         { "hour": "9時", "intensity": 85, "taskCount": 18, "riskFactor": "週末入院受け入れ準備・検査" },
         { "hour": "10時", "intensity": 98, "taskCount": 25, "riskFactor": "🚨 最大過密: 手術・退院・急変対応の集中" },
@@ -113,12 +165,23 @@
         { "hour": "17時", "intensity": 70, "taskCount": 14 },
         { "hour": "18時", "intensity": 50, "taskCount": 9 },
         { "hour": "19時", "intensity": 25, "taskCount": 4 },
-        { "hour": "20時", "intensity": 15, "taskCount": 2 }
+        { "hour": "20時", "intensity": 15, "taskCount": 2 },
+        { "hour": "21時", "intensity": 30, "taskCount": 5, "riskFactor": "週末消灯前処置" },
+        { "hour": "22時", "intensity": 20, "taskCount": 3 },
+        { "hour": "23時", "intensity": 15, "taskCount": 2 }
       ]
     },
     {
       "day": "土",
       "hours": [
+        { "hour": "0時", "intensity": 10, "taskCount": 1 },
+        { "hour": "1時", "intensity": 5, "taskCount": 1 },
+        { "hour": "2時", "intensity": 15, "taskCount": 2 },
+        { "hour": "3時", "intensity": 5, "taskCount": 1 },
+        { "hour": "4時", "intensity": 5, "taskCount": 1 },
+        { "hour": "5時", "intensity": 10, "taskCount": 1 },
+        { "hour": "6時", "intensity": 25, "taskCount": 3 },
+        { "hour": "7時", "intensity": 30, "taskCount": 4 },
         { "hour": "8時", "intensity": 15, "taskCount": 2 },
         { "hour": "9時", "intensity": 45, "taskCount": 8 },
         { "hour": "10時", "intensity": 60, "taskCount": 11, "riskFactor": "少人数体制での定期ケア" },
@@ -131,12 +194,23 @@
         { "hour": "17時", "intensity": 45, "taskCount": 8 },
         { "hour": "18時", "intensity": 35, "taskCount": 6 },
         { "hour": "19時", "intensity": 15, "taskCount": 2 },
-        { "hour": "20時", "intensity": 5, "taskCount": 1 }
+        { "hour": "20時", "intensity": 5, "taskCount": 1 },
+        { "hour": "21時", "intensity": 15, "taskCount": 2 },
+        { "hour": "22時", "intensity": 10, "taskCount": 1 },
+        { "hour": "23時", "intensity": 5, "taskCount": 1 }
       ]
     },
     {
       "day": "日",
       "hours": [
+        { "hour": "0時", "intensity": 5, "taskCount": 1 },
+        { "hour": "1時", "intensity": 5, "taskCount": 1 },
+        { "hour": "2時", "intensity": 10, "taskCount": 1 },
+        { "hour": "3時", "intensity": 5, "taskCount": 1 },
+        { "hour": "4時", "intensity": 5, "taskCount": 1 },
+        { "hour": "5時", "intensity": 10, "taskCount": 1 },
+        { "hour": "6時", "intensity": 20, "taskCount": 3 },
+        { "hour": "7時", "intensity": 30, "taskCount": 4 },
         { "hour": "8時", "intensity": 10, "taskCount": 2 },
         { "hour": "9時", "intensity": 40, "taskCount": 7 },
         { "hour": "10時", "intensity": 55, "taskCount": 10 },
@@ -149,7 +223,10 @@
         { "hour": "17時", "intensity": 40, "taskCount": 7 },
         { "hour": "18時", "intensity": 30, "taskCount": 5 },
         { "hour": "19時", "intensity": 10, "taskCount": 1 },
-        { "hour": "20時", "intensity": 5, "taskCount": 1 }
+        { "hour": "20時", "intensity": 5, "taskCount": 1 },
+        { "hour": "21時", "intensity": 15, "taskCount": 2 },
+        { "hour": "22時", "intensity": 10, "taskCount": 1 },
+        { "hour": "23時", "intensity": 5, "taskCount": 1 }
       ]
     }
   ],
