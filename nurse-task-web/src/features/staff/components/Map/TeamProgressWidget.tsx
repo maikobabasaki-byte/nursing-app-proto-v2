@@ -80,22 +80,22 @@ export const TeamProgressWidget: React.FC<TeamProgressWidgetProps> = ({
     const currentUser = useTimelineStore.getState().currentUser;
     const currentUserId = currentUser?.nurse_id || currentUser?.staff_id;
     const currentUserName = currentUser?.name;
-    const isDemoPresenterSession = typeof window !== 'undefined' && sessionStorage.getItem('is_demo_presenter_session') === 'true';
 
     let baseNurses = [...activeNurses];
-    const demoName = isDemoPresenterSession ? 'デモ１（メンバー）' : (currentUserName || 'デモ１（メンバー）');
+    const fallbackName = sessionStorage.getItem('nurseflow_guest_role') === 'admin' ? '山田 師長' : '田中 結衣 (1年目)';
+    const demoName = currentUserName || fallbackName;
     const demoId = currentUserId || 'demo-nurse-01';
 
-    // デモ・ゲストセッション時は「デモ１（メンバー）」のプログレスカードを確実に表示
-    const hasSelf = baseNurses.some((n) => n.nurse_id === demoId || n.name === demoName || n.name === 'デモ１（メンバー）');
+    // デモ・ゲストセッション時はログインユーザーのプログレスカードを確実に表示
+    const hasSelf = baseNurses.some((n) => n.nurse_id === demoId || n.name === demoName || (currentUser?.name && n.name === currentUser.name));
     if (!hasSelf) {
       baseNurses.unshift({
         nurse_id: demoId,
         name: demoName,
         team: currentUser?.team || 'Aチーム',
         color: '#2563eb',
-        role: 'メンバー',
-        is_leader: false,
+        role: currentUser?.role === 'admin' ? '管理者' : 'メンバー',
+        is_leader: currentUser?.is_leader || false,
         x_percent: 48,
         y_percent: 45,
         is_logged_in: true,
@@ -115,8 +115,8 @@ export const TeamProgressWidget: React.FC<TeamProgressWidgetProps> = ({
       );
 
       if (isGuestOrDemo) {
-        // 現在のログインユーザー本人（デモ１）であれば採用、自分以外の過去の匿名ゲスト/デモデータは除外
-        const isSelf = n.nurse_id === demoId || n.name === demoName || n.name === 'デモ１（メンバー）';
+        // 現在のログインユーザー本人であれば採用、自分以外の過去の匿名ゲスト/デモデータは除外
+        const isSelf = n.nurse_id === demoId || n.name === demoName || (currentUser?.name && n.name === currentUser.name);
         if (!isSelf) return false;
       }
 

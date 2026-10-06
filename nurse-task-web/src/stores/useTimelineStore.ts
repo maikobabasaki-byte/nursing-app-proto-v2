@@ -255,6 +255,13 @@ interface TimelineStore {
   editingMemo: Memo | null;
   newMemoText: string;
 
+  // 🎓 OJT（新人指導）画面共有モード設定 State
+  isOjtMode: boolean;
+  menteeId: string | null;
+  setOjtMode: (isOjtMode: boolean) => void;
+  setMenteeId: (menteeId: string | null) => void;
+  setOjtSettings: (isOjtMode: boolean, menteeId: string | null) => void;
+
   addDemoTask: () => void;
   removeDemoTask: () => void;
   addTask: (task: ExtendedTask) => void;
@@ -541,6 +548,43 @@ export const useTimelineStore = create<TimelineStore>((set, get) => ({
   editingMemo: null,
   newMemoText: "",
 
+  // 🎓 OJT・新人画面共有モードの初期状態（初期値は100% OFF）
+  isOjtMode: false,
+  menteeId: (() => {
+    try {
+      return localStorage.getItem('menteeId') || 'n002';
+    } catch (e) {
+      return 'n002';
+    }
+  })(),
+  setOjtMode: (isOjtMode: boolean) => set(() => {
+    try {
+      localStorage.setItem('isOjtMode', String(isOjtMode));
+    } catch (e) {}
+    return { isOjtMode };
+  }),
+  setMenteeId: (menteeId: string | null) => set(() => {
+    try {
+      if (menteeId) {
+        localStorage.setItem('menteeId', menteeId);
+      } else {
+        localStorage.removeItem('menteeId');
+      }
+    } catch (e) {}
+    return { menteeId };
+  }),
+  setOjtSettings: (isOjtMode: boolean, menteeId: string | null) => set(() => {
+    try {
+      localStorage.setItem('isOjtMode', String(isOjtMode));
+      if (menteeId) {
+        localStorage.setItem('menteeId', menteeId);
+      } else {
+        localStorage.removeItem('menteeId');
+      }
+    } catch (e) {}
+    return { isOjtMode, menteeId };
+  }),
+
   resetStoreData: () => set({
     allTasks: [],
     memos: [],
@@ -739,6 +783,8 @@ export const useTimelineStore = create<TimelineStore>((set, get) => ({
   setMemos: (memos) => set({ memos }),
   setCurrentUser: (user) => {
     const userId = user ? (user.nurse_id || user.staff_id || user.email || '').trim() : '';
+    const userNurseId = user ? (user.nurse_id || '').trim() : '';
+    const userStaffId = user ? (user.staff_id || '').trim() : '';
     const userName = user ? (user.name || '').trim().replace(/[\s　]+/g, '') : '';
     set((state) => {
       if (!user) {
@@ -748,11 +794,18 @@ export const useTimelineStore = create<TimelineStore>((set, get) => ({
       const userMemos = state.memos.filter((m) => {
         const creator = String(m.created_by || (m as any).nurse_name || (m as any).nurse_id || '').trim().replace(/[\s　]+/g, '');
         if (creator !== '') {
-          return (userId !== '' && creator === userId) || (userName !== '' && creator === userName);
+          return (userId !== '' && creator === userId) ||
+                 (userNurseId !== '' && creator === userNurseId) ||
+                 (userStaffId !== '' && creator === userStaffId) ||
+                 (userName !== '' && creator === userName) ||
+                 creator === 'self';
         }
-        return false;
+        return true;
       });
-      return { currentUser: user, memos: userMemos };
+      return { 
+        currentUser: user, 
+        memos: userMemos,
+      };
     });
   },
   setSelectedPatients: (list) => {
@@ -866,7 +919,7 @@ export const useTimelineStore = create<TimelineStore>((set, get) => ({
         cleanNId === cleanTarget ||
         (rawTarget !== '' && (rawNId === rawTarget || cleanNId === rawTarget)) ||
         (Boolean(n.name) && Boolean(nurseId) && n.name === nurseId) ||
-        (n.name === 'デモ１（メンバー）');
+        (state.currentUser?.name && n.name === state.currentUser.name);
       if (isMatch) {
         found = true;
         return { ...n, x_percent, y_percent };
@@ -875,14 +928,15 @@ export const useTimelineStore = create<TimelineStore>((set, get) => ({
     });
 
     if (!found) {
-      const currentUserName = state.currentUser?.name || 'デモ１（メンバー）';
+      const fallbackName = typeof window !== 'undefined' && sessionStorage.getItem('nurseflow_guest_role') === 'admin' ? '山田 師長' : '田中 結衣 (1年目)';
+      const currentUserName = state.currentUser?.name || fallbackName;
       updatedNurses.push({
         nurse_id: rawTarget || 'demo-nurse-01',
         name: currentUserName,
         team: state.currentUser?.team || 'Aチーム',
         color: '#2563eb',
-        role: 'メンバー',
-        is_leader: false,
+        role: state.currentUser?.role === 'admin' ? '管理者' : 'メンバー',
+        is_leader: state.currentUser?.is_leader || false,
         x_percent,
         y_percent,
         is_logged_in: true,
@@ -1792,3 +1846,6 @@ export const useTimelineStore = create<TimelineStore>((set, get) => ({
     return targetTasks.length;
   },
 }));
+
+// 🎓 設定専用エイリアスフック (useSettingsStore) のエクスポート
+export const useSettingsStore = useTimelineStore;

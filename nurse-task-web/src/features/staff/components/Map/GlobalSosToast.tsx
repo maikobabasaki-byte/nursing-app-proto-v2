@@ -76,25 +76,30 @@ export const GlobalSosToast: React.FC = () => {
     );
   };
 
+  const responderName = currentUserName || '自分';
+  const currentSessionId = getSessionId();
+  const myNurseId = String(currentUser?.nurse_id || currentUser?.staff_id || sessionStorage.getItem('nurse_id') || '').trim();
+  const myNurseName = String(currentUser?.name || currentUserName || sessionStorage.getItem('nurse_name') || '').trim().replace(/[\s　]+/g, '');
+
   const activeMemoToasts = storeMemos.filter((m) => {
     if (m.is_completed || dismissedIds.includes(`memo-${m.id}`)) return false;
-    const isMemoGuest = checkIsGuestSource(m.id || m.target_room_id, (m as any).created_by);
-    if (isGuestUser !== isMemoGuest) return false;
 
     // 🛡️ メモの他ユーザー共有を100%完全遮断（作成者本人以外の画面・通知には一切表示しない）
     const memoCreator = String((m as any).created_by || (m as any).nurse_name || (m as any).nurse_id || '').trim().replace(/[\s　]+/g, '');
     if (memoCreator !== '') {
-      const isMyMemo = (myNurseId !== '' && memoCreator === myNurseId) || (myNurseName !== '' && memoCreator === myNurseName);
+      const isMyMemo =
+        (myNurseId !== '' && memoCreator === myNurseId) ||
+        (myNurseName !== '' && memoCreator === myNurseName) ||
+        memoCreator === 'self';
       if (!isMyMemo) return false;
+    } else {
+      if (myNurseId !== '' || myNurseName !== '') return false;
     }
+
+    if (m.id?.startsWith('GUEST-') && !isGuestUser) return false;
+
     return true;
   });
-
-  const responderName = currentUserName || '自分';
-
-  const currentSessionId = getSessionId();
-  const myNurseId = String(currentUser?.nurse_id || currentUser?.staff_id || sessionStorage.getItem('nurse_id') || '').trim();
-  const myNurseName = String(currentUser?.name || currentUserName || sessionStorage.getItem('nurse_name') || '').trim().replace(/[\s　]+/g, '');
 
   const flattenTasks = (tasks: ExtendedTask[]): ExtendedTask[] => {
     let result: ExtendedTask[] = [];

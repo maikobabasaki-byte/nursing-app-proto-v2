@@ -68,16 +68,16 @@ export function TimelineRow({
         }
       `}
     >
-      {/* 左端の時間軸ラベル (1/12) */}
-      <div className="col-span-1 border-r border-gray-100 flex items-center justify-center font-bold text-gray-500 bg-gray-50 text-xs sm:text-sm select-none py-2">
+      {/* 左端の時間軸ラベル (1/12 または 2/12) */}
+      <div className="col-span-2 sm:col-span-1 border-r border-gray-100 flex items-center justify-center font-bold text-gray-500 bg-gray-50 text-[11px] sm:text-xs select-none py-2 shrink-0">
         {time}
       </div>
 
-      {/* 中央：タスクカード配置エリア (8/12 - 横3つ並び) */}
-      <div className="col-span-8 p-1.5 min-h-[60px] grid grid-cols-1 md:grid-cols-3 gap-1.5 items-start content-start min-w-0">
+      {/* 中央：タスクカード配置エリア (横幅固定カードの自動列調整：3列・2列・1列) */}
+      <div className="col-span-7 sm:col-span-8 p-1.5 min-h-[60px] flex flex-wrap gap-1.5 items-start content-start min-w-0">
         {/* 🤖 16:00想定時刻行におけるAI先回り予測チップ・モーダル */}
         {time === '16:00' && (
-          <div className="w-full min-w-0 col-span-1">
+          <div className="relative w-[195px] max-w-full shrink-0">
             <AiPredictionAlertCard time={time} />
           </div>
         )}
@@ -119,7 +119,7 @@ export function TimelineRow({
               key={`placeholder-${task.task_id}`} 
               id={task.task_id === 'demo-task-tutorial' ? 'dummy-task-inprogress-pool' : undefined}
               onClick={() => setActivePopupTaskId(task.task_id)}
-              className={`w-full min-w-0 border-2 border-dashed ${borderBgStyle} p-2.5 rounded shadow-sm flex flex-col justify-between font-bold text-xs min-h-[80px] cursor-pointer hover:shadow-md select-none`}
+              className={`w-[195px] max-w-full shrink-0 border-2 border-dashed ${borderBgStyle} p-2.5 rounded shadow-sm flex flex-col justify-between font-bold text-xs min-h-[80px] cursor-pointer hover:shadow-md select-none`}
             >
               <div className="flex justify-between items-center w-full text-[10px]">
                 <span className="font-extrabold flex items-center gap-1">
@@ -136,12 +136,12 @@ export function TimelineRow({
           );
         })}
         
-        {/* 中央：タスク専用エリア */}
+        {/* 中央：タスク専用エリア (カード幅固定: 195px) */}
         {rowTasks.map(task => {
           const { cardColorClass, borderStyle } = getTaskStyles(task, isPastTime);
 
           return (
-            <div key={task.task_id} className="relative w-full min-w-0 flex-shrink-0">
+            <div key={task.task_id} className="relative w-[195px] max-w-full shrink-0">
               {task.isGroup ? (
                 // 💡 引数がスッキリ！
                 <GroupParentCard 

@@ -18,8 +18,19 @@ import { PoolTaskCard } from './PoolTaskCard';
 import { normalizeToHHMM, normalizeTeamName, isTaskInLeaderTeam, extractUserProgressingTasks, isTimeInSlot, isEmergencyTaskOutdated, isWardTask, DEFAULT_WARD_TASKS } from '../../../../utils/taskLogic';
 import { useIsMobile } from '../../../../hooks/useIsMobile';
 
+// 🎓 新人IDに対応する受け持ち患者IDのマップ定義（実環境・ゲストシード双方対応）
+const MENTEE_PATIENT_IDS_MAP: Record<string, string[]> = {
+  'n002': ['P212', 'P213', 'P214', 'P215'], // 202・203号室 (森 蒼真, 池田 悠, 橋本 瑞希, 阿部 明日香)
+  'n003': ['P211', 'P212', 'P213'],         // 201・202号室 (山崎 陽向, 森 蒼真, 池田 悠)
+  'n004': ['P226', 'P227', 'P228', 'P229'], // 207号室 (小林 結菜, 加藤 栞, 渡辺 咲良)
+  'n005': ['P218', 'P219', 'P222', 'P223'], // 205・206号室 (中島 伊織, 石井 希美, 佐藤 蓮)
+  'nurse05': ['P212', 'P213', 'P214', 'P215'],
+};
+
 export default function TimelineMain({ 
-  selectedPatients
+  selectedPatients,
+  targetNurseId,
+  isMenteeView = false,
 }: TimelineMainProps) {
   const isMobile = useIsMobile();
   const userName = useUserName();
@@ -44,20 +55,28 @@ export default function TimelineMain({
     currentUser?.isAnonymous === true
   );
   const isDemoPresenterSession = typeof window !== 'undefined' && sessionStorage.getItem('is_demo_presenter_session') === 'true';
-  const isLeader = checkIsLeader(currentUser);
+  // 🎓 新人視点（isMenteeView: true）の時はリーダーフラグを確実OFFにし、新人の実際の個別画面を正確に再現
+  const isLeader = isMenteeView ? false : checkIsLeader(currentUser);
   const leaderTeam = currentUser?.team || 'Aチーム';
 
-  // 💡 有効な選択患者リスト（props または ストアから算出）
+  // 💡 有効な選択患者リスト（新人視点時は新人専用の受け持ち患者リストを使用）
   const storeSelectedPatients = useTimelineStore((state) => state.selectedPatients);
-  const effectiveSelectedPatients = (selectedPatients && selectedPatients.length > 0)
-    ? selectedPatients
-    : storeSelectedPatients;
+  const effectiveSelectedPatients = useMemo(() => {
+    if (isMenteeView && targetNurseId) {
+      return MENTEE_PATIENT_IDS_MAP[targetNurseId] || ['P212', 'P213', 'P214', 'P215'];
+    }
+    return (selectedPatients && selectedPatients.length > 0)
+      ? selectedPatients
+      : storeSelectedPatients;
+  }, [isMenteeView, targetNurseId, selectedPatients, storeSelectedPatients]);
 
   // 🏥 病棟業務専任（または患者未選択）フラグ
   const isWardDutyOnly = Boolean(
-    sessionStorage.getItem('isWardDutyOnly') === 'true' ||
-    !effectiveSelectedPatients ||
-    effectiveSelectedPatients.length === 0
+    !isMenteeView && (
+      sessionStorage.getItem('isWardDutyOnly') === 'true' ||
+      !effectiveSelectedPatients ||
+      effectiveSelectedPatients.length === 0
+    )
   );
 
   // 💡 判定関数
@@ -99,6 +118,16 @@ export default function TimelineMain({
     // 病棟専任モード（または患者未選択）の場合は個別の患者タスクを非表示にする
     if (isWardDutyOnly) {
       return false;
+    }
+
+    // 🎓 新人（メンティー）表示モード時: 新人にアサインされているタスク、または新人の担当部屋/患者のタスクを正確に抽出
+    if (isMenteeView && targetNurseId) {
+      const isMenteeAssigned = Boolean(
+        task.nurse_id === targetNurseId ||
+        task.assigned_nurse_id === targetNurseId ||
+        (task as any).staff_id === targetNurseId
+      );
+      if (isMenteeAssigned) return true;
     }
 
     if (isPatientSelected(task.patient_id)) return true;
@@ -277,23 +306,29 @@ export default function TimelineMain({
     return storeMemos.filter((m) => {
       if (m.is_completed) return false;
 
-      const isMemoGuest = Boolean((m as any).is_guest === true || m.id?.startsWith('GUEST-'));
-      if (isGuestUser !== isMemoGuest) return false;
-
       // 🛡️ メモは完全非共有。作成者本人の画面（タイムライン）にのみ表示する
       const memoCreator = String(m.created_by || (m as any).nurse_name || (m as any).nurse_id || '').trim().replace(/[\s　]+/g, '');
 
       if (memoCreator !== '') {
-        const isMyMemo = (myId !== '' && memoCreator === myId) || (myName !== '' && memoCreator === myName);
+        const isMyMemo =
+          (myId !== '' && memoCreator === myId) ||
+          (myName !== '' && memoCreator === myName) ||
+          memoCreator === 'self';
         if (!isMyMemo) {
-          return false; // 他メンバーや作成者が異なるメモはリーダー等の他者タイムラインへ一切表示しない
+          return false; // 他メンバーや作成者が異なるメモは他者タイムラインへ一切表示しない
         }
       } else {
-        // created_by が未指定の古いメモ等は他ユーザー画面への混入を防止するため遮断
+        // created_by が未指定の古いメモ等で、ログイン情報がある場合は他ユーザー画面への混入を防止するため遮断
         if (myId !== '' || myName !== '') {
           return false;
         }
       }
+
+      // 他セッション用ゲスト固定デモデータ（GUEST-***）の通常セッション混入のみ遮断
+      if (m.id?.startsWith('GUEST-') && !isGuestUser) {
+        return false;
+      }
+
       return true;
     });
   }, [storeMemos, currentUser, isGuestUser]);
@@ -462,7 +497,7 @@ export default function TimelineMain({
   return (
     <div className="flex-1 min-h-0 w-full flex flex-col p-2 md:p-4 select-none overflow-hidden">
       {/* 👑 リーダー参照モードコントロールヘッダー */}
-      {isLeader && (
+      {isLeader && !isMenteeView && (
         <div className="bg-gradient-to-r from-indigo-900 to-indigo-950 text-white p-2.5 md:p-3 rounded-xl mb-3 flex items-center justify-between shadow-md border border-indigo-700/60 animate-fade-in">
           {/* 📱 タブレット・モバイル表示時：所属チームと低優先度トグルボタンのみの簡潔表示 */}
           {isMobile ? (

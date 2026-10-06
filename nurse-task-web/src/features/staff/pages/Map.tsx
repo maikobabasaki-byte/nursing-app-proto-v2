@@ -212,29 +212,30 @@ export default function MapContainer({ selectedPatients }: MapContainerProps): R
       currentUser?.isAnonymous === true
     );
 
-    // 🎬 面接デモセッション時は「デモ１（メンバー）」のピンのみをマップ上に限定表示
+    // 🎬 面接デモセッション時はログインユーザーのピンのみをマップ上に限定表示
     if (isDemoPresenterSession) {
+      const activeName = currentUser?.name || (sessionStorage.getItem('nurseflow_guest_role') === 'admin' ? '山田 師長' : '田中 結衣 (1年目)');
+      const activeRole = currentUser?.role === 'admin' ? '管理者' : 'メンバー';
       const demoPin = nurses.find((n) =>
         n.nurse_id === currentUserId ||
-        n.name === 'デモ１（メンバー）' ||
         (currentUser?.name && n.name === currentUser.name)
       );
 
       if (demoPin) {
         return [{
           ...demoPin,
-          name: 'デモ１（メンバー）',
-          role: 'メンバー',
+          name: activeName,
+          role: activeRole,
           color: '#2563eb',
         }];
       }
       return [{
         nurse_id: currentUserId || 'demo-nurse-01',
-        name: 'デモ１（メンバー）',
+        name: activeName,
         team: currentUser?.team || 'Aチーム',
         color: '#2563eb',
-        role: 'メンバー',
-        is_leader: false,
+        role: activeRole,
+        is_leader: currentUser?.is_leader || false,
         x_percent: 48.0,
         y_percent: 45.0,
         is_logged_in: true,

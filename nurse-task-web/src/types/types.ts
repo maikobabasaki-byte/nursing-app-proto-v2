@@ -148,6 +148,8 @@ export interface TimelineControlsProps {
 
 export interface TimelineMainProps {
   selectedPatients: string[];
+  targetNurseId?: string;
+  isMenteeView?: boolean;
 }
 
 export interface TaskCardPropsInner {

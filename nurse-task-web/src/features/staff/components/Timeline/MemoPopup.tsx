@@ -238,7 +238,9 @@ export const MemoPopup = () => {
                 alert("⚠️ メモ内容は200文字以内で入力してください。");
                 return;
               }
-              const currentUserId = currentUser?.nurse_id || currentUser?.email || sessionStorage.getItem('nurse_id') || 'self';
+              const currentUserId = currentUser?.nurse_id || currentUser?.staff_id || sessionStorage.getItem('nurse_id') || currentUser?.email || 'self';
+              const currentUserName = currentUser?.name || sessionStorage.getItem('nurse_name') || '';
+              const isGuestSession = Boolean(sessionStorage.getItem('is_guest_session') === 'true' || currentUser?.isAnonymous === true || sessionStorage.getItem('is_demo_presenter_session') === 'true');
               const isRed = priority === 'red';
               // 💡 優先度（red/high含め）に関わらず、メモは他ユーザーと共有せず個人のプライベート管理とする
               const memoToSave = editingMemo 
@@ -252,6 +254,8 @@ export const MemoPopup = () => {
                     priority: priority,
                     is_anchor: isRed,
                     created_by: editingMemo.created_by || currentUserId,
+                    nurse_name: (editingMemo as any)?.nurse_name || currentUserName,
+                    is_guest: isGuestSession,
                   }
                 : { 
                     id: Date.now().toString(), 
@@ -263,6 +267,8 @@ export const MemoPopup = () => {
                     priority: priority,
                     is_anchor: isRed,
                     created_by: currentUserId,
+                    nurse_name: currentUserName,
+                    is_guest: isGuestSession,
                   };
               
               handleSaveMemo(memoToSave);
