@@ -54,6 +54,9 @@ interface SkillProficiencyChecklistProps {
   skills: NursingSkillItem[];
   onUpdateSkillLevel: (skillId: string, skillName: string, newLevel: number) => void;
   isViewingSelf?: boolean;
+  staffName?: string;
+  isTargetMentee?: boolean;
+  menteeName?: string;
 }
 
 export const SkillProficiencyChecklist: React.FC<SkillProficiencyChecklistProps> = ({
@@ -61,28 +64,42 @@ export const SkillProficiencyChecklist: React.FC<SkillProficiencyChecklistProps>
   skills,
   onUpdateSkillLevel,
   isViewingSelf = false,
+  staffName = '',
+  isTargetMentee = true,
+  menteeName = '田中 結衣',
 }) => {
-  // 指導者（プリセプター / 師長）が「他者（本人以外）」を評価・入力可能（本人は変更不可）
-  const isInstructor = !isViewingSelf && (currentUser.role === 'admin' || currentUser.role === 'preceptor');
+  const isTargetPreceptor = !isTargetMentee;
+  const targetMenteeDisplayName = isTargetPreceptor ? menteeName : (staffName || '対象看護師');
+
+  // 指導者（プリセプター / 師長）が入力可能
+  const isInstructor = (currentUser.role === 'admin' || currentUser.role === 'preceptor') && (!isViewingSelf || isTargetPreceptor);
+  const canEditLevel = isInstructor;
 
   return (
     <section className="bg-white p-4 lg:p-6 rounded-2xl shadow-sm border border-slate-200 flex flex-col gap-4">
       {/* タイトル & レベル定義凡例 */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 border-b border-slate-200 pb-3">
         <div>
-          <h3 className="text-base lg:text-lg font-extrabold text-slate-900 flex items-center gap-2">
-            <span className="text-xl">💉</span> 看護技術 習熟度（自立度）チェックリスト
-          </h3>
-          <p className="text-xs text-slate-500 font-medium mt-0.5">
-            新人教育・OJT現場における具体的な看護技術の5段階（自立度）評価
+          <div className="flex flex-wrap items-center gap-2">
+            <h3 className="text-base lg:text-lg font-extrabold text-slate-900 flex items-center gap-2">
+              <span className="text-xl">💉</span> 看護技術 習熟度（自立度）チェックリスト
+            </h3>
+            <span className="text-xs font-black text-emerald-950 bg-emerald-100/90 border border-emerald-300 px-3 py-1 rounded-xl shadow-2xs flex items-center gap-1">
+              <span>🌱</span> 評価対象新人: <strong>{targetMenteeDisplayName}</strong> ナース
+            </span>
+          </div>
+          <p className="text-xs text-slate-600 font-medium mt-1">
+            {isTargetPreceptor
+              ? `指導プリセプター（${staffName}）として、担当新人「${targetMenteeDisplayName}」の看護技術自立度（Lv.1〜5）を評価・更新します。`
+              : `新人ナース「${targetMenteeDisplayName}」のOJT現場における具体的な看護技術の5段階（自立度）評価結果です。`}
           </p>
         </div>
 
         {/* 権限状態バッジ */}
         <div>
-          {isInstructor ? (
+          {canEditLevel ? (
             <span className="text-xs font-bold text-emerald-800 bg-emerald-50 px-3 py-1 rounded-xl border border-emerald-200 flex items-center gap-1 shadow-2xs">
-              <span>✏️</span> 指導者評価・レベル更新モード（プリセプター / 師長）
+              <span>✏️</span> 指導者評価・レベル更新モード
             </span>
           ) : (
             <span className="text-xs font-bold text-slate-600 bg-slate-100 px-3 py-1 rounded-xl border border-slate-200 flex items-center gap-1">
@@ -91,6 +108,15 @@ export const SkillProficiencyChecklist: React.FC<SkillProficiencyChecklistProps>
           )}
         </div>
       </div>
+
+      {isTargetPreceptor && (
+        <div className="bg-amber-50/90 border border-amber-200/90 text-amber-950 p-3 rounded-xl text-xs font-medium flex items-center gap-2 shadow-2xs animate-fade-in">
+          <span className="text-xl">💡</span>
+          <div>
+            <strong>【OJT指導表示メモ】</strong> プリセプター（{staffName}）本人の技術評価ではなく、指導担当している<strong>新人ナース「{targetMenteeDisplayName}」</strong>の看護技術習熟度を表示・指導評価しています。
+          </div>
+        </div>
+      )}
 
       {/* 5段階レベル定義の凡例バー */}
       <div className="grid grid-cols-1 sm:grid-cols-5 gap-1.5 p-2 bg-slate-50 rounded-xl border border-slate-200 text-xs">
@@ -146,11 +172,17 @@ export const SkillProficiencyChecklist: React.FC<SkillProficiencyChecklistProps>
                       onClick={() => isInstructor && onUpdateSkillLevel(skill.id, skill.name, stepVal)}
                       title={`${stepDef.desc} ${isInstructor ? '（クリックでこのレベルに更新）' : '（指導者のみ入力可能・閲覧モード）'}`}
                       className={`!h-7 !px-2.5 !rounded-lg !font-black !transition-all !flex !items-center !justify-center !gap-1 !border disabled:opacity-100 ${
-                        isInstructor ? 'cursor-pointer active:scale-95' : 'cursor-default'
-                      } ${
-                        isReached
-                          ? `${stepDef.activeBg} ${stepDef.textCol} ${stepDef.borderCol} !shadow-2xs`
-                          : '!bg-slate-200/80 !text-slate-400 !border-slate-300 hover:!bg-slate-300'
+                        isInstructor
+                          ? `cursor-pointer active:scale-95 ${
+                              isReached
+                                ? `${stepDef.activeBg} ${stepDef.textCol} ${stepDef.borderCol} hover:brightness-110 !shadow-2xs`
+                                : '!bg-slate-200/80 !text-slate-400 !border-slate-300 hover:!bg-slate-300'
+                            }`
+                          : `cursor-default ${
+                              isReached
+                                ? `${stepDef.activeBg} ${stepDef.textCol} ${stepDef.borderCol} !shadow-2xs`
+                                : '!bg-slate-200/80 !text-slate-400 !border-slate-300'
+                            }`
                       }`}
                     >
                       <span>{stepVal}</span>

@@ -18,13 +18,12 @@ import { PoolTaskCard } from './PoolTaskCard';
 import { normalizeToHHMM, normalizeTeamName, isTaskInLeaderTeam, extractUserProgressingTasks, isTimeInSlot, isEmergencyTaskOutdated, isWardTask, DEFAULT_WARD_TASKS } from '../../../../utils/taskLogic';
 import { useIsMobile } from '../../../../hooks/useIsMobile';
 
-// 🎓 新人IDに対応する受け持ち患者IDのマップ定義（実環境・ゲストシード双方対応）
+// 🎓 新人IDに対応する受け持ち患者IDのマップ定義
 const MENTEE_PATIENT_IDS_MAP: Record<string, string[]> = {
-  'n002': ['P212', 'P213', 'P214', 'P215'], // 202・203号室 (森 蒼真, 池田 悠, 橋本 瑞希, 阿部 明日香)
-  'n003': ['P211', 'P212', 'P213'],         // 201・202号室 (山崎 陽向, 森 蒼真, 池田 悠)
-  'n004': ['P226', 'P227', 'P228', 'P229'], // 207号室 (小林 結菜, 加藤 栞, 渡辺 咲良)
-  'n005': ['P218', 'P219', 'P222', 'P223'], // 205・206号室 (中島 伊織, 石井 希美, 佐藤 蓮)
-  'nurse05': ['P212', 'P213', 'P214', 'P215'],
+  'nurse05': ['P212', 'P213', 'P214', 'P215'], // 田中 結衣 (1年目)
+  'nurse02': ['P211', 'P212', 'P213'],         // 佐藤 看護師 (1年目)
+  'nurse03': ['P226', 'P227', 'P228', 'P229'], // 鈴木 看護師 (4年目・プリセプター)
+  'nurse04': ['P218', 'P219', 'P222', 'P223'], // 高橋 看護師 (1年目)
 };
 
 export default function TimelineMain({ 

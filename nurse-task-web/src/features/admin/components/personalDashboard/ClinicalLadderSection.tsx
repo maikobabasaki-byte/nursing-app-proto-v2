@@ -32,6 +32,7 @@ interface ClinicalLadderSectionProps {
   onUpdateCompetencyScore: (key: string, newScore: number) => void;
   onSaveFeedback: (strengths: string, improvements: string) => void;
   isViewingSelf?: boolean;
+  staffName?: string;
 }
 
 // 💡 レーダーチャート用カスタムツールチップ
@@ -63,6 +64,7 @@ export const ClinicalLadderSection: React.FC<ClinicalLadderSectionProps> = ({
   onUpdateCompetencyScore,
   onSaveFeedback,
   isViewingSelf = false,
+  staffName = '',
 }) => {
   const [strengthsText, setStrengthsText] = useState(ladderData.strengths);
   const [improvementsText, setImprovementsText] = useState(ladderData.improvements);
@@ -94,11 +96,18 @@ export const ClinicalLadderSection: React.FC<ClinicalLadderSectionProps> = ({
       {/* ヘッダー & ラダーレベルバッジ表示 */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-indigo-100 pb-3">
         <div>
-          <h3 className="text-base lg:text-lg font-extrabold text-indigo-950 flex items-center gap-2">
-            <span className="text-xl">🎖️</span> 日本看護協会 JNAクリニカルラダー評価 & 定性フィードバック
-          </h3>
-          <p className="text-xs text-indigo-700 font-medium mt-0.5">
-            能力段階に応じた5つのコア要件評価、スキル多角チャート、指導者コメント
+          <div className="flex flex-wrap items-center gap-2">
+            <h3 className="text-base lg:text-lg font-extrabold text-indigo-950 flex items-center gap-2">
+              <span className="text-xl">🎖️</span> 日本看護協会 JNAクリニカルラダー評価 & 定性フィードバック
+            </h3>
+            {staffName && (
+              <span className="text-xs font-black text-indigo-950 bg-indigo-100 border border-indigo-300 px-3 py-1 rounded-xl shadow-2xs flex items-center gap-1">
+                <span>👤</span> 評価対象: <strong>{staffName}</strong> ナース
+              </span>
+            )}
+          </div>
+          <p className="text-xs text-indigo-700 font-medium mt-1">
+            {staffName ? `「${staffName}」ナースの` : ''}能力段階に応じた5つのコア要件評価、スキル多角チャート、指導者コメント
           </p>
         </div>
 

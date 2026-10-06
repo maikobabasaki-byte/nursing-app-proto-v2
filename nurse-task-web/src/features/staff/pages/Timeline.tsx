@@ -14,16 +14,12 @@ interface TimelineProps {
   selectedPatients: string[];
 }
 
-// 🎓 新人IDから表示名へのマッピング
+// 🎓 新人・後輩IDから表示名へのマッピング
 const MENTEE_NAME_MAP: Record<string, string> = {
   'nurse05': '田中 結衣 (1年目)',
-  'n002': '田中 結衣 (1年目)',
   'nurse02': '佐藤 看護師 (1年目)',
-  'n003': '佐藤 看護師 (1年目)',
-  'nurse03': '鈴木 看護師 (2年目)',
-  'n004': '鈴木 看護師 (2年目)',
+  'nurse03': '鈴木 看護師 (4年目・プリセプター)',
   'nurse04': '高橋 看護師 (1年目)',
-  'n005': '高橋 看護師 (1年目)',
 };
 
 export default function Timeline({ selectedPatients }: TimelineProps) {
@@ -268,7 +264,7 @@ export default function Timeline({ selectedPatients }: TimelineProps) {
                 <div className="flex-1 min-h-0 overflow-hidden flex flex-col bg-emerald-50/20">
                   <TimelineMain 
                     selectedPatients={selectedPatients} 
-                    targetNurseId={menteeId || 'n002'} 
+                    targetNurseId={menteeId || 'nurse05'} 
                     isMenteeView={true} 
                   />
                 </div>

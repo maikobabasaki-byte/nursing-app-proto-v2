@@ -53,13 +53,9 @@ export const Settings: React.FC = () => {
     // 3. システム標準の登録済み通常看護師アカウントを追加（重複排除付き）
     const defaultKnownNurses = [
       { id: 'nurse05', name: '田中 結衣', experience: '1年目', team: 'Aチーム' },
-      { id: 'n002', name: '田中 結衣', experience: '1年目', team: 'Aチーム' },
       { id: 'nurse02', name: '佐藤 看護師', experience: '1年目', team: 'Aチーム' },
-      { id: 'n003', name: '佐藤 看護師', experience: '1年目', team: 'Aチーム' },
-      { id: 'nurse03', name: '鈴木 看護師', experience: '2年目', team: 'Bチーム' },
-      { id: 'n004', name: '鈴木 看護師', experience: '2年目', team: 'Bチーム' },
+      { id: 'nurse03', name: '鈴木 看護師', experience: '4年目・プリセプター', team: 'Bチーム' },
       { id: 'nurse04', name: '高橋 看護師', experience: '1年目', team: 'Bチーム' },
-      { id: 'n005', name: '高橋 看護師', experience: '1年目', team: 'Bチーム' },
     ];
 
     defaultKnownNurses.forEach((dk) => {
@@ -72,22 +68,13 @@ export const Settings: React.FC = () => {
     return list;
   }, [nurseMaster, nurses, currentUser]);
 
-  // 選択中の新人オブジェクト（ケースインセンシティブID名寄せ対応）
+  // 選択中の新人・指導対象オブジェクト
   const selectedMentee = useMemo(() => {
     if (!menteeId) return menteeCandidates[0] || null;
     const target = menteeId.trim().toLowerCase();
     return (
       menteeCandidates.find(
-        (m) =>
-          m.id.toLowerCase() === target ||
-          (target === 'n002' && m.id === 'nurse05') ||
-          (target === 'nurse05' && m.id === 'n002') ||
-          (target === 'n003' && m.id === 'nurse02') ||
-          (target === 'nurse02' && m.id === 'n003') ||
-          (target === 'n004' && m.id === 'nurse03') ||
-          (target === 'nurse03' && m.id === 'n004') ||
-          (target === 'n005' && m.id === 'nurse04') ||
-          (target === 'nurse04' && m.id === 'n005')
+        (m) => m.id.toLowerCase() === target
       ) || menteeCandidates[0]
     );
   }, [menteeCandidates, menteeId]);

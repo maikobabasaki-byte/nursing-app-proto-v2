@@ -28,6 +28,7 @@ interface OJTFeedbackSectionProps {
   preceptorKpt: PreceptorKPTData;
   onSubmitOJTFeedback: (data: OJTFeedbackData) => void;
   onSavePreceptorKPT: (kpt: PreceptorKPTData) => void;
+  isTargetMentee?: boolean;
 }
 
 export const OJTFeedbackSection: React.FC<OJTFeedbackSectionProps> = ({
@@ -40,10 +41,15 @@ export const OJTFeedbackSection: React.FC<OJTFeedbackSectionProps> = ({
   preceptorKpt,
   onSubmitOJTFeedback,
   onSavePreceptorKPT,
+  isTargetMentee,
 }) => {
+  const isTargetMenteeResolved = typeof isTargetMentee === 'boolean'
+    ? isTargetMentee
+    : (effectiveTargetId === 'N002' || effectiveTargetId === 'N004' || effectiveTargetId === 'N005' || effectiveTargetId.includes('nurse02') || effectiveTargetId.includes('nurse04') || effectiveTargetId.includes('nurse05'));
+
   const isPreceptorOrAdmin = currentUser.role === 'admin' || currentUser.role === 'preceptor';
-  const canEditNurseThanksCard = !isPreceptorOrAdmin && isViewingSelf;
-  const canEditPreceptorKPT = currentUser.role === 'preceptor';
+  const canEditNurseThanksCard = isTargetMenteeResolved && !isPreceptorOrAdmin && isViewingSelf;
+  const canEditPreceptorKPT = !isTargetMenteeResolved && (currentUser.role === 'preceptor' || currentUser.role === 'admin');
 
   // 新人側 State
   const [clarity, setClarity] = useState<number>(ojtFeedback.clarityRating || 4);
@@ -162,8 +168,8 @@ export const OJTFeedbackSection: React.FC<OJTFeedbackSectionProps> = ({
 
   return (
     <section className="bg-gradient-to-br from-rose-50/80 via-orange-50/50 to-amber-50/80 p-4 lg:p-6 rounded-2xl shadow-sm border-2 border-rose-200/90 flex flex-col gap-5">
-      {/* ---------------- 1. 新人ナース向け UI（サンクスカード送信用） ---------------- */}
-      {!isPreceptorOrAdmin ? (
+      {/* ---------------- 1. 新人ナース向け UI（サンクスカード受講・送信用） ---------------- */}
+      {isTargetMenteeResolved ? (
         <div className="flex flex-col gap-4">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-rose-200 pb-3">
             <div>

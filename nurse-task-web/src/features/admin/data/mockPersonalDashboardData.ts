@@ -312,6 +312,164 @@ export const STAFF_PROFILES: Record<string, StaffProfile> = {
       preceptorName: 'プリセプターリーダー：山田 師長',
     },
   },
+  N004: {
+    user: {
+      id: 'nurse04',
+      name: '高橋 看護師',
+      role: 'nurse',
+      rank: '新人ナース（1年目）',
+      ward: '2階病棟（一般）',
+      avatarEmoji: '🔰',
+    },
+    timeline: [
+      { id: 't1', time: '08:30', room: '304号室', patientName: '中村 幸子様', taskTitle: '朝のバイタル測定 & 服薬確認', status: 'completed', priority: 'high', estimatedMinutes: 20, taskType: 'patient' },
+      { id: 't2', time: '09:30', room: '305号室', patientName: '小林 義雄様', taskTitle: '創傷チェック & 点滴交換', status: 'completed', priority: 'medium', estimatedMinutes: 20, taskType: 'patient' },
+      { id: 't3', time: '11:00', room: '304号室', patientName: '中村 幸子様', taskTitle: '昼前バイタル測定 & 体位変換', status: 'completed', priority: 'medium', estimatedMinutes: 15, taskType: 'patient' },
+      { id: 't4', time: '13:30', room: '305号室', patientName: '小林 義雄様', taskTitle: '清拭 & シーツ交換サポート', status: 'in_progress', priority: 'high', estimatedMinutes: 30, taskType: 'patient' },
+      { id: 't5', time: '15:30', room: 'ナースステーション', patientName: '担当患者全般', taskTitle: '看護記録入力 & 申し送り確認', status: 'scheduled', priority: 'medium', estimatedMinutes: 25, taskType: 'patient' },
+    ],
+    skillData: [
+      { subject: 'スケジュール遵守率', score: 82, rationale: '予定時刻との平均ズレが6分程度です。基本的なタイムラインに沿って行動できています。' },
+      { subject: '処置スピード', score: 78, rationale: '基準時間に沿って丁寧に処置を行っています。' },
+      { subject: '重症度対応力', score: 75, rationale: '軽症〜中等症患者を中心に安全な看護を提供しています。' },
+      { subject: '記録の迅速性', score: 80, rationale: 'タスク完了後、概ね10分以内にSOAP入力できています。' },
+      { subject: 'イレギュラー対応', score: 72, rationale: '先輩のサポートを受けながら突発タスクに対応しています。' },
+    ],
+    paceData: [
+      { time: '08:00', planned: 2, actual: 2 },
+      { time: '10:00', planned: 4, actual: 4 },
+      { time: '12:00', planned: 7, actual: 6 },
+      { time: '14:00', planned: 10, actual: 9 },
+      { time: '16:00', planned: 12, actual: 11 },
+    ],
+    feedback: {
+      evalSummary: '丁寧な患者接遇と確実なバイタル測定ができています。',
+      strengths: [
+        '患者様とのコミュニケーションが非常に丁寧で信頼を得られています。',
+        '報告・連絡・相談（ホウレンソウ）がこまめに実施できています。',
+      ],
+      improvements: [
+        '処置準備の事前物品整理をルーティン化することでさらに余裕が生まれます。',
+      ],
+      recommendation: '午後の清拭・シーツ交換時、先輩看護師のサポートを受けながら効率的な作業手順を確認することを推奨します。',
+    },
+    reflection: {
+      format: 'modular',
+      nurseSelfReflection: 'バイタル測定と服薬確認はスムーズに行えました。シーツ交換と清拭で少し時間がかかったため、明日は物品準備を事前に整えて臨みます。',
+      kpt: {
+        keep: '丁寧な患者様への声かけとこまめなホウレンソウ。',
+        problem: '清拭・シーツ交換の物品事前準備に手間取った。',
+        try: '作業開始10分前にカートへ必要備品を揃えてセッティングする。',
+      },
+      kolb: {
+        experience: '午後の中村様・小林様の清拭とシーツ交換サポート。',
+        reflection: '準備不足で途中でナースステーションに物品を取りに戻る時間が発生した。',
+        conceptual: '処置開始前の準備チェックリスト活用が時間短縮の鍵。',
+        experiment: '明日朝に清拭用カートの標準セットアップリストを作成して試す。',
+      },
+      reflections: [
+        {
+          id: 'ref-n4-1',
+          type: '振り返り',
+          title: '清拭・シーツ交換の手順改善と準備ルーティン化',
+          content: '本日の清拭作業で物品の往復が発生したため、事前の準備確認を徹底します。',
+          comments: [
+            {
+              id: 'c-n4-1',
+              senderId: 'admin01',
+              senderName: '山田 師長',
+              senderRole: 'admin',
+              senderAvatarEmoji: '👩‍⚕️',
+              text: '【アドバイス】焦らず確実に行いましょう！慣れれば自然と準備がスムーズになりますよ👍',
+              createdAt: '16:45',
+            },
+          ],
+          createdAt: '16:45',
+        },
+      ],
+      preceptorComment: '高橋さん、誠実な看護姿勢が良いですね！物品準備のコツは先輩にいつでも聞いてください。',
+      preceptorName: '指導担当：山田 師長',
+    },
+  },
+  N005: {
+    user: {
+      id: 'nurse02',
+      name: '佐藤 看護師',
+      role: 'nurse',
+      rank: '新人ナース（1年目）',
+      ward: '2階病棟（一般）',
+      avatarEmoji: '🌱',
+    },
+    timeline: [
+      { id: 't1', time: '08:30', room: '308号室', patientName: '吉田 清様', taskTitle: '朝のバイタル測定 & 点滴確認', status: 'completed', priority: 'high', estimatedMinutes: 20, taskType: 'patient' },
+      { id: 't2', time: '09:30', room: '309号室', patientName: '松本 美智子様', taskTitle: '服薬介助 & 血糖値チェック', status: 'completed', priority: 'high', estimatedMinutes: 15, taskType: 'patient' },
+      { id: 't3', time: '11:00', room: '308号室', patientName: '吉田 清様', taskTitle: '昼前バイタル & 酸素流量チェック', status: 'completed', priority: 'medium', estimatedMinutes: 15, taskType: 'patient' },
+      { id: 't4', time: '14:00', room: '309号室', patientName: '松本 美智子様', taskTitle: '午後の検温 & 創傷ガーゼ交換', status: 'in_progress', priority: 'high', estimatedMinutes: 25, taskType: 'patient' },
+      { id: 't5', time: '16:00', room: 'ナースステーション', patientName: '担当患者全般', taskTitle: '終業前記録入力 & 申し送りメモ作成', status: 'scheduled', priority: 'medium', estimatedMinutes: 25, taskType: 'patient' },
+    ],
+    skillData: [
+      { subject: 'スケジュール遵守率', score: 85, rationale: '予定時刻との平均ズレが5分以内です。着実にタスクを遂行しています。' },
+      { subject: '処置スピード', score: 80, rationale: '落ち着いて正確な手順で処置を行えています。' },
+      { subject: '重症度対応力', score: 78, rationale: '指示に従って安全に患者アセスメントを実施しています。' },
+      { subject: '記録の迅速性', score: 82, rationale: 'タスク終了後の看護記録の入力がスムーズです。' },
+      { subject: 'イレギュラー対応', score: 75, rationale: '疑問点があればすぐに先輩に確認して安全に対応しています。' },
+    ],
+    paceData: [
+      { time: '08:00', planned: 2, actual: 2 },
+      { time: '10:00', planned: 4, actual: 4 },
+      { time: '12:00', planned: 7, actual: 7 },
+      { time: '14:00', planned: 10, actual: 9 },
+      { time: '16:00', planned: 12, actual: 11 },
+    ],
+    feedback: {
+      evalSummary: '正確なバイタル測定と報告ができており、安全意識が高いです。',
+      strengths: [
+        '指示や手順書を忠実に守り、安全第一で行動できています。',
+        '患者様の変化に気づいた際、すぐに相談・報告ができています。',
+      ],
+      improvements: [
+        '複数患者のスケジュール調整で迷った際は、優先度の高い処置を優先して声かけしましょう。',
+      ],
+      recommendation: '14時台の処置前に、高リスク処置の確認をプリセプターと事前共有することを推奨します。',
+    },
+    reflection: {
+      format: 'modular',
+      nurseSelfReflection: '本日は血糖測定と点滴確認をミスなく安全に終えられました。ガーゼ交換の際の手技を再確認し、明日も丁寧に実施します。',
+      kpt: {
+        keep: '安全確認の徹底と疑問点の即時報連相。',
+        problem: '処置中の物品取り出しで少し手際がもたつく場面があった。',
+        try: '事前準備の段階で滅菌手袋や消毒綿の配置を整理しておく。',
+      },
+      kolb: {
+        experience: '松本様の血糖測定と創傷ガーゼ交換の実施。',
+        reflection: '手技自体は正確に行えたが、物品配置を意識するともっと手際よく行えた。',
+        conceptual: '処置中の作業動線をイメージした物品配置が効率化につながる。',
+        experiment: '明日の処置前に清潔野と不潔野の配置イメージを頭の中でシミュレーションする。',
+      },
+      reflections: [
+        {
+          id: 'ref-n5-1',
+          type: '気づき',
+          title: '創傷ガーゼ交換における手技の正確性と動線配慮',
+          content: '滅菌手袋の装着からガーゼ貼付まで清潔操作を保ちつつスムーズに行うことができました。',
+          comments: [
+            {
+              id: 'c-n5-1',
+              senderId: 'admin01',
+              senderName: '山田 師長',
+              senderRole: 'admin',
+              senderAvatarEmoji: '👩‍⚕️',
+              text: '【評価】清潔操作がとても綺麗にできていました！素晴らしい成果です👍',
+              createdAt: '16:50',
+            },
+          ],
+          createdAt: '16:50',
+        },
+      ],
+      preceptorComment: '佐藤さん、確実で安全な手技が素晴らしいです！自信を持って進めていきましょう。',
+      preceptorName: '指導担当：山田 師長',
+    },
+  },
 };
 
 // IDエイリアス設定
@@ -323,9 +481,17 @@ STAFF_PROFILES['nurse01'] = STAFF_PROFILES['N001'];
 STAFF_PROFILES['n001'] = STAFF_PROFILES['N001'];
 
 STAFF_PROFILES['nurse05'] = STAFF_PROFILES['N002'];
-STAFF_PROFILES['nurse02'] = STAFF_PROFILES['N002'];
 STAFF_PROFILES['n002'] = STAFF_PROFILES['N002'];
-STAFF_PROFILES['sato'] = STAFF_PROFILES['N002'];
+STAFF_PROFILES['tanaka'] = STAFF_PROFILES['N002'];
 
 STAFF_PROFILES['nurse03'] = STAFF_PROFILES['N003'];
 STAFF_PROFILES['n003'] = STAFF_PROFILES['N003'];
+STAFF_PROFILES['suzuki'] = STAFF_PROFILES['N003'];
+
+STAFF_PROFILES['nurse04'] = STAFF_PROFILES['N004'];
+STAFF_PROFILES['n004'] = STAFF_PROFILES['N004'];
+STAFF_PROFILES['takahashi'] = STAFF_PROFILES['N004'];
+
+STAFF_PROFILES['nurse02'] = STAFF_PROFILES['N005'];
+STAFF_PROFILES['n005'] = STAFF_PROFILES['N005'];
+STAFF_PROFILES['sato'] = STAFF_PROFILES['N005'];

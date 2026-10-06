@@ -1,15 +1,16 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 
 // Zustandストア・Firebase認証・ユーザーユーティリティのインポート
 import { doc, setDoc, getDoc, serverTimestamp } from 'firebase/firestore';
 import { useTimelineStore } from '../../../stores/useTimelineStore';
 import { auth, db } from '../../../lib/firebase';
-import { checkIsLeader } from '../../../utils/userUtils';
+import { checkIsLeader, getStaffCandidates } from '../../../utils/userUtils';
 import { getJSTDateString } from '../../../utils/dateUtils';
 
 // 型定義・モックデータのインポート
 import type {
   UserRoleInfo,
+  StaffProfile,
   TimelineItem,
   GapItem,
   GapSubSegment,
@@ -43,6 +44,8 @@ export { GAP_ACTIVITY_OPTIONS } from '../types/personalDashboard';
 export const PersonalDashboard: React.FC = () => {
   // ログイン認証状態（Zustandストア / Firebase認証）よりロール判定
   const storeUser = useTimelineStore((state) => state.currentUser);
+  const nurseMaster = useTimelineStore((state) => state.nurseMaster);
+  const nurses = useTimelineStore((state) => state.nurses);
   const selectedDate = useTimelineStore((state) => state.selectedDate) || getJSTDateString();
   const firebaseUser = auth.currentUser;
 
@@ -54,26 +57,81 @@ export const PersonalDashboard: React.FC = () => {
 
   const normalizeStaffId = (id: string): string => {
     const clean = (id || '').trim().toLowerCase();
-    if (clean.includes('admin') || clean.includes('yamada') || clean.includes('ono') || clean === 'n001' || clean === 'nurse01' || clean === 'n1') {
+    if (clean === 'n001' || clean === 'nurse01' || clean === 'admin01' || clean === 'n1' || clean.includes('admin') || clean.includes('yamada') || clean.includes('ono')) {
       return 'N001';
     }
-    if (clean.includes('nurse05') || clean.includes('sato') || clean.includes('yui') || clean === 'n002' || clean === 'nurse02' || clean === 'n2') {
+    if (clean === 'n002' || clean === 'nurse05' || clean === 'n5' || clean.includes('tanaka') || clean.includes('yui')) {
       return 'N002';
     }
-    if (clean.includes('nurse03') || clean.includes('tanaka') || clean.includes('suzuki') || clean === 'n003' || clean === 'n3' || clean.includes('preceptor')) {
+    if (clean === 'n003' || clean === 'nurse03' || clean === 'n3' || clean.includes('suzuki') || clean.includes('preceptor')) {
       return 'N003';
     }
-    return 'N002';
+    if (clean === 'n004' || clean === 'nurse04' || clean === 'n4' || clean.includes('takahashi')) {
+      return 'N004';
+    }
+    if (clean === 'n005' || clean === 'nurse02' || clean === 'n2' || clean.includes('sato')) {
+      return 'N005';
+    }
+    return id || 'N002';
   };
 
   const defaultTargetId = normalizeStaffId(loggedInUserId);
   const effectiveTargetId = normalizeStaffId(targetUserId);
 
-  const currentStaff = STAFF_PROFILES[effectiveTargetId] || STAFF_PROFILES['N002'];
-
   const realRole: 'admin' | 'preceptor' | 'nurse' =
     (storeUser?.role as 'admin' | 'preceptor' | 'nurse') ||
     (storeUser?.role === 'admin' || checkIsLeader(storeUser) || checkIsLeader(firebaseUser) ? 'admin' : 'nurse');
+
+  const isAdmin = realRole === 'admin';
+  const activeStaffId = isAdmin ? effectiveTargetId : defaultTargetId;
+
+  // 🏥 システムに登録されている全実データ看護師（Firestore / Auth）＆デモ用看護師を動的候補化
+  const staffCandidates = useMemo(() => {
+    return getStaffCandidates(nurseMaster, nurses, storeUser);
+  }, [nurseMaster, nurses, storeUser]);
+
+  // 🎯 選択されたスタッフIDに対応するプロファイル（実データユーザーの場合は動的構築）
+  const rawStaff: StaffProfile = useMemo(() => {
+    if (STAFF_PROFILES[activeStaffId]) {
+      return STAFF_PROFILES[activeStaffId];
+    }
+    const realUserMatch =
+      (nurseMaster || []).find((m) => m.nurse_id === activeStaffId || m.nurse_id?.toLowerCase() === activeStaffId.toLowerCase()) ||
+      (nurses || []).find((n) => n.nurse_id === activeStaffId || n.nurse_id?.toLowerCase() === activeStaffId.toLowerCase()) ||
+      (storeUser && (storeUser.nurse_id === activeStaffId || storeUser.staff_id === activeStaffId) ? storeUser : null);
+
+    const isLeader = realUserMatch ? checkIsLeader(realUserMatch) : false;
+    const baseProfile = isLeader ? STAFF_PROFILES['N001'] : STAFF_PROFILES['N002'];
+
+    const realName = realUserMatch?.name || (activeStaffId.includes('@') ? activeStaffId.split('@')[0] : activeStaffId);
+
+    return {
+      ...baseProfile,
+      user: {
+        id: activeStaffId,
+        name: realName,
+        role: isLeader ? 'admin' : 'nurse',
+        rank: isLeader ? '師長・看護管理者（実ユーザー）' : '一般看護師（実ユーザー）',
+        ward: realUserMatch?.team || '2階病棟（一般）',
+        avatarEmoji: isLeader ? '👩‍⚕️' : '🩺',
+      },
+    };
+  }, [activeStaffId, nurseMaster, nurses, storeUser]);
+
+  // 🛡️ 非管理者（一般看護師）はログインユーザー本人のリアルタイム名・プロファイルを厳格適用
+  const currentStaff: StaffProfile = useMemo(() => {
+    if (!isAdmin && storeUser) {
+      return {
+        ...rawStaff,
+        user: {
+          ...rawStaff.user,
+          id: loggedInUserId,
+          name: storeUser.name || rawStaff.user.name,
+        },
+      };
+    }
+    return rawStaff;
+  }, [isAdmin, storeUser, loggedInUserId, rawStaff]);
 
   const currentUser: UserRoleInfo = {
     id: loggedInUserId,
@@ -81,12 +139,12 @@ export const PersonalDashboard: React.FC = () => {
     role: realRole,
   };
 
-  // 🛡️ 一般看護師（role === 'nurse'）は他スタッフの画面を閲覧できないよう、閲覧対象を本人（defaultTargetId）に常時固定
+  // 🛡️ 一般看護師は他スタッフの画面を閲覧できないよう、閲覧対象を本人（defaultTargetId）に常時固定
   useEffect(() => {
-    if (realRole === 'nurse' && targetUserId !== defaultTargetId) {
-      setTargetUserId(defaultTargetId);
+    if (!isAdmin && targetUserId !== loggedInUserId) {
+      setTargetUserId(loggedInUserId);
     }
-  }, [realRole, targetUserId, defaultTargetId, setTargetUserId]);
+  }, [isAdmin, targetUserId, loggedInUserId, setTargetUserId]);
 
   const [timelineViewMode, setTimelineViewMode] = useState<'patient' | 'gantt' | 'table'>('patient');
 
@@ -327,6 +385,32 @@ export const PersonalDashboard: React.FC = () => {
         { key: 'comp5', subject: '安全管理', score: 5, rationale: 'インシデント防止・点滴ダブルチェック・与薬安全を徹底できています。' },
       ],
     },
+    N004: {
+      currentLevel: 'レベルⅠ (新人)',
+      targetLevel: 'レベルⅡ (一人立ち)',
+      strengths: '患者観察力が高く、点滴・バイタルの変化に素早く気づくことができます。',
+      improvements: '排泄・体位変換の介助手技の効率化と自立度向上を目指しましょう。',
+      competencies: [
+        { key: 'comp1', subject: 'ニーズを捉える力', score: 3, rationale: '患者の細かな状態変化を注意深く観察できています。' },
+        { key: 'comp2', subject: 'ケアを実践する力', score: 2, rationale: '基礎看護手技は確実ですが、複合的な介護ケアでフォローが必要です。' },
+        { key: 'comp3', subject: '協働する力', score: 4, rationale: '先輩指導者への報告・相談タイミングが的確です。' },
+        { key: 'comp4', subject: '意思決定を支える力', score: 3, rationale: '患者の不安を和らげる声かけが意識できています。' },
+        { key: 'comp5', subject: '安全管理', score: 4, rationale: '患者誤認防止のネームバンド確認を徹底できています。' },
+      ],
+    },
+    N005: {
+      currentLevel: 'レベルⅠ (新人)',
+      targetLevel: 'レベルⅡ (一人立ち)',
+      strengths: '清潔操作・感染予防手順が極めて正確で、安全第一で行動できています。',
+      improvements: '多忙時の業務優先度の判断力を指導者と一緒に鍛えていきましょう。',
+      competencies: [
+        { key: 'comp1', subject: 'ニーズを捉える力', score: 3, rationale: 'バイタルデータや患者の症状変化の捉え方が的確です。' },
+        { key: 'comp2', subject: 'ケアを実践する力', score: 3, rationale: '創傷処置や配薬の手続きがとても丁寧で安全です。' },
+        { key: 'comp3', subject: '協働する力', score: 3, rationale: '指導者のアドバイスを素直に受け入れ迅速に改善できています。' },
+        { key: 'comp4', subject: '意思決定を支える力', score: 3, rationale: '患者の希望をしっかり傾聴し記録に反映できています。' },
+        { key: 'comp5', subject: '安全管理', score: 5, rationale: '与薬のダブルチェック・アレルギー確認を完璧に履行しています。' },
+      ],
+    },
   });
 
   // 💉 看護技術 5段階習熟度（自立度）チェックリスト State
@@ -356,6 +440,24 @@ export const PersonalDashboard: React.FC = () => {
       { id: 'sk4', name: '経管栄養・胃瘻管理', category: '栄養管理', level: 5 },
       { id: 'sk5', name: '十二指腸チューブ挿入補助', category: '処置介助', level: 3 },
       { id: 'sk6', name: '心電図装着・モニター測定', category: '循環アセスメント', level: 5 },
+      { id: 'sk7', name: '清拭・全身皮膚ケア', category: '清潔ケア', level: 5 },
+    ],
+    N004: [
+      { id: 'sk1', name: '静脈血採血', category: '注射・採血', level: 2 },
+      { id: 'sk2', name: '気管吸引（経口・経鼻）', category: '呼吸ケア', level: 2 },
+      { id: 'sk3', name: '導尿・尿道カテーテル留置', category: '排泄ケア', level: 1 },
+      { id: 'sk4', name: '経管栄養・胃瘻管理', category: '栄養管理', level: 3 },
+      { id: 'sk5', name: '十二指腸チューブ挿入補助', category: '処置介助', level: 1 },
+      { id: 'sk6', name: '心電図装着・モニター測定', category: '循環アセスメント', level: 3 },
+      { id: 'sk7', name: '清拭・全身皮膚ケア', category: '清潔ケア', level: 4 },
+    ],
+    N005: [
+      { id: 'sk1', name: '静脈血採血', category: '注射・採血', level: 3 },
+      { id: 'sk2', name: '気管吸引（経口・経鼻）', category: '呼吸ケア', level: 3 },
+      { id: 'sk3', name: '導尿・尿道カテーテル留置', category: '排泄ケア', level: 2 },
+      { id: 'sk4', name: '経管栄養・胃瘻管理', category: '栄養管理', level: 4 },
+      { id: 'sk5', name: '十二指腸チューブ挿入補助', category: '処置介助', level: 2 },
+      { id: 'sk6', name: '心電図装着・モニター測定', category: '循環アセスメント', level: 4 },
       { id: 'sk7', name: '清拭・全身皮膚ケア', category: '清潔ケア', level: 5 },
     ],
   });
@@ -389,6 +491,24 @@ export const PersonalDashboard: React.FC = () => {
       submittedAt: '16:45',
       isSubmitted: true,
     },
+    N004: {
+      clarityRating: 5,
+      psychologicalSafetyRating: 5,
+      thanksMessage: '本日は導尿カテーテル管理のフォローありがとうございました！失敗しそうな箇所を前もって声かけしていただけたので落ち着けました。',
+      senderName: '高橋 看護師',
+      senderAvatarEmoji: '🌱',
+      submittedAt: '16:20',
+      isSubmitted: true,
+    },
+    N005: {
+      clarityRating: 4,
+      psychologicalSafetyRating: 5,
+      thanksMessage: '本日は創傷ガーゼ交換と血糖測定の見守り指導ありがとうございました！手作業の順番をシミュレーションしたおかげで自信がつきました！',
+      senderName: '佐藤 看護師',
+      senderAvatarEmoji: '🌱',
+      submittedAt: '16:40',
+      isSubmitted: true,
+    },
   });
 
   // 🎓 プリセプター（指導者）自身の教育KPT State
@@ -411,22 +531,81 @@ export const PersonalDashboard: React.FC = () => {
       try: '明日は記録用テンプレートを事前に共有して入力時間を短縮する。',
       updatedAt: '16:50',
     },
+    N004: {
+      keep: '処置開始前にカテーテル留置の注意点を写真付きマニュアルで共有した。',
+      problem: '急患対応時、振り返りメモのやり取りが17時以降にずれ込んだ。',
+      try: '明日は申し送り直前の3分間でその日の総括セッションを設ける。',
+      updatedAt: '16:25',
+    },
+    N005: {
+      keep: '清潔操作の手順について事前準備段階で具体的な声かけ・確認を行えた。',
+      problem: '物品配置の作業動線について口頭説明のみにとどまってしまった。',
+      try: '明日は事前にワゴンのセッティング例を見せてから処置に入ってもらう。',
+      updatedAt: '16:45',
+    },
   });
 
+  // 📌 指導者用：新人指導タブの動的管理 State (デフォルトで N002 田中 結衣, N004 高橋 看護師)
+  const [menteeTabIds, setMenteeTabIds] = useState<string[]>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('preceptor_mentee_tabs');
+      if (saved) {
+        try {
+          const parsed = JSON.parse(saved);
+          if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        } catch (e) {}
+      }
+    }
+    return ['N002', 'N004'];
+  });
+
+  const [activeMenteeTabId, setActiveMenteeTabId] = useState<string>('N002');
+  const [isAddMenteeModalOpen, setIsAddMenteeModalOpen] = useState<boolean>(false);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('preceptor_mentee_tabs', JSON.stringify(menteeTabIds));
+    } catch (e) {}
+  }, [menteeTabIds]);
+
+  const handleAddMenteeTab = (staffId: string) => {
+    if (!menteeTabIds.includes(staffId)) {
+      const updated = [...menteeTabIds, staffId];
+      setMenteeTabIds(updated);
+      setActiveMenteeTabId(staffId);
+      const staffObj = staffCandidates.find((s) => s.id === staffId);
+      showToast(`🌱 【${staffObj?.name || '新人'}】の指導・評価タブを新設しました！`);
+    } else {
+      setActiveMenteeTabId(staffId);
+    }
+    setIsAddMenteeModalOpen(false);
+  };
+
+  const handleRemoveMenteeTab = (staffId: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    const updated = menteeTabIds.filter((id) => id !== staffId);
+    setMenteeTabIds(updated);
+    if (activeMenteeTabId === staffId) {
+      setActiveMenteeTabId(updated.length > 0 ? updated[0] : 'personal');
+    }
+    const staffObj = staffCandidates.find((s) => s.id === staffId);
+    showToast(`🗑️ ${staffObj?.name || '新人'}の指導タブを閉じました。`);
+  };
+
   // 💌 サンクスカード送信ハンドラー
-  const handleSubmitOJTFeedback = (newFeedback: OJTFeedbackData) => {
+  const handleSubmitOJTFeedback = (targetId: string, newFeedback: OJTFeedbackData) => {
     setOjtFeedbackMap((prev) => ({
       ...prev,
-      [effectiveTargetId]: newFeedback,
+      [targetId]: newFeedback,
     }));
     showToast(`💌 指導者へ本日のサンクスカード・フィードバックを送信しました！`);
   };
 
   // 🎓 指導者教育KPT保存ハンドラー
-  const handleSavePreceptorKPT = (newKpt: PreceptorKPTData) => {
+  const handleSavePreceptorKPT = (targetId: string, newKpt: PreceptorKPTData) => {
     setPreceptorKptMap((prev) => ({
       ...prev,
-      [effectiveTargetId]: newKpt,
+      [targetId]: newKpt,
     }));
     showToast(`💾 指導スキルの教育用KPT（Keep / Problem / Try）を保存しました。`);
   };
@@ -444,10 +623,36 @@ export const PersonalDashboard: React.FC = () => {
     ? currentStaff.reflection.preceptorName
     : `${currentUser.name}（指導プリセプター）`;
 
+  // 🗂️ インデックス型切り替えタブを表示する対象 (プリセプター本人、または閲覧対象が N003 鈴木プリセプター の場合)
+  // ※ 師長（管理者）は全スタッフ選択プルダウンで直接全員を評価するため、インデックス表示はプリセプター専用とします
+  const showMenteeTabs = (currentUser.role === 'preceptor' || effectiveTargetId === 'N003') && effectiveTargetId !== 'N001';
+  const currentMenteeId = showMenteeTabs && activeMenteeTabId && activeMenteeTabId !== 'personal'
+    ? activeMenteeTabId
+    : effectiveTargetId;
+
+  const currentMenteeStaff: StaffProfile = useMemo(() => {
+    if (STAFF_PROFILES[currentMenteeId]) {
+      return STAFF_PROFILES[currentMenteeId];
+    }
+    const realUserMatch = staffCandidates.find((s) => s.id === currentMenteeId);
+    const baseProfile = STAFF_PROFILES['N002'];
+    return {
+      ...baseProfile,
+      user: {
+        id: currentMenteeId,
+        name: realUserMatch?.name || currentMenteeId,
+        role: 'nurse',
+        rank: realUserMatch?.roleLabel || '一般看護師',
+        ward: '2階病棟（一般）',
+        avatarEmoji: '🌱',
+      },
+    };
+  }, [currentMenteeId, staffCandidates]);
+
   const currentFormat = reflectionFormats[effectiveTargetId] || 'modular';
 
   const currentLadder = ladderDataMap[effectiveTargetId] || ladderDataMap['N002'];
-  const currentTechnicalSkills = technicalSkillsMap[effectiveTargetId] || technicalSkillsMap['N002'];
+  const currentTechnicalSkills = technicalSkillsMap[currentMenteeId] || technicalSkillsMap['N002'];
 
   // JNAラダースコア更新ハンドラー (管理者専用)
   const handleUpdateCompetencyScore = (key: string, newScore: number) => {
@@ -486,10 +691,11 @@ export const PersonalDashboard: React.FC = () => {
 
   // 看護技術 習熟度レベル更新ハンドラー (管理者専用)
   const handleUpdateSkillLevel = (skillId: string, skillName: string, newLevel: number) => {
+    const targetId = currentMenteeId;
     setTechnicalSkillsMap((prev) => {
-      const list = prev[effectiveTargetId] || prev['N002'];
+      const list = prev[targetId] || prev['N002'];
       const updated = list.map((sk) => (sk.id === skillId ? { ...sk, level: newLevel } : sk));
-      return { ...prev, [effectiveTargetId]: updated };
+      return { ...prev, [targetId]: updated };
     });
     const levelDef = SKILL_LEVEL_DEFINITIONS[newLevel];
     showToast(`✨ 「${skillName}」の評価を更新しました：Lv.${newLevel}（${levelDef?.label || ''}）`);
@@ -863,17 +1069,30 @@ export const PersonalDashboard: React.FC = () => {
         nurseName: '田中 結衣 (1年目)',
       };
     }
+    if (effectiveTargetId === 'N004') {
+      return {
+        preceptorName: '鈴木 プリセプター',
+        nurseName: '高橋 看護師 (1年目)',
+      };
+    }
+    if (effectiveTargetId === 'N005') {
+      return {
+        preceptorName: '鈴木 プリセプター',
+        nurseName: '佐藤 看護師 (1年目)',
+      };
+    }
     return {
       preceptorName: '鈴木 プリセプター',
-      nurseName: '田中 結衣 (1年目)',
+      nurseName: `${currentStaff?.user?.name || '対象スタッフ'}`,
     };
   };
 
   const { preceptorName: ojtPreceptorName, nurseName: ojtNurseName } = getOjtPairNames();
 
+  const activeProfileStaff = (showMenteeTabs && activeMenteeTabId !== 'personal') ? currentMenteeStaff : currentStaff;
   const scheduleGaps = computeScheduleGaps(currentStaff.timeline);
-  const timelineList = currentStaff?.timeline || [];
-  const completedCount = timelineList.filter((t) => t.status === 'completed').length;
+  const timelineList = activeProfileStaff?.timeline || [];
+  const completedCount = timelineList.filter((t: any) => t.status === 'completed').length;
   const totalCount = timelineList.length;
   const progressPercent = totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 0;
 
@@ -887,10 +1106,10 @@ export const PersonalDashboard: React.FC = () => {
         </div>
       )}
 
-      {/* 最上部：対象スタッフ選択 (管理者・プリセプター用) または 本人固定表示 (一般看護師用) & 表示スタッフ概要 */}
+      {/* 1. 最上部：対象スタッフ選択 (管理者・指導者用) または 本人固定表示 (一般看護師用) & スタッフ概要 */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-stretch">
         {/* 左カラム: 対象スタッフ選択 (管理者・指導者のみ) または 本人専用固定表示 */}
-        {currentUser.role === 'admin' || currentUser.role === 'preceptor' ? (
+        {currentUser.role === 'admin' || currentUser.role === 'preceptor' || checkIsLeader(storeUser) ? (
           <div className="bg-amber-50/90 border border-amber-200 p-4 lg:p-5 rounded-2xl shadow-sm flex flex-col justify-center gap-2.5">
             <div className="flex items-center gap-2">
               <span className="text-xl">👩‍⚕️</span>
@@ -898,39 +1117,36 @@ export const PersonalDashboard: React.FC = () => {
                 対象スタッフ選択（表示・評価切替）:
               </label>
             </div>
-
-            <div className="mt-0.5">
-              <div>
-                <label htmlFor="top-2col-staff-select" className="text-[11px] font-extrabold text-amber-900 block mb-1">
-                  表示対象スタッフ:
-                </label>
-                <select
-                  id="top-2col-staff-select"
-                  value={effectiveTargetId}
-                  onChange={(e) => setTargetUserId(e.target.value)}
-                  className="!bg-white !text-slate-900 !font-extrabold !text-xs sm:!text-sm !px-3 !py-2 !rounded-xl !border !border-amber-300 focus:!outline-none focus:!ring-2 focus:!ring-amber-500 !cursor-pointer !shadow-sm w-full"
-                >
-                  <option value="N001">N001: 山田 師長 (管理者・病棟長)</option>
-                  <option value="N003">N003: 鈴木 プリセプター (4年目・指導看護師)</option>
-                  <option value="N002">N002: 田中 結衣 (1年目・新人ナース)</option>
-                </select>
-              </div>
+            <div>
+              <select
+                id="top-2col-staff-select"
+                value={effectiveTargetId}
+                onChange={(e) => {
+                  setTargetUserId(e.target.value);
+                  setActiveMenteeTabId('personal');
+                }}
+                className="!bg-white !text-slate-900 !font-extrabold !text-xs sm:!text-sm !px-3 !py-2.5 !rounded-xl !border !border-amber-300 focus:!outline-none focus:!ring-2 focus:!ring-amber-500 !cursor-pointer !shadow-sm w-full"
+              >
+                {staffCandidates.map((staff) => (
+                  <option key={staff.id} value={staff.id}>
+                    {staff.name} ({staff.roleLabel})
+                  </option>
+                ))}
+              </select>
             </div>
           </div>
         ) : (
           <div className="bg-slate-100 border border-slate-300 p-4 lg:p-5 rounded-2xl shadow-sm flex flex-col justify-center gap-2.5">
             <div className="flex items-center gap-2">
               <span className="text-xl">👤</span>
-              <span className="font-extrabold text-slate-800 text-sm">
-                表示対象データ:
-              </span>
+              <span className="font-extrabold text-slate-800 text-sm">表示対象データ:</span>
             </div>
-            <div className="mt-0.5 flex items-center justify-between bg-white p-3 rounded-xl border border-slate-300 shadow-2xs">
+            <div className="flex items-center justify-between bg-white p-3 rounded-xl border border-slate-300 shadow-2xs">
               <span className="font-black text-slate-900 text-xs sm:text-sm">
                 {currentStaff.user.name} ({currentStaff.user.role})
               </span>
               <span className="text-xs font-bold text-slate-600 bg-slate-100 px-2.5 py-1 rounded-lg border border-slate-200 flex items-center gap-1">
-                🔒 本人専用画面（他者閲覧不可）
+                🔒 本人専用画面
               </span>
             </div>
           </div>
@@ -938,109 +1154,331 @@ export const PersonalDashboard: React.FC = () => {
 
         {/* 右カラム: 表示中スタッフの概要 */}
         <StaffOverviewCard
-          currentStaff={currentStaff}
+          currentStaff={activeProfileStaff}
           completedCount={completedCount}
           totalCount={totalCount}
           progressPercent={progressPercent}
         />
       </div>
 
-      {/* 3. ワンカラム構造セクション */}
-      <div className="w-full flex flex-col gap-5">
-        {/* ---------------- 1. 本日について ---------------- */}
-        {/* 本日のタイムライン */}
-        <TimelineScheduleSection
-          currentStaff={currentStaff}
-          currentTimeStr={currentTimeStr}
-          currentTopPx={currentTopPx}
-          simulatedTimeStr={simulatedTimeStr}
-          setSimulatedTimeStr={setSimulatedTimeStr}
-          showGaps={showGaps}
-          setShowGaps={setShowGaps}
-          timelineViewMode={timelineViewMode}
-          setTimelineViewMode={setTimelineViewMode}
-          scheduleGaps={scheduleGaps}
-          gapSegments={gapSegments}
-          setGapSegments={setGapSegments}
-          isViewingSelf={isViewingSelf}
-        />
+      {/* 2. 🗂️ 画面最上部：インデックス型メインタブバー (明るく見やすいクリアカラー設計) */}
+      {showMenteeTabs && (
+        <div className="bg-white p-3.5 sm:p-4 rounded-2xl shadow-sm border border-slate-200/90 flex flex-col gap-3">
+          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-2.5">
+            <div className="flex items-center gap-2">
+              <span className="text-2xl">🗂️</span>
+              <div>
+                <h2 className="font-black text-sm sm:text-base text-slate-900 flex items-center gap-2">
+                  <span>ダッシュボード インデックス切替</span>
+                  <span className="bg-indigo-50 text-indigo-700 text-[11px] font-extrabold px-2.5 py-0.5 rounded-full border border-indigo-200">
+                    表示切替
+                  </span>
+                </h2>
+                <p className="text-[11px] text-slate-500 font-bold mt-0.5">
+                  「本人の評価（振り返り・ラダー）」と「各新人の指導画面」をインデックスで切り替えます。
+                </p>
+              </div>
+            </div>
 
-        {/* 📈 タスク消化ペース比較 & AIパーソナルフィードバック */}
-        <PerformanceChartsSection
-          currentStaff={currentStaff}
-          selectedDate={selectedDate}
-        />
+            {/* ➕ 新人指導タブを新設 ボタン */}
+            <button
+              type="button"
+              onClick={() => setIsAddMenteeModalOpen(true)}
+              className="!bg-amber-400 hover:!bg-amber-300 !text-slate-950 !font-black !text-xs !px-3.5 !py-2 !rounded-xl !border !border-amber-300 !shadow-xs hover:!shadow-md !transition-all !flex !items-center !gap-1.5 !cursor-pointer active:!scale-95"
+            >
+              <span className="text-sm">➕</span>
+              <span>新人指導タブを新設</span>
+            </button>
+          </div>
 
-        {/* 高度な本日の振り返り（モジュール/自由記述/KPT/Kolb & インライン対話チャット） */}
-        <DailyReflectionSection
-          currentStaff={currentStaff}
-          effectiveTargetId={effectiveTargetId}
-          currentUser={currentUser}
-          isReflectionEditable={isReflectionEditable}
-          isViewingSelf={isViewingSelf}
-          preceptorBadgeName={preceptorBadgeName}
-          currentFormat={currentFormat}
-          setReflectionFormats={setReflectionFormats}
-          modularReflections={modularReflections}
-          handleAddModularReflection={handleAddModularReflection}
-          handleDeleteModularReflection={handleDeleteModularReflection}
-          handleUpdateModularReflection={handleUpdateModularReflection}
-          handleSendModularComment={handleSendModularComment}
-          handleEditModularComment={handleEditModularComment}
-          handleDeleteModularComment={handleDeleteModularComment}
-          userFreeReflections={userFreeReflections}
-          setUserFreeReflections={setUserFreeReflections}
-          userFreeChats={userFreeChats}
-          handleSendFreeComment={handleSendFreeComment}
-          userKPTReflections={userKPTReflections}
-          setUserKPTReflections={setUserKPTReflections}
-          userKPTChats={userKPTChats}
-          handleSendKPTComment={handleSendKPTComment}
-          userKolbReflections={userKolbReflections}
-          setUserKolbReflections={setUserKolbReflections}
-          userKolbChats={userKolbChats}
-          handleSendKolbComment={handleSendKolbComment}
-          isSaveSuccess={isSaveSuccess}
-          setIsSaveSuccess={setIsSaveSuccess}
-          onSaveReflection={handleSaveReflection}
-          autoSaveStatus={autoSaveStatus}
-          lastSavedTime={lastSavedTime}
-          selectedDate={selectedDate}
-        />
+          {/* 明るいインデックス型タブ一覧 */}
+          <div className="flex flex-wrap items-end gap-2 overflow-x-auto pt-1">
+            {/* 1. 自分の振り返り & クリニカルラダー インデックス */}
+            <button
+              type="button"
+              onClick={() => setActiveMenteeTabId('personal')}
+              className={`!px-4 !py-2.5 !rounded-xl !text-xs !font-black !transition-all !flex !items-center !gap-2 !border !cursor-pointer !select-none ${
+                activeMenteeTabId === 'personal'
+                  ? '!bg-amber-400 !text-slate-950 !border-amber-400 !shadow-md !ring-2 !ring-amber-300/80 !scale-102 !z-10'
+                  : '!bg-slate-100 !text-slate-700 !border-slate-200 hover:!bg-slate-200 hover:!text-slate-900'
+              }`}
+            >
+              <span className="text-base">👤</span>
+              <span>本人の評価（自分の振り返り・クリニカルラダー）</span>
+            </button>
 
-        {/* 🤝 プリセプター（指導者）成長のための「本日のOJT指導振り返り＆サンクスカード」 */}
-        <OJTFeedbackSection
-          currentUser={currentUser}
-          effectiveTargetId={effectiveTargetId}
-          isViewingSelf={isViewingSelf}
-          preceptorName={ojtPreceptorName}
-          nurseName={ojtNurseName}
-          ojtFeedback={ojtFeedbackMap[effectiveTargetId] || ojtFeedbackMap['N002']}
-          preceptorKpt={preceptorKptMap[effectiveTargetId] || preceptorKptMap['N002']}
-          onSubmitOJTFeedback={handleSubmitOJTFeedback}
-          onSavePreceptorKPT={handleSavePreceptorKPT}
-        />
+            {/* 2. 新人の指導インデックス (各新人名) */}
+            {menteeTabIds.map((menteeId) => {
+              const staffObj = staffCandidates.find((s) => s.id === menteeId);
+              const name = staffObj?.name || STAFF_PROFILES[menteeId]?.user?.name || menteeId;
+              const isActive = activeMenteeTabId === menteeId;
 
-        {/* ---------------- 2. 看護技術について ---------------- */}
-        {/* 💉 看護技術 5段階習熟度（自立度）チェックリスト (新人教育・OJT用) */}
-        <SkillProficiencyChecklist
-          currentUser={currentUser}
-          skills={currentTechnicalSkills}
-          onUpdateSkillLevel={handleUpdateSkillLevel}
-          isViewingSelf={isViewingSelf}
-        />
+              return (
+                <div
+                  key={menteeId}
+                  onClick={() => setActiveMenteeTabId(menteeId)}
+                  className={`group px-4 py-2.5 rounded-xl text-xs font-black transition-all flex items-center gap-2 border cursor-pointer select-none ${
+                    isActive
+                      ? 'bg-emerald-600 text-white border-emerald-600 shadow-md ring-2 ring-emerald-300/80 scale-102 z-10'
+                      : 'bg-emerald-50/90 text-emerald-900 border-emerald-200/90 hover:bg-emerald-100 hover:text-emerald-950'
+                  }`}
+                >
+                  <span className="text-base">🌱</span>
+                  <span>【指導】{name}</span>
 
-        {/* ---------------- 3. クリニカルラダーについて ---------------- */}
-        {/* 🎖️ 日本看護協会 JNAクリニカルラダー評価 & 定性フィードバックセクション */}
-        <ClinicalLadderSection
-          currentUser={currentUser}
-          effectiveTargetId={effectiveTargetId}
-          ladderData={currentLadder}
-          onUpdateCompetencyScore={handleUpdateCompetencyScore}
-          onSaveFeedback={handleSaveLadderFeedback}
-          isViewingSelf={isViewingSelf}
-        />
-      </div>
+                  {/* 閉じるボタン (✕) */}
+                  <button
+                    type="button"
+                    title="この指導タブを閉じる"
+                    onClick={(e) => handleRemoveMenteeTab(menteeId, e)}
+                    className={`ml-1 w-4 h-4 rounded-full flex items-center justify-center text-[10px] font-extrabold transition-all ${
+                      isActive
+                        ? 'bg-emerald-800 text-emerald-100 hover:bg-red-500 hover:text-white'
+                        : 'bg-emerald-200/80 text-emerald-800 hover:bg-red-500 hover:text-white'
+                    }`}
+                  >
+                    ✕
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* 3. 画面コンテンツ切り替え: 本人評価インデックス (personal) vs 新人指導用画面 (menteeId) */}
+      {activeMenteeTabId === 'personal' ? (
+        /* ==================== 👤 本人の振り返り・クリニカルラダー画面 ==================== */
+        <div className="w-full flex flex-col gap-4">
+          <div className="w-full flex flex-col gap-5">
+            {/* 本日のタイムライン */}
+            <TimelineScheduleSection
+              currentStaff={currentStaff}
+              currentTimeStr={currentTimeStr}
+              currentTopPx={currentTopPx}
+              simulatedTimeStr={simulatedTimeStr}
+              setSimulatedTimeStr={setSimulatedTimeStr}
+              showGaps={showGaps}
+              setShowGaps={setShowGaps}
+              timelineViewMode={timelineViewMode}
+              setTimelineViewMode={setTimelineViewMode}
+              scheduleGaps={scheduleGaps}
+              gapSegments={gapSegments}
+              setGapSegments={setGapSegments}
+              isViewingSelf={isViewingSelf}
+            />
+
+            {/* パフォーマンス比較 & AIフィードバック */}
+            <PerformanceChartsSection
+              currentStaff={currentStaff}
+              selectedDate={selectedDate}
+            />
+
+            {/* 高度な本日の振り返り (KPT / Kolb / Modular) */}
+            <DailyReflectionSection
+              currentStaff={currentStaff}
+              effectiveTargetId={effectiveTargetId}
+              currentUser={currentUser}
+              isReflectionEditable={isReflectionEditable}
+              isViewingSelf={isViewingSelf}
+              preceptorBadgeName={preceptorBadgeName}
+              currentFormat={currentFormat}
+              setReflectionFormats={setReflectionFormats}
+              modularReflections={modularReflections}
+              handleAddModularReflection={handleAddModularReflection}
+              handleDeleteModularReflection={handleDeleteModularReflection}
+              handleUpdateModularReflection={handleUpdateModularReflection}
+              handleSendModularComment={handleSendModularComment}
+              handleEditModularComment={handleEditModularComment}
+              handleDeleteModularComment={handleDeleteModularComment}
+              userFreeReflections={userFreeReflections}
+              setUserFreeReflections={setUserFreeReflections}
+              userFreeChats={userFreeChats}
+              handleSendFreeComment={handleSendFreeComment}
+              userKPTReflections={userKPTReflections}
+              setUserKPTReflections={setUserKPTReflections}
+              userKPTChats={userKPTChats}
+              handleSendKPTComment={handleSendKPTComment}
+              userKolbReflections={userKolbReflections}
+              setUserKolbReflections={setUserKolbReflections}
+              userKolbChats={userKolbChats}
+              handleSendKolbComment={handleSendKolbComment}
+              isSaveSuccess={isSaveSuccess}
+              setIsSaveSuccess={setIsSaveSuccess}
+              onSaveReflection={handleSaveReflection}
+              autoSaveStatus={autoSaveStatus}
+              lastSavedTime={lastSavedTime}
+              selectedDate={selectedDate}
+            />
+
+            {/* 🎖️ 日本看護協会 JNAクリニカルラダー評価 (プリセプター本人の評価) */}
+            <ClinicalLadderSection
+              currentUser={currentUser}
+              effectiveTargetId={effectiveTargetId}
+              ladderData={currentLadder}
+              onUpdateCompetencyScore={handleUpdateCompetencyScore}
+              onSaveFeedback={handleSaveLadderFeedback}
+              isViewingSelf={isViewingSelf}
+              staffName={currentStaff?.user?.name}
+            />
+          </div>
+        </div>
+      ) : (
+        /* ==================== 🌱 新人指導用画面（タイムライン最上部配置 & OJT・看護技術習熟度評価） ==================== */
+        <div className="w-full flex flex-col gap-5 animate-fadeIn">
+          {/* 1. 🕒 新人の本日のタイムライン (指導用：一番上に配置) */}
+          <TimelineScheduleSection
+            currentStaff={currentMenteeStaff}
+            currentTimeStr={currentTimeStr}
+            currentTopPx={currentTopPx}
+            simulatedTimeStr={simulatedTimeStr}
+            setSimulatedTimeStr={setSimulatedTimeStr}
+            showGaps={showGaps}
+            setShowGaps={setShowGaps}
+            timelineViewMode={timelineViewMode}
+            setTimelineViewMode={setTimelineViewMode}
+            scheduleGaps={computeScheduleGaps(currentMenteeStaff.timeline)}
+            gapSegments={gapSegments}
+            setGapSegments={setGapSegments}
+            isViewingSelf={false}
+          />
+
+          {/* 3. 🤝 本日のOJT指導振り返り＆サンクスカード */}
+          <OJTFeedbackSection
+            currentUser={currentUser}
+            effectiveTargetId={currentMenteeId}
+            isViewingSelf={false}
+            preceptorName={ojtPreceptorName}
+            nurseName={ojtNurseName}
+            ojtFeedback={ojtFeedbackMap[currentMenteeId] || ojtFeedbackMap['N002']}
+            preceptorKpt={preceptorKptMap[currentMenteeId] || preceptorKptMap['N002']}
+            onSubmitOJTFeedback={(fb) => handleSubmitOJTFeedback(currentMenteeId, fb)}
+            onSavePreceptorKPT={(kpt) => handleSavePreceptorKPT(currentMenteeId, kpt)}
+            isTargetMentee={true}
+          />
+
+          {/* 4. 💉 看護技術 5段階習熟度（自立度）チェックリスト (Lv.1〜5 更新可能) */}
+          <SkillProficiencyChecklist
+            currentUser={currentUser}
+            skills={currentTechnicalSkills}
+            onUpdateSkillLevel={handleUpdateSkillLevel}
+            isViewingSelf={false}
+            staffName={currentStaff?.user?.name}
+            isTargetMentee={true}
+            menteeName={ojtNurseName}
+          />
+
+          {/* 5. 新人の本日の振り返り (指導用参照・アドバイス) */}
+          <DailyReflectionSection
+            currentStaff={currentMenteeStaff}
+            effectiveTargetId={currentMenteeId}
+            currentUser={currentUser}
+            isReflectionEditable={false}
+            isViewingSelf={false}
+            preceptorBadgeName={preceptorBadgeName}
+            currentFormat={currentFormat}
+            setReflectionFormats={setReflectionFormats}
+            modularReflections={modularReflections}
+            handleAddModularReflection={handleAddModularReflection}
+            handleDeleteModularReflection={handleDeleteModularReflection}
+            handleUpdateModularReflection={handleUpdateModularReflection}
+            handleSendModularComment={handleSendModularComment}
+            handleEditModularComment={handleEditModularComment}
+            handleDeleteModularComment={handleDeleteModularComment}
+            userFreeReflections={userFreeReflections}
+            setUserFreeReflections={setUserFreeReflections}
+            userFreeChats={userFreeChats}
+            handleSendFreeComment={handleSendFreeComment}
+            userKPTReflections={userKPTReflections}
+            setUserKPTReflections={setUserKPTReflections}
+            userKPTChats={userKPTChats}
+            handleSendKPTComment={handleSendKPTComment}
+            userKolbReflections={userKolbReflections}
+            setUserKolbReflections={setUserKolbReflections}
+            userKolbChats={userKolbChats}
+            handleSendKolbComment={handleSendKolbComment}
+            isSaveSuccess={isSaveSuccess}
+            setIsSaveSuccess={setIsSaveSuccess}
+            onSaveReflection={handleSaveReflection}
+            autoSaveStatus={autoSaveStatus}
+            lastSavedTime={lastSavedTime}
+            selectedDate={selectedDate}
+          />
+        </div>
+      )}
+
+      {/* ➕ 新人指導タブ新設モーダル */}
+      {isAddMenteeModalOpen && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl shadow-2xl border border-slate-200 w-full max-w-md p-5 sm:p-6 flex flex-col gap-4">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <div className="flex items-center gap-2">
+                <span className="text-2xl">🌱</span>
+                <h3 className="font-extrabold text-slate-900 text-base">新しい新人指導タブを新設</h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsAddMenteeModalOpen(false)}
+                className="text-slate-400 hover:text-slate-600 p-1.5 rounded-full hover:bg-slate-100 transition-all font-bold text-sm cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            <p className="text-xs text-slate-600 font-medium leading-relaxed">
+              指導・看護技術の評価を担当する新人看護師を選択してください。選択した看護師の指導インデックスがダッシュボード上部に追加されます。
+            </p>
+
+            {/* 対象新人選択リスト */}
+            <div className="flex flex-col gap-2 max-h-60 overflow-y-auto py-1">
+              {staffCandidates
+                .filter((s) => s.id !== 'N001' && s.id !== 'N003' && !s.roleLabel.includes('管理者') && !s.roleLabel.includes('師長'))
+                .map((staff) => {
+                  const isAlreadyOpen = menteeTabIds.includes(staff.id);
+                  return (
+                    <div
+                      key={staff.id}
+                      onClick={() => !isAlreadyOpen && handleAddMenteeTab(staff.id)}
+                      className={`p-3 rounded-2xl border flex items-center justify-between transition-all ${
+                        isAlreadyOpen
+                          ? 'bg-slate-50 border-slate-200 text-slate-400 cursor-not-allowed'
+                          : 'bg-emerald-50/60 border-emerald-200 hover:bg-emerald-100/80 hover:border-emerald-300 text-slate-900 cursor-pointer shadow-2xs'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2.5">
+                        <span className="text-lg">{isAlreadyOpen ? '✅' : '🌱'}</span>
+                        <div>
+                          <span className="font-black text-xs sm:text-sm block">{staff.name}</span>
+                          <span className="text-[11px] font-bold text-slate-500">{staff.roleLabel}</span>
+                        </div>
+                      </div>
+
+                      {isAlreadyOpen ? (
+                        <span className="text-[10px] font-extrabold bg-slate-200 text-slate-600 px-2 py-1 rounded-lg">
+                          開設済み
+                        </span>
+                      ) : (
+                        <span className="text-xs font-black bg-emerald-600 text-white px-3 py-1 rounded-xl shadow-2xs">
+                          タブを追加 ➕
+                        </span>
+                      )}
+                    </div>
+                  );
+                })}
+            </div>
+
+            <div className="flex justify-end gap-2 pt-2 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => setIsAddMenteeModalOpen(false)}
+                className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl cursor-pointer"
+              >
+                キャンセル
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

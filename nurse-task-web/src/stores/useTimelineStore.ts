@@ -552,9 +552,9 @@ export const useTimelineStore = create<TimelineStore>((set, get) => ({
   isOjtMode: false,
   menteeId: (() => {
     try {
-      return localStorage.getItem('menteeId') || 'n002';
+      return localStorage.getItem('menteeId') || 'nurse05';
     } catch (e) {
-      return 'n002';
+      return 'nurse05';
     }
   })(),
   setOjtMode: (isOjtMode: boolean) => set(() => {
